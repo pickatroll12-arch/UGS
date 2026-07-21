@@ -343,6 +343,9 @@
     // --- entry marker ---
     if (opts.entry) drawEntry(ctx, cam, level, opts.entry, hw, hh);
 
+    // --- room motion preview (Build aid) ---
+    if (opts.previewRoom) drawRoomMotion(ctx, cam, opts.previewRoom);
+
     // --- hover / selection tile highlight ---
     if (opts.hover) highlightTile(ctx, cam, level, opts.hover, opts.hoverFill || 'rgba(255,255,255,0.14)', opts.hoverStroke || '#cfcfd6', hw, hh);
     if (opts.selection) highlightTile(ctx, cam, level, opts.selection, 'rgba(255,255,255,0.05)', '#ffffff', hw, hh);
@@ -408,6 +411,82 @@
     ctx.restore();
   }
 
+  // world centre of a room at its current pose
+  function roomCenterWorld(room) {
+    const t = room.transform;
+    const rc = rotatePoint(room.size.w / 2, room.size.h / 2, t.rotation, t.pivot);
+    return { x: rc.x + t.x, y: rc.y + t.y };
+  }
+
+  function arrowLine(ctx, a, b, color) {
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 8;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - h * Math.cos(ang - 0.4), b.y - h * Math.sin(ang - 0.4));
+    ctx.lineTo(b.x - h * Math.cos(ang + 0.4), b.y - h * Math.sin(ang + 0.4));
+    ctx.closePath(); ctx.fill();
+  }
+  function handleDot(ctx, s, color) {
+    ctx.fillStyle = '#14141a'; ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  function crossMark(ctx, s, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(s.x - 6, s.y); ctx.lineTo(s.x + 6, s.y); ctx.moveTo(s.x, s.y - 6); ctx.lineTo(s.x, s.y + 6); ctx.stroke();
+  }
+
+  // Preview the motion path/direction of a room's events (Build mode aid).
+  function drawRoomMotion(ctx, cam, room) {
+    if (!room || !room.events || !room.events.length) return;
+    const rc = roomCenterWorld(room), t = room.transform;
+    const w = (x, y) => worldToScreen(cam, x, y);
+    for (const ev of room.events) {
+      const a = ev.action; if (!a) continue;
+      ctx.save();
+      if (a.kind === 'shift') {
+        const to = { x: rc.x + (a.to.x - t.x), y: rc.y + (a.to.y - t.y) };
+        arrowLine(ctx, w(rc.x, rc.y), w(to.x, to.y), '#8fd0ff');
+        handleDot(ctx, w(to.x, to.y), '#8fd0ff');
+      } else if (a.kind === 'orbit') {
+        const C = a.center, Rr = Math.hypot(rc.x - C.x, rc.y - C.y);
+        ctx.strokeStyle = 'rgba(255,196,120,0.85)'; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i <= 48; i++) { const th = i / 48 * Math.PI * 2; const p = w(C.x + Rr * Math.cos(th), C.y + Rr * Math.sin(th)); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+        ctx.stroke(); ctx.setLineDash([]);
+        const dir = a.direction === 'ccw' ? -1 : 1, th0 = Math.atan2(rc.y - C.y, rc.x - C.x);
+        arrowLine(ctx, w(C.x + Rr * Math.cos(th0), C.y + Rr * Math.sin(th0)), w(C.x + Rr * Math.cos(th0 + dir * 0.5), C.y + Rr * Math.sin(th0 + dir * 0.5)), '#ffc478');
+        crossMark(ctx, w(C.x, C.y), '#ffc478'); handleDot(ctx, w(C.x, C.y), '#ffc478');
+      } else if (a.kind === 'rotate') {
+        const piv = localToWorld(room, t.pivot.x, t.pivot.y);
+        crossMark(ctx, w(piv.x, piv.y), '#c8a8ff');
+        const s = w(rc.x, rc.y);
+        ctx.strokeStyle = '#c8a8ff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 14, -0.6, 2.2); ctx.stroke();
+      } else if (a.kind === 'carousel') {
+        ctx.strokeStyle = '#a8ffb0'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5;
+        const pts = [rc, ...(a.poses || []).map(p => ({ x: rc.x + (p.x - t.x), y: rc.y + (p.y - t.y) }))];
+        ctx.beginPath(); pts.forEach((p, i) => { const s = w(p.x, p.y); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); }); ctx.stroke(); ctx.setLineDash([]);
+        pts.forEach((p, i) => { if (i) handleDot(ctx, w(p.x, p.y), '#a8ffb0'); });
+      }
+      ctx.restore();
+    }
+  }
+
+  // Draggable handles for a room's motion (screen coords for hit-testing).
+  function motionHandles(cam, room) {
+    const out = []; if (!room || !room.events) return out;
+    const rc = roomCenterWorld(room), t = room.transform;
+    for (const ev of room.events) {
+      const a = ev.action; if (!a) continue;
+      if (a.kind === 'shift') { const wx = rc.x + (a.to.x - t.x), wy = rc.y + (a.to.y - t.y); const s = worldToScreen(cam, wx, wy); out.push({ eventId: ev.id, kind: 'shift-to', sx: s.x, sy: s.y }); }
+      else if (a.kind === 'orbit') { const s = worldToScreen(cam, a.center.x, a.center.y); out.push({ eventId: ev.id, kind: 'orbit-center', sx: s.x, sy: s.y }); }
+      else if (a.kind === 'carousel') { (a.poses || []).forEach((p, idx) => { const wx = rc.x + (p.x - t.x), wy = rc.y + (p.y - t.y); const s = worldToScreen(cam, wx, wy); out.push({ eventId: ev.id, kind: 'carousel-pose', poseIndex: idx, sx: s.x, sy: s.y }); }); }
+    }
+    return out;
+  }
+
   function outlineRoom(ctx, cam, room, stroke, width) {
     // trace the 4 transformed corners of the room footprint
     const corners = [
@@ -444,7 +523,7 @@
   return {
     TILE_W, TILE_H, WALL_H, OBJ_H,
     worldToScreen, screenToWorld,
-    rotatePoint, localToWorld, worldToLocal, tileCenterWorld,
-    pick, pickTopmost, drawLevel, drawObject, centerOn, shade
+    rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
+    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, centerOn, shade
   };
 });
