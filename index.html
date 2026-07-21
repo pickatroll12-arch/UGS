@@ -1,456 +1,1619 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UGS — Isometric Placeholder</title>
-<style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    overflow: hidden;
-    background: #1a1a1a;
-    font-family: monospace;
-    color: #ccc;
-    user-select: none;
-  }
-  #game {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-    cursor: crosshair;
-    background: #1a1a1a;
-  }
-  #hud {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    font-size: 12px;
-    line-height: 1.5;
-    background: rgba(0,0,0,0.5);
-    padding: 8px 10px;
-    border: 1px solid #444;
-    pointer-events: none;
-    white-space: pre;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Station Builder Prototype</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0a0b;
+      --panel: rgba(21, 21, 24, 0.94);
+      --panel-soft: rgba(32, 32, 36, 0.88);
+      --line: #3b3b41;
+      --line-bright: #686870;
+      --text: #f0f0f3;
+      --muted: #a2a2aa;
+      --accent: #ffffff;
+      --danger: #d77;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+      background:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.035), transparent 56%),
+        var(--bg);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: var(--text);
+      background: #29292e;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--line-bright);
+      background: #333338;
+    }
+
+    button.active {
+      color: #111;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    button.danger {
+      color: #ffdada;
+      border-color: #6b3c3c;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      color: var(--text);
+      background: #17171a;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 9px;
+      outline: none;
+    }
+
+    input[type="checkbox"] {
+      accent-color: #eee;
+    }
+
+    .editor-panel {
+      position: fixed;
+      z-index: 3;
+      top: 14px;
+      left: 14px;
+      bottom: 14px;
+      width: 326px;
+      padding: 14px;
+      overflow-y: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(12px);
+    }
+
+    .editor-panel h1 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      line-height: 1.2;
+      letter-spacing: 0.03em;
+    }
+
+    .editor-panel .subtitle {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .section {
+      margin-top: 13px;
+      padding-top: 13px;
+      border-top: 1px solid var(--line);
+    }
+
+    .section:first-of-type {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .section-title {
+      margin: 0 0 8px;
+      color: #d8d8dd;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .button-grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 64px 64px;
+      gap: 7px;
+      align-items: end;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    label span {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 8px 0;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .inspector {
+      min-height: 96px;
+      padding: 10px;
+      color: var(--muted);
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .inspector strong {
+      color: var(--text);
+    }
+
+    .inspector .mini-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .inspector .mini-actions button {
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+
+    .hint {
+      margin: 9px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .status {
+      position: fixed;
+      z-index: 4;
+      right: 16px;
+      bottom: 16px;
+      max-width: min(520px, calc(100vw - 32px));
+      padding: 10px 13px;
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 12px;
+      letter-spacing: 0.01em;
+      pointer-events: none;
+    }
+
+    .test-bar {
+      position: fixed;
+      z-index: 3;
+      top: 14px;
+      left: 14px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(12px);
+      font-size: 12px;
+    }
+
+    body.testing .editor-panel {
+      display: none;
+    }
+
+    body.testing .test-bar {
+      display: flex;
+    }
+
+    .kbd {
+      padding: 1px 5px;
+      color: #eee;
+      background: #26262a;
+      border: 1px solid #4b4b52;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+  </style>
 </head>
 <body>
-<canvas id="game"></canvas>
-<div id="hud"></div>
-<script>
-(() => {
-  'use strict';
+  <canvas id="game" aria-label="Station builder canvas"></canvas>
 
-  // ---- Config -------------------------------------------------------------
-  const GRID_W = 30;          // room width in tiles
-  const GRID_H = 30;          // room height in tiles
-  const TILE_W = 64;          // isometric tile width (screen px)
-  const TILE_H = 32;          // isometric tile height (screen px)
-  const AVATAR_SPEED = 4.2;   // tiles per second
+  <aside class="editor-panel" aria-label="Station builder controls">
+    <h1>STATION BUILDER</h1>
+    <p class="subtitle">HTML prototype for the map editor, package format, and runtime test loop.</p>
 
-  // Monochromatic palette (bare colours)
-  const COL = {
-    floor:      '#3a3a3a',
-    floorAlt:   '#333333',
-    floorEdge:  '#4a4a4a',
-    wall:       '#555555',
-    wallTop:    '#6a6a6a',
-    obstacle:   '#444444',
-    obstacleTop:'#585858',
-    highlight:  '#7a7a7a',
-    path:       '#909090',
-    avatar:     '#dcdcdc',
-    avatarDark: '#8a8a8a',
-  };
+    <section class="section">
+      <h2 class="section-title">Mode</h2>
+      <div class="button-grid">
+        <button id="buildModeButton" class="active" type="button">Build</button>
+        <button id="testModeButton" type="button">Test map</button>
+      </div>
+    </section>
 
-  // ---- Canvas -------------------------------------------------------------
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const hud = document.getElementById('hud');
-  let VIEW_W = 0, VIEW_H = 0, DPR = 1;
+    <section class="section">
+      <h2 class="section-title">Map</h2>
+      <div class="field-grid">
+        <label><span>Name</span><input id="mapName" type="text" value="Prototype Deck" /></label>
+        <label><span>Width</span><input id="mapWidth" type="number" min="8" max="48" value="26" /></label>
+        <label><span>Height</span><input id="mapHeight" type="number" min="8" max="48" value="18" /></label>
+      </div>
+      <div class="button-grid" style="margin-top: 7px;">
+        <button id="resizeMap" type="button">Resize</button>
+        <button id="newMap" class="danger" type="button">New map</button>
+      </div>
+    </section>
 
-  function resize() {
-    DPR = window.devicePixelRatio || 1;
-    VIEW_W = window.innerWidth;
-    VIEW_H = window.innerHeight;
-    canvas.width = Math.floor(VIEW_W * DPR);
-    canvas.height = Math.floor(VIEW_H * DPR);
-    canvas.style.width = VIEW_W + 'px';
-    canvas.style.height = VIEW_H + 'px';
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  }
-  window.addEventListener('resize', resize);
-  resize();
+    <section class="section">
+      <h2 class="section-title">Tools</h2>
+      <div class="button-grid three">
+        <button class="tool active" data-tool="select" type="button">Select</button>
+        <button class="tool" data-tool="floor" type="button">Floor</button>
+        <button class="tool" data-tool="wall" type="button">Wall</button>
+        <button class="tool" data-tool="object" type="button">Object</button>
+        <button class="tool" data-tool="entry" type="button">Entry</button>
+        <button class="tool" data-tool="erase" type="button">Erase</button>
+      </div>
+      <p class="hint">Drag with Floor, Wall, or Erase to paint. Use Select to inspect tiles or drag objects.</p>
+    </section>
 
-  // ---- World --------------------------------------------------------------
-  // 0 = walkable floor, 1 = blocked (wall / obstacle)
-  const grid = [];
-  for (let y = 0; y < GRID_H; y++) {
-    const row = [];
-    for (let x = 0; x < GRID_W; x++) {
-      // outer ring is wall
-      const isWall = (x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1);
-      row.push(isWall ? 1 : 0);
-    }
-    grid.push(row);
-  }
-  // a few placeholder obstacles (pillars / crates) inside the room
-  const obstacles = [
-    [8, 8], [8, 9], [9, 8],
-    [20, 6], [21, 6], [22, 6],
-    [15, 15], [16, 15], [15, 16], [16, 16],
-    [6, 22], [7, 22], [8, 22],
-    [23, 20], [23, 21], [23, 22],
-  ];
-  for (const [ox, oy] of obstacles) grid[oy][ox] = 1;
-  const obstacleSet = new Set(obstacles.map(([x, y]) => x + ',' + y));
+    <section class="section">
+      <h2 class="section-title">Floor material</h2>
+      <div class="button-grid three">
+        <button class="floor-choice active" data-floor="deck" type="button">Deck</button>
+        <button class="floor-choice" data-floor="dark" type="button">Dark</button>
+        <button class="floor-choice" data-floor="light" type="button">Light</button>
+        <button class="floor-choice" data-floor="roundPad" type="button">Round pad</button>
+        <button class="floor-choice" data-floor="service" type="button">Service</button>
+        <button class="floor-choice" data-floor="void" type="button">Void</button>
+      </div>
+    </section>
 
-  function inBounds(x, y) { return x >= 0 && y >= 0 && x < GRID_W && y < GRID_H; }
-  function walkable(x, y) { return inBounds(x, y) && grid[y][x] === 0; }
+    <section class="section">
+      <h2 class="section-title">Wall shape</h2>
+      <div class="button-grid three">
+        <button class="wall-choice active" data-wall="solid" type="button">Solid</button>
+        <button class="wall-choice" data-wall="diagA" type="button">Diagonal /</button>
+        <button class="wall-choice" data-wall="diagB" type="button">Diagonal \</button>
+      </div>
+    </section>
 
-  // ---- Camera -------------------------------------------------------------
-  // Camera stores an offset (screen px) and zoom. Centered on room initially.
-  const camera = { x: 0, y: 0, zoom: 1 };
+    <section class="section">
+      <h2 class="section-title">Objects</h2>
+      <div class="button-grid">
+        <button class="object-choice active" data-object="console" type="button">Console</button>
+        <button class="object-choice" data-object="crate" type="button">Crate</button>
+        <button class="object-choice" data-object="light" type="button">Light</button>
+        <button class="object-choice" data-object="plant" type="button">Plant</button>
+        <button class="object-choice" data-object="elevator" type="button">Elevator pad</button>
+      </div>
+    </section>
 
-  function worldToScreen(gx, gy) {
-    // isometric projection (diamond tiles)
-    const sx = (gx - gy) * (TILE_W / 2);
-    const sy = (gx + gy) * (TILE_H / 2);
-    return {
-      x: sx * camera.zoom + camera.x,
-      y: sy * camera.zoom + camera.y,
+    <section class="section">
+      <h2 class="section-title">Inspector</h2>
+      <div id="inspector" class="inspector">Nothing selected.</div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Map package</h2>
+      <div class="button-grid">
+        <button id="exportMap" type="button">Export JSON</button>
+        <button id="importMap" type="button">Import JSON</button>
+        <button id="undoButton" type="button">Undo</button>
+        <button id="redoButton" type="button">Redo</button>
+      </div>
+      <p class="hint">
+        Shortcuts: <span class="kbd">Ctrl+Z</span> undo, <span class="kbd">Ctrl+Y</span> redo,
+        <span class="kbd">Delete</span> remove selection, <span class="kbd">WASD</span> pan,
+        mouse wheel zoom.
+      </p>
+    </section>
+  </aside>
+
+  <div class="test-bar">
+    <strong>TEST MODE</strong>
+    <span>Click a walkable tile to move the pawn.</span>
+    <button id="exitTestMode" type="button">Back to builder</button>
+  </div>
+
+  <input id="importInput" type="file" accept="application/json,.json" hidden />
+  <div id="status" class="status">Builder ready.</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const inspector = document.getElementById('inspector');
+    const importInput = document.getElementById('importInput');
+
+    const tile = { width: 72, height: 36 };
+    const camera = { x: 0, y: 0, zoom: 0.92, minZoom: 0.48, maxZoom: 1.8 };
+    const mouse = { x: 0, y: 0, tileX: -1, tileY: -1, inside: false };
+    const pressed = new Set();
+
+    const SQRT2 = Math.SQRT2;
+
+    const floorStyles = {
+      deck: { label: 'Deck', color: '#2d2d31', line: '#414147' },
+      dark: { label: 'Dark', color: '#222225', line: '#37373d' },
+      light: { label: 'Light', color: '#3b3b40', line: '#53535a' },
+      roundPad: { label: 'Round pad', color: '#29292d', line: '#45454b' },
+      service: { label: 'Service', color: '#25262d', line: '#424755' },
+      void: { label: 'Void', color: '#101013', line: '#242429' }
     };
-  }
 
-  function screenToWorld(px, py) {
-    // invert the projection; returns fractional tile coords
-    const sx = (px - camera.x) / camera.zoom;
-    const sy = (py - camera.y) / camera.zoom;
-    const gx = (sx / (TILE_W / 2) + sy / (TILE_H / 2)) / 2;
-    const gy = (sy / (TILE_H / 2) - sx / (TILE_W / 2)) / 2;
-    return { x: gx, y: gy };
-  }
+    const objectTypes = {
+      console: { label: 'Console', interactive: true, collision: true },
+      crate: { label: 'Storage crate', interactive: false, collision: true },
+      light: { label: 'Wall light', interactive: false, collision: false },
+      plant: { label: 'Plant', interactive: false, collision: false },
+      elevator: { label: 'Elevator pad', interactive: true, collision: false }
+    };
 
-  function centerCameraOn(gx, gy) {
-    const sx = (gx - gy) * (TILE_W / 2) * camera.zoom;
-    const sy = (gx + gy) * (TILE_H / 2) * camera.zoom;
-    camera.x = VIEW_W / 2 - sx;
-    camera.y = VIEW_H / 2 - sy;
-  }
-  centerCameraOn(GRID_W / 2, GRID_H / 2);
+    // Pawn: fully vector-drawn, no external sprite dependency.
+    // `facing` is a screen-space angle (radians) used to orient the figure.
+    const pawn = {
+      x: 2,
+      y: 2,
+      selected: true,
+      path: [],
+      speed: 4.6,
+      facing: Math.PI / 2,   // default look "south" (down the screen)
+      moving: false,
+      animationTime: 0
+    };
 
-  // ---- Avatar -------------------------------------------------------------
-  const avatar = {
-    x: 15,          // fractional tile pos
-    y: 15,
-    path: [],       // list of {x,y} tile waypoints to follow
-  };
+    let map = createMap('Prototype Deck', 26, 18);
+    let mode = 'build';
+    let currentTool = 'select';
+    let currentFloor = 'deck';
+    let currentWall = 'solid';
+    let currentObject = 'console';
+    let selectedObjectId = null;
+    let selectedTile = null;
+    let draggingObject = false;
+    let pointerPainting = false;
+    let objectCounter = 1;
+    let lastTime = performance.now();
+    let undoStack = [];
+    let redoStack = [];
 
-  // ---- A* pathfinding (RimWorld-style navigation) -------------------------
-  function neighbors(x, y) {
-    const out = [];
-    const dirs = [
-      [1, 0], [-1, 0], [0, 1], [0, -1],
-      [1, 1], [1, -1], [-1, 1], [-1, -1],
-    ];
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx, ny = y + dy;
-      if (!walkable(nx, ny)) continue;
-      // prevent cutting diagonally through wall corners
-      if (dx !== 0 && dy !== 0) {
-        if (!walkable(x + dx, y) || !walkable(x, y + dy)) continue;
-      }
-      out.push([nx, ny, (dx !== 0 && dy !== 0) ? 1.4142 : 1]);
+    function createTile(floor = 'deck') {
+      return { floor, wall: null };
     }
-    return out;
-  }
 
-  function findPath(sx, sy, tx, ty) {
-    sx = Math.round(sx); sy = Math.round(sy);
-    if (!walkable(tx, ty)) return null;
-    if (!walkable(sx, sy)) return null;
-    const key = (x, y) => x + ',' + y;
-    const open = new Map();     // key -> node
-    const openHeap = [];        // simple array used as priority list
-    const closed = new Set();
-    const h = (x, y) => Math.hypot(x - tx, y - ty);
+    function createMap(name, width, height) {
+      return {
+        format: 'station-map-prototype',
+        formatVersion: 1,
+        id: `map-${Date.now().toString(36)}`,
+        name,
+        width,
+        height,
+        entry: { x: 2, y: 2 },
+        tiles: Array.from({ length: height }, () => Array.from({ length: width }, () => createTile())),
+        objects: [],
+        links: [],
+        events: [],
+        metadata: {
+          createdBy: 'station-builder-html-prototype',
+          textureSource: 'external-manifest-placeholder'
+        }
+      };
+    }
 
-    const start = { x: sx, y: sy, g: 0, f: h(sx, sy), parent: null };
-    open.set(key(sx, sy), start);
-    openHeap.push(start);
+    function cloneMap(source = map) {
+      return structuredClone(source);
+    }
 
-    while (openHeap.length) {
-      // pop lowest f
-      let bi = 0;
-      for (let i = 1; i < openHeap.length; i++) {
-        if (openHeap[i].f < openHeap[bi].f) bi = i;
+    function pushHistory() {
+      undoStack.push(cloneMap());
+      if (undoStack.length > 60) undoStack.shift();
+      redoStack = [];
+    }
+
+    function restoreMap(nextMap) {
+      map = normalizeMap(nextMap);
+      selectedObjectId = null;
+      selectedTile = null;
+      resetPawnToEntry();
+      syncMapControls();
+      updateInspector();
+    }
+
+    function undo() {
+      if (!undoStack.length) return setStatus('Nothing to undo.');
+      redoStack.push(cloneMap());
+      restoreMap(undoStack.pop());
+      setStatus('Undo.');
+    }
+
+    function redo() {
+      if (!redoStack.length) return setStatus('Nothing to redo.');
+      undoStack.push(cloneMap());
+      restoreMap(redoStack.pop());
+      setStatus('Redo.');
+    }
+
+    function setStatus(message) {
+      status.textContent = message;
+    }
+
+    function isInside(x, y) {
+      return x >= 0 && y >= 0 && x < map.width && y < map.height;
+    }
+
+    function getTile(x, y) {
+      return isInside(x, y) ? map.tiles[y][x] : null;
+    }
+
+    function getObjectAt(x, y) {
+      for (let i = map.objects.length - 1; i >= 0; i -= 1) {
+        const object = map.objects[i];
+        if (object.x === x && object.y === y) return object;
       }
-      const cur = openHeap.splice(bi, 1)[0];
-      const ck = key(cur.x, cur.y);
-      if (cur.x === tx && cur.y === ty) {
-        // reconstruct
-        const path = [];
-        let n = cur;
-        while (n) { path.push({ x: n.x, y: n.y }); n = n.parent; }
-        path.reverse();
-        return path;
-      }
-      open.delete(ck);
-      closed.add(ck);
+      return null;
+    }
 
-      for (const [nx, ny, cost] of neighbors(cur.x, cur.y)) {
-        const nk = key(nx, ny);
-        if (closed.has(nk)) continue;
-        const g = cur.g + cost;
-        const existing = open.get(nk);
-        if (!existing) {
-          const node = { x: nx, y: ny, g, f: g + h(nx, ny), parent: cur };
-          open.set(nk, node);
-          openHeap.push(node);
-        } else if (g < existing.g) {
-          existing.g = g;
-          existing.f = g + h(nx, ny);
-          existing.parent = cur;
+    function getSelectedObject() {
+      return map.objects.find(object => object.id === selectedObjectId) || null;
+    }
+
+    function isWalkable(x, y) {
+      const cell = getTile(x, y);
+      if (!cell || cell.floor === 'void' || cell.wall) return false;
+      const object = getObjectAt(x, y);
+      return !object || !object.collision;
+    }
+
+    function firstWalkable() {
+      for (let y = 0; y < map.height; y += 1) {
+        for (let x = 0; x < map.width; x += 1) {
+          if (isWalkable(x, y)) return { x, y };
         }
       }
+      return { x: 0, y: 0 };
     }
-    return null; // no path
-  }
 
-  // ---- Input --------------------------------------------------------------
-  const keys = new Set();
-  let mouse = { x: 0, y: 0, tile: { x: 0, y: 0 } };
-
-  window.addEventListener('keydown', e => keys.add(e.key.toLowerCase()));
-  window.addEventListener('keyup',   e => keys.delete(e.key.toLowerCase()));
-
-  canvas.addEventListener('mousemove', e => {
-    const r = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - r.left;
-    mouse.y = e.clientY - r.top;
-    const w = screenToWorld(mouse.x, mouse.y);
-    mouse.tile = { x: Math.round(w.x), y: Math.round(w.y) };
-  });
-
-  // Left click: issue a move order (RimWorld point-and-click)
-  canvas.addEventListener('click', e => {
-    const tx = mouse.tile.x, ty = mouse.tile.y;
-    if (!walkable(tx, ty)) return;
-    const path = findPath(avatar.x, avatar.y, tx, ty);
-    if (path) {
-      // drop the first node if we're basically already on it
-      avatar.path = path;
+    function resetPawnToEntry() {
+      const entry = isWalkable(map.entry.x, map.entry.y) ? map.entry : firstWalkable();
+      pawn.x = entry.x;
+      pawn.y = entry.y;
+      pawn.path = [];
+      pawn.moving = false;
+      pawn.facing = Math.PI / 2;
     }
-  });
 
-  // Wheel: zoom toward cursor
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const before = screenToWorld(mouse.x, mouse.y);
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    camera.zoom = Math.max(0.4, Math.min(2.5, camera.zoom * factor));
-    const after = screenToWorld(mouse.x, mouse.y);
-    // keep the tile under the cursor stationary
-    const s1 = worldToScreenRaw(before.x, before.y);
-    const s2 = worldToScreenRaw(after.x, after.y);
-    camera.x += (s1.x - s2.x);
-    camera.y += (s1.y - s2.y);
-  }, { passive: false });
+    function normalizeMap(candidate) {
+      if (!candidate || typeof candidate !== 'object') throw new Error('Map package is not an object.');
+      if (!Number.isInteger(candidate.width) || !Number.isInteger(candidate.height)) throw new Error('Map width and height are required.');
+      if (candidate.width < 8 || candidate.height < 8 || candidate.width > 48 || candidate.height > 48) {
+        throw new Error('Map size must be between 8 and 48 tiles.');
+      }
 
-  function worldToScreenRaw(gx, gy) {
-    const sx = (gx - gy) * (TILE_W / 2) * camera.zoom;
-    const sy = (gx + gy) * (TILE_H / 2) * camera.zoom;
-    return { x: sx + camera.x, y: sy + camera.y };
-  }
+      const normalized = createMap(String(candidate.name || 'Imported Deck'), candidate.width, candidate.height);
+      normalized.format = 'station-map-prototype';
+      normalized.formatVersion = Number(candidate.formatVersion || 1);
+      normalized.id = String(candidate.id || normalized.id);
+      normalized.entry = {
+        x: clamp(Math.floor(candidate.entry?.x ?? 2), 0, candidate.width - 1),
+        y: clamp(Math.floor(candidate.entry?.y ?? 2), 0, candidate.height - 1)
+      };
+      normalized.links = Array.isArray(candidate.links) ? candidate.links : [];
+      normalized.events = Array.isArray(candidate.events) ? candidate.events : [];
+      normalized.metadata = { ...normalized.metadata, ...(candidate.metadata || {}) };
 
-  // ---- Update -------------------------------------------------------------
-  function update(dt) {
-    // camera pan (WASD / arrows), RimWorld-style edge-free keyboard pan
-    const panSpeed = 600 * dt;
-    if (keys.has('w') || keys.has('arrowup'))    camera.y += panSpeed;
-    if (keys.has('s') || keys.has('arrowdown'))  camera.y -= panSpeed;
-    if (keys.has('a') || keys.has('arrowleft'))  camera.x += panSpeed;
-    if (keys.has('d') || keys.has('arrowright')) camera.x -= panSpeed;
+      for (let y = 0; y < candidate.height; y += 1) {
+        for (let x = 0; x < candidate.width; x += 1) {
+          const source = candidate.tiles?.[y]?.[x];
+          const floor = floorStyles[source?.floor] ? source.floor : 'deck';
+          const wall = ['solid', 'diagA', 'diagB'].includes(source?.wall) ? source.wall : null;
+          normalized.tiles[y][x] = { floor, wall };
+        }
+      }
 
-    // move avatar along its path
-    if (avatar.path.length) {
-      const target = avatar.path[0];
-      const dx = target.x - avatar.x;
-      const dy = target.y - avatar.y;
-      const dist = Math.hypot(dx, dy);
-      const step = AVATAR_SPEED * dt;
-      if (dist <= step) {
-        avatar.x = target.x;
-        avatar.y = target.y;
-        avatar.path.shift();
+      normalized.objects = Array.isArray(candidate.objects) ? candidate.objects
+        .filter(object => objectTypes[object.type])
+        .map(object => ({
+          id: String(object.id || `obj-${objectCounter++}`),
+          type: object.type,
+          name: String(object.name || objectTypes[object.type].label),
+          x: clamp(Math.floor(object.x), 0, candidate.width - 1),
+          y: clamp(Math.floor(object.y), 0, candidate.height - 1),
+          rotation: Number(object.rotation || 0),
+          interactive: Boolean(object.interactive ?? objectTypes[object.type].interactive),
+          collision: Boolean(object.collision ?? objectTypes[object.type].collision),
+          properties: object.properties && typeof object.properties === 'object' ? object.properties : {}
+        })) : [];
+
+      return normalized;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function resizeMap(width, height) {
+      pushHistory();
+      const oldTiles = map.tiles;
+      const oldWidth = map.width;
+      const oldHeight = map.height;
+      map.width = width;
+      map.height = height;
+      map.tiles = Array.from({ length: height }, (_, y) =>
+        Array.from({ length: width }, (_, x) => x < oldWidth && y < oldHeight ? oldTiles[y][x] : createTile())
+      );
+      map.objects = map.objects.filter(object => object.x < width && object.y < height);
+      map.entry.x = clamp(map.entry.x, 0, width - 1);
+      map.entry.y = clamp(map.entry.y, 0, height - 1);
+      selectedObjectId = null;
+      selectedTile = null;
+      resetPawnToEntry();
+      updateInspector();
+      setStatus(`Map resized to ${width} × ${height}.`);
+    }
+
+    function applyTool(x, y, isDrag = false) {
+      if (!isInside(x, y)) return false;
+      const cell = getTile(x, y);
+
+      if (currentTool === 'floor') {
+        cell.floor = currentFloor;
+        if (currentFloor === 'void') cell.wall = null;
+        return true;
+      }
+
+      if (currentTool === 'wall') {
+        if (cell.floor === 'void') cell.floor = 'deck';
+        cell.wall = currentWall;
+        return true;
+      }
+
+      if (currentTool === 'erase') {
+        const object = getObjectAt(x, y);
+        if (object) {
+          map.objects = map.objects.filter(candidate => candidate.id !== object.id);
+          if (selectedObjectId === object.id) selectedObjectId = null;
+        } else if (cell.wall) {
+          cell.wall = null;
+        } else {
+          cell.floor = 'void';
+        }
+        updateInspector();
+        return true;
+      }
+
+      if (currentTool === 'object' && !isDrag) {
+        if (cell.floor === 'void' || cell.wall || getObjectAt(x, y)) {
+          setStatus('Object needs an empty floor tile.');
+          return false;
+        }
+        const definition = objectTypes[currentObject];
+        const object = {
+          id: `obj-${Date.now().toString(36)}-${objectCounter++}`,
+          type: currentObject,
+          name: definition.label,
+          x,
+          y,
+          rotation: 0,
+          interactive: definition.interactive,
+          collision: definition.collision,
+          properties: {}
+        };
+        map.objects.push(object);
+        selectedObjectId = object.id;
+        selectedTile = null;
+        updateInspector();
+        setStatus(`${definition.label} placed at ${x}, ${y}.`);
+        return true;
+      }
+
+      if (currentTool === 'entry' && !isDrag) {
+        if (!isWalkable(x, y)) {
+          setStatus('Entry must be on a walkable tile.');
+          return false;
+        }
+        map.entry = { x, y };
+        selectedTile = { x, y };
+        selectedObjectId = null;
+        resetPawnToEntry();
+        updateInspector();
+        setStatus(`Entry set to ${x}, ${y}.`);
+        return true;
+      }
+
+      return false;
+    }
+
+    function selectAt(x, y) {
+      if (!isInside(x, y)) return;
+      const object = getObjectAt(x, y);
+      if (object) {
+        selectedObjectId = object.id;
+        selectedTile = null;
+        draggingObject = true;
+        setStatus(`${object.name} selected.`);
       } else {
-        avatar.x += (dx / dist) * step;
-        avatar.y += (dy / dist) * step;
+        selectedObjectId = null;
+        selectedTile = { x, y };
+        setStatus(`Tile ${x}, ${y} selected.`);
+      }
+      updateInspector();
+    }
+
+    function updateInspector() {
+      const object = getSelectedObject();
+
+      if (object) {
+        inspector.innerHTML = `
+          <strong>${escapeHtml(object.name)}</strong><br>
+          Type: ${objectTypes[object.type].label}<br>
+          Position: ${object.x}, ${object.y}<br>
+          <label class="checkbox-row"><input id="objectInteractive" type="checkbox" ${object.interactive ? 'checked' : ''}> Interactive</label>
+          <label class="checkbox-row"><input id="objectCollision" type="checkbox" ${object.collision ? 'checked' : ''}> Collision</label>
+          <div class="mini-actions">
+            <button type="button" data-inspector-action="rotate">Rotate 30°</button>
+            <button type="button" class="danger" data-inspector-action="delete-object">Delete</button>
+          </div>
+        `;
+        document.getElementById('objectInteractive').addEventListener('change', event => {
+          pushHistory();
+          object.interactive = event.target.checked;
+        });
+        document.getElementById('objectCollision').addEventListener('change', event => {
+          pushHistory();
+          object.collision = event.target.checked;
+        });
+        return;
+      }
+
+      if (selectedTile) {
+        const cell = getTile(selectedTile.x, selectedTile.y);
+        inspector.innerHTML = `
+          <strong>Tile ${selectedTile.x}, ${selectedTile.y}</strong><br>
+          Floor: ${floorStyles[cell.floor].label}<br>
+          Wall: ${cell.wall || 'none'}<br>
+          Entry point: ${map.entry.x === selectedTile.x && map.entry.y === selectedTile.y ? 'yes' : 'no'}
+          <div class="mini-actions">
+            <button type="button" data-inspector-action="clear-wall">Clear wall</button>
+            <button type="button" class="danger" data-inspector-action="clear-floor">Make void</button>
+          </div>
+        `;
+        return;
+      }
+
+      inspector.textContent = 'Nothing selected.';
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+      }[character]));
+    }
+
+    function mapOrigin() {
+      return {
+        x: window.innerWidth / 2 + camera.x,
+        y: window.innerHeight / 2 + camera.y - ((map.width + map.height) * tile.height * camera.zoom) / 4
+      };
+    }
+
+    function isoToScreen(x, y) {
+      const origin = mapOrigin();
+      return {
+        x: origin.x + (x - y) * (tile.width / 2) * camera.zoom,
+        y: origin.y + (x + y) * (tile.height / 2) * camera.zoom
+      };
+    }
+
+    function screenToTile(screenX, screenY) {
+      const origin = mapOrigin();
+      const x = (screenX - origin.x) / camera.zoom;
+      const y = (screenY - origin.y) / camera.zoom;
+      return {
+        x: Math.floor(y / tile.height + x / tile.width),
+        y: Math.floor(y / tile.height - x / tile.width)
+      };
+    }
+
+    function updateMouse(event) {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = event.clientX - rect.left;
+      mouse.y = event.clientY - rect.top;
+      const position = screenToTile(mouse.x, mouse.y);
+      mouse.tileX = position.x;
+      mouse.tileY = position.y;
+      mouse.inside = isInside(position.x, position.y);
+    }
+
+    function drawDiamond(x, y, fill, stroke, alpha = 1) {
+      const point = isoToScreen(x + 0.5, y + 0.5);
+      const halfW = tile.width / 2 * camera.zoom;
+      const halfH = tile.height / 2 * camera.zoom;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y - halfH);
+      ctx.lineTo(point.x + halfW, point.y);
+      ctx.lineTo(point.x, point.y + halfH);
+      ctx.lineTo(point.x - halfW, point.y);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawFloor(x, y, cell) {
+      const style = floorStyles[cell.floor] || floorStyles.deck;
+      drawDiamond(x, y, style.color, style.line);
+
+      const point = isoToScreen(x + 0.5, y + 0.5);
+      if (cell.floor === 'roundPad') {
+        ctx.save();
+        ctx.strokeStyle = '#77777f';
+        ctx.lineWidth = 2 * camera.zoom;
+        ctx.beginPath();
+        ctx.ellipse(point.x, point.y, 22 * camera.zoom, 10 * camera.zoom, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (cell.floor === 'service') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(210,210,220,0.28)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(point.x - 16 * camera.zoom, point.y - 8 * camera.zoom);
+        ctx.lineTo(point.x + 16 * camera.zoom, point.y + 8 * camera.zoom);
+        ctx.moveTo(point.x + 16 * camera.zoom, point.y - 8 * camera.zoom);
+        ctx.lineTo(point.x - 16 * camera.zoom, point.y + 8 * camera.zoom);
+        ctx.stroke();
+        ctx.restore();
       }
     }
-  }
 
-  // ---- Render -------------------------------------------------------------
-  function drawTileDiamond(gx, gy, fill, stroke) {
-    const t = worldToScreen(gx, gy);
-    const hw = (TILE_W / 2) * camera.zoom;
-    const hh = (TILE_H / 2) * camera.zoom;
-    ctx.beginPath();
-    ctx.moveTo(t.x, t.y - hh);
-    ctx.lineTo(t.x + hw, t.y);
-    ctx.lineTo(t.x, t.y + hh);
-    ctx.lineTo(t.x - hw, t.y);
-    ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
-  }
+    function drawWall(x, y, type) {
+      const top = isoToScreen(x, y);
+      const scale = camera.zoom;
+      const halfW = tile.width / 2 * scale;
+      const halfH = tile.height / 2 * scale;
 
-  // draw a raised block (wall / obstacle) as a simple isometric cube
-  function drawBlock(gx, gy, topCol, sideCol, height) {
-    const t = worldToScreen(gx, gy);
-    const hw = (TILE_W / 2) * camera.zoom;
-    const hh = (TILE_H / 2) * camera.zoom;
-    const H = height * camera.zoom;
+      if (type === 'solid') {
+        const height = 42 * scale;
+        const a = { x: top.x, y: top.y - height };
+        const b = { x: top.x + halfW, y: top.y + halfH - height };
+        const c = { x: top.x, y: top.y + tile.height * scale - height };
+        const d = { x: top.x - halfW, y: top.y + halfH - height };
+        const aBase = { x: top.x, y: top.y };
+        const bBase = { x: top.x + halfW, y: top.y + halfH };
+        const cBase = { x: top.x, y: top.y + tile.height * scale };
+        const dBase = { x: top.x - halfW, y: top.y + halfH };
 
-    // left face
-    ctx.beginPath();
-    ctx.moveTo(t.x - hw, t.y);
-    ctx.lineTo(t.x, t.y + hh);
-    ctx.lineTo(t.x, t.y + hh - H);
-    ctx.lineTo(t.x - hw, t.y - H);
-    ctx.closePath();
-    ctx.fillStyle = sideCol;
-    ctx.fill();
+        ctx.fillStyle = '#202024';
+        polygon([d, c, cBase, dBase]);
+        ctx.fillStyle = '#2b2b30';
+        polygon([b, c, cBase, bBase]);
+        ctx.fillStyle = '#494950';
+        polygon([a, b, c, d], '#5c5c64');
+        return;
+      }
 
-    // right face (slightly darker)
-    ctx.beginPath();
-    ctx.moveTo(t.x + hw, t.y);
-    ctx.lineTo(t.x, t.y + hh);
-    ctx.lineTo(t.x, t.y + hh - H);
-    ctx.lineTo(t.x + hw, t.y - H);
-    ctx.closePath();
-    ctx.fillStyle = shade(sideCol, -18);
-    ctx.fill();
+      const center = isoToScreen(x + 0.5, y + 0.5);
+      const left = { x: center.x - halfW, y: center.y };
+      const right = { x: center.x + halfW, y: center.y };
+      const topCorner = { x: center.x, y: center.y - halfH };
+      const bottomCorner = { x: center.x, y: center.y + halfH };
+      const start = type === 'diagA' ? left : topCorner;
+      const end = type === 'diagA' ? right : bottomCorner;
 
-    // top
-    ctx.beginPath();
-    ctx.moveTo(t.x, t.y - hh - H);
-    ctx.lineTo(t.x + hw, t.y - H);
-    ctx.lineTo(t.x, t.y + hh - H);
-    ctx.lineTo(t.x - hw, t.y - H);
-    ctx.closePath();
-    ctx.fillStyle = topCol;
-    ctx.fill();
-  }
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#242428';
+      ctx.lineWidth = 12 * scale;
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y - 10 * scale);
+      ctx.lineTo(end.x, end.y - 10 * scale);
+      ctx.stroke();
+      ctx.strokeStyle = '#66666e';
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y - 13 * scale);
+      ctx.lineTo(end.x, end.y - 13 * scale);
+      ctx.stroke();
+      ctx.restore();
+    }
 
-  function shade(hex, amt) {
-    const n = parseInt(hex.slice(1), 16);
-    let r = (n >> 16) + amt, g = ((n >> 8) & 255) + amt, b = (n & 255) + amt;
-    r = Math.max(0, Math.min(255, r));
-    g = Math.max(0, Math.min(255, g));
-    b = Math.max(0, Math.min(255, b));
-    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-  }
+    function polygon(points, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+      ctx.closePath();
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
 
-  function drawAvatar() {
-    const t = worldToScreen(avatar.x, avatar.y);
-    const z = camera.zoom;
-    const bodyH = 34 * z;
-    const rx = 9 * z;
+    function drawObject(object) {
+      const point = isoToScreen(object.x + 0.5, object.y + 0.5);
+      const scale = camera.zoom;
+      const selected = object.id === selectedObjectId;
 
-    // shadow
-    ctx.beginPath();
-    ctx.ellipse(t.x, t.y, 11 * z, 5.5 * z, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fill();
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.scale(scale, scale);
 
-    // body (simple capsule/figure)
-    ctx.beginPath();
-    ctx.ellipse(t.x, t.y - bodyH * 0.45, rx, bodyH * 0.5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = COL.avatar;
-    ctx.fill();
-    ctx.strokeStyle = COL.avatarDark;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 20, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
 
-    // head
-    ctx.beginPath();
-    ctx.arc(t.x, t.y - bodyH, 7 * z, 0, Math.PI * 2);
-    ctx.fillStyle = COL.avatar;
-    ctx.fill();
-    ctx.stroke();
-  }
+      if (selected) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.ellipse(0, 9, 27, 13, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
-  function render() {
-    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+      ctx.save();
+      ctx.rotate((object.rotation || 0) * Math.PI / 180);
+      if (object.type === 'console') drawConsole();
+      if (object.type === 'crate') drawCrate();
+      if (object.type === 'light') drawLight();
+      if (object.type === 'plant') drawPlant();
+      if (object.type === 'elevator') drawElevator();
 
-    // floor
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        if (grid[y][x] === 0) {
-          const alt = (x + y) % 2 === 0;
-          drawTileDiamond(x, y, alt ? COL.floor : COL.floorAlt, COL.floorEdge);
+      if (object.interactive) {
+        ctx.fillStyle = '#f4f4f5';
+        ctx.beginPath();
+        ctx.arc(17, -30, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.restore();
+    }
+
+    function drawConsole() {
+      ctx.fillStyle = '#2f2f34';
+      ctx.fillRect(-17, -12, 34, 22);
+      ctx.fillStyle = '#55555d';
+      ctx.fillRect(-13, -27, 26, 17);
+      ctx.fillStyle = '#bdbdc4';
+      ctx.fillRect(-9, -23, 18, 8);
+      ctx.strokeStyle = '#77777f';
+      ctx.strokeRect(-17, -12, 34, 22);
+    }
+
+    function drawCrate() {
+      ctx.fillStyle = '#343438';
+      ctx.fillRect(-17, -19, 34, 29);
+      ctx.fillStyle = '#4c4c53';
+      ctx.fillRect(-17, -19, 34, 8);
+      ctx.strokeStyle = '#696970';
+      ctx.strokeRect(-17, -19, 34, 29);
+      ctx.beginPath();
+      ctx.moveTo(-17, -5);
+      ctx.lineTo(17, -5);
+      ctx.moveTo(0, -19);
+      ctx.lineTo(0, 10);
+      ctx.stroke();
+    }
+
+    function drawLight() {
+      ctx.strokeStyle = '#77777f';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, 9);
+      ctx.lineTo(0, -27);
+      ctx.stroke();
+      ctx.fillStyle = '#f0f0f2';
+      ctx.beginPath();
+      ctx.arc(0, -31, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.14;
+      ctx.beginPath();
+      ctx.arc(0, -31, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawPlant() {
+      ctx.strokeStyle = '#b8b8bd';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, 8);
+      ctx.lineTo(0, -20);
+      ctx.moveTo(0, -8);
+      ctx.lineTo(-11, -19);
+      ctx.moveTo(0, -12);
+      ctx.lineTo(11, -24);
+      ctx.stroke();
+      ctx.fillStyle = '#48484e';
+      ctx.fillRect(-11, 4, 22, 10);
+    }
+
+    function drawElevator() {
+      ctx.strokeStyle = '#85858c';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, -18);
+      ctx.lineTo(24, 0);
+      ctx.lineTo(0, 18);
+      ctx.lineTo(-24, 0);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = '#c8c8cd';
+      ctx.beginPath();
+      ctx.moveTo(0, -11);
+      ctx.lineTo(8, 0);
+      ctx.lineTo(0, 11);
+      ctx.lineTo(-8, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Vector pawn — a simple monochrome figure. No external sprite needed.
+    // A short "shoulder" line and a nose nub encode the facing direction so
+    // you can read which way the pawn is walking, RimWorld-style.
+    function drawPawn() {
+      const point = isoToScreen(pawn.x + 0.5, pawn.y + 0.5);
+      const scale = camera.zoom;
+      const bob = pawn.moving ? Math.sin(pawn.animationTime * 11) * 1.6 : 0;
+
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.scale(scale, scale);
+
+      // ground shadow
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(0, 9, 13, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // selection ring in test mode
+      if (mode === 'test') {
+        ctx.strokeStyle = '#f2f2f4';
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.ellipse(0, 8, 18, 9, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // facing offsets (screen-space unit vector, flattened vertically for iso)
+      const fx = Math.cos(pawn.facing);
+      const fy = Math.sin(pawn.facing) * 0.55;
+
+      // legs (only visible split while walking)
+      const stride = pawn.moving ? Math.sin(pawn.animationTime * 11) * 4 : 0;
+      ctx.strokeStyle = '#8a8a92';
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-2.5, 2 + bob);
+      ctx.lineTo(-2.5 - stride * 0.4, 9);
+      ctx.moveTo(2.5, 2 + bob);
+      ctx.lineTo(2.5 + stride * 0.4, 9);
+      ctx.stroke();
+
+      // body (capsule torso)
+      ctx.fillStyle = '#d9d9de';
+      ctx.strokeStyle = '#9a9aa2';
+      ctx.lineWidth = 1.4;
+      roundedRect(-6, -13 + bob, 12, 18, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      // shoulder line — perpendicular to facing, sells the orientation
+      ctx.strokeStyle = '#6f6f77';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-fy * 6, -8 + bob);
+      ctx.lineTo(fy * 6, -8 + bob);
+      ctx.stroke();
+
+      // head
+      ctx.fillStyle = '#ededf0';
+      ctx.strokeStyle = '#9a9aa2';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(0, -18 + bob, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // nose nub — points where the pawn is facing
+      ctx.fillStyle = '#2a2a2e';
+      ctx.beginPath();
+      ctx.arc(fx * 5, -18 + bob + fy * 5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function roundedRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function drawEntryMarker() {
+      const point = isoToScreen(map.entry.x + 0.5, map.entry.y + 0.5);
+      ctx.save();
+      ctx.strokeStyle = '#f0f0f2';
+      ctx.lineWidth = 2 * camera.zoom;
+      ctx.setLineDash([4 * camera.zoom, 4 * camera.zoom]);
+      ctx.beginPath();
+      ctx.ellipse(point.x, point.y, 15 * camera.zoom, 7 * camera.zoom, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#f0f0f2';
+      ctx.font = `${11 * camera.zoom}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('ENTRY', point.x, point.y - 12 * camera.zoom);
+      ctx.restore();
+    }
+
+    function drawPathPreview() {
+      if (mode !== 'test' || !mouse.inside || !isWalkable(mouse.tileX, mouse.tileY)) return;
+      const path = findPath(Math.round(pawn.x), Math.round(pawn.y), mouse.tileX, mouse.tileY);
+      ctx.save();
+      ctx.globalAlpha = 0.24;
+      for (const node of path) drawDiamond(node.x, node.y, '#fff', null);
+      ctx.restore();
+    }
+
+    function drawCurrentPath() {
+      if (mode !== 'test' || !pawn.path.length) return;
+      ctx.save();
+      ctx.strokeStyle = '#eeeeef';
+      ctx.lineWidth = Math.max(2, 2.2 * camera.zoom);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.62;
+      ctx.beginPath();
+      const start = isoToScreen(pawn.x + 0.5, pawn.y + 0.5);
+      ctx.moveTo(start.x, start.y);
+      for (const node of pawn.path) {
+        const point = isoToScreen(node.x + 0.5, node.y + 0.5);
+        ctx.lineTo(point.x, point.y);
+      }
+      ctx.stroke();
+      // destination marker
+      const last = pawn.path[pawn.path.length - 1];
+      const dp = isoToScreen(last.x + 0.5, last.y + 0.5);
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(dp.x - 6, dp.y);
+      ctx.lineTo(dp.x + 6, dp.y);
+      ctx.moveTo(dp.x, dp.y - 6);
+      ctx.lineTo(dp.x, dp.y + 6);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+      for (let y = 0; y < map.height; y += 1) {
+        for (let x = 0; x < map.width; x += 1) drawFloor(x, y, map.tiles[y][x]);
+      }
+
+      if (mouse.inside && mode === 'build') {
+        drawDiamond(mouse.tileX, mouse.tileY, 'rgba(255,255,255,0.10)', '#d7d7dc');
+      }
+
+      drawEntryMarker();
+      drawCurrentPath();
+      drawPathPreview();
+
+      const drawables = [];
+      for (let y = 0; y < map.height; y += 1) {
+        for (let x = 0; x < map.width; x += 1) {
+          if (map.tiles[y][x].wall) drawables.push({ kind: 'wall', x, y, type: map.tiles[y][x].wall, depth: x + y + 0.1 });
         }
       }
-    }
+      for (const object of map.objects) drawables.push({ kind: 'object', object, depth: object.x + object.y + 0.4 });
+      drawables.push({ kind: 'pawn', depth: pawn.x + pawn.y + 0.5 });
+      drawables.sort((a, b) => a.depth - b.depth);
 
-    // move-target highlight under cursor
-    if (walkable(mouse.tile.x, mouse.tile.y)) {
-      drawTileDiamond(mouse.tile.x, mouse.tile.y, null, COL.highlight);
-    }
-
-    // current path breadcrumbs
-    for (const p of avatar.path) {
-      drawTileDiamond(p.x, p.y, null, COL.path);
-    }
-
-    // walls + obstacles + avatar, drawn back-to-front by (x+y) for correct
-    // isometric depth ordering
-    const drawables = [];
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        if (grid[y][x] === 1) {
-          const isObstacle = obstacleSet.has(x + ',' + y);
-          drawables.push({
-            depth: x + y, kind: 'block', x, y,
-            top: isObstacle ? COL.obstacleTop : COL.wallTop,
-            side: isObstacle ? COL.obstacle : COL.wall,
-            h: isObstacle ? 22 : 30,
-          });
-        }
+      for (const item of drawables) {
+        if (item.kind === 'wall') drawWall(item.x, item.y, item.type);
+        if (item.kind === 'object') drawObject(item.object);
+        if (item.kind === 'pawn') drawPawn();
       }
     }
-    drawables.push({ depth: avatar.x + avatar.y, kind: 'avatar' });
-    drawables.sort((a, b) => a.depth - b.depth);
 
-    for (const d of drawables) {
-      if (d.kind === 'block') drawBlock(d.x, d.y, d.top, d.side, d.h);
-      else drawAvatar();
+    function key(x, y) {
+      return `${x},${y}`;
     }
 
-    hud.textContent =
-      'ISOMETRIC PLACEHOLDER (RimWorld-style)\n' +
-      'Left click floor  → move avatar (A* pathfinding)\n' +
-      'WASD / arrows     → pan camera\n' +
-      'Mouse wheel       → zoom\n' +
-      '\n' +
-      'avatar tile: ' + Math.round(avatar.x) + ',' + Math.round(avatar.y) +
-      '   zoom: ' + camera.zoom.toFixed(2);
-  }
+    // Octile heuristic — admissible for 8-directional movement.
+    function heuristic(a, b) {
+      const dx = Math.abs(a.x - b.x);
+      const dy = Math.abs(a.y - b.y);
+      return (dx + dy) + (SQRT2 - 2) * Math.min(dx, dy);
+    }
 
-  // ---- Main loop ----------------------------------------------------------
-  let last = performance.now();
-  function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
-    last = now;
-    update(dt);
-    render();
+    // 8-directional A*. Diagonals are only allowed when both orthogonal
+    // neighbours are open, so the pawn never clips a wall corner.
+    function findPath(startX, startY, endX, endY) {
+      if (!isWalkable(endX, endY)) return [];
+      if (startX === endX && startY === endY) return [];
+      const start = { x: startX, y: startY };
+      const goal = { x: endX, y: endY };
+      const open = [{ ...start, g: 0, f: heuristic(start, goal), parent: null }];
+      const nodes = new Map([[key(start.x, start.y), open[0]]]);
+      const closed = new Set();
+
+      const dirs = [
+        { x: 1, y: 0, cost: 1 }, { x: -1, y: 0, cost: 1 },
+        { x: 0, y: 1, cost: 1 }, { x: 0, y: -1, cost: 1 },
+        { x: 1, y: 1, cost: SQRT2 }, { x: 1, y: -1, cost: SQRT2 },
+        { x: -1, y: 1, cost: SQRT2 }, { x: -1, y: -1, cost: SQRT2 }
+      ];
+
+      while (open.length) {
+        open.sort((a, b) => a.f - b.f);
+        const current = open.shift();
+        if (current.x === goal.x && current.y === goal.y) {
+          const path = [];
+          let cursor = current;
+          while (cursor.parent) {
+            path.unshift({ x: cursor.x, y: cursor.y });
+            cursor = cursor.parent;
+          }
+          return path;
+        }
+
+        closed.add(key(current.x, current.y));
+
+        for (const dir of dirs) {
+          const nx = current.x + dir.x;
+          const ny = current.y + dir.y;
+          if (!isWalkable(nx, ny)) continue;
+          // block diagonal moves that would cut a wall corner
+          if (dir.x !== 0 && dir.y !== 0) {
+            if (!isWalkable(current.x + dir.x, current.y) || !isWalkable(current.x, current.y + dir.y)) continue;
+          }
+          const neighborKey = key(nx, ny);
+          if (closed.has(neighborKey)) continue;
+          const g = current.g + dir.cost;
+          const existing = nodes.get(neighborKey);
+          if (!existing || g < existing.g) {
+            const node = { x: nx, y: ny, g, f: g + heuristic({ x: nx, y: ny }, goal), parent: current };
+            nodes.set(neighborKey, node);
+            open.push(node);
+          }
+        }
+      }
+      return [];
+    }
+
+    function orderMove(x, y) {
+      if (!isWalkable(x, y)) {
+        setStatus('Destination is blocked.');
+        return;
+      }
+      const path = findPath(Math.round(pawn.x), Math.round(pawn.y), x, y);
+      pawn.path = path;
+      setStatus(path.length ? `Moving to ${x}, ${y}.` : 'Already there.');
+    }
+
+    function updatePawn(delta) {
+      if (mode !== 'test' || !pawn.path.length) {
+        pawn.moving = false;
+        return;
+      }
+
+      pawn.moving = true;
+      pawn.animationTime += delta;
+      const target = pawn.path[0];
+      const dx = target.x - pawn.x;
+      const dy = target.y - pawn.y;
+      const distance = Math.hypot(dx, dy);
+      const step = pawn.speed * delta;
+
+      // face the movement direction in screen space (iso-projected)
+      if (distance > 1e-4) {
+        const screenDX = (dx - dy);
+        const screenDY = (dx + dy) * (tile.height / tile.width);
+        pawn.facing = Math.atan2(screenDY, screenDX);
+      }
+
+      if (distance <= step) {
+        pawn.x = target.x;
+        pawn.y = target.y;
+        pawn.path.shift();
+        if (!pawn.path.length) {
+          pawn.moving = false;
+          setStatus(`Pawn at ${pawn.x}, ${pawn.y}.`);
+        }
+      } else {
+        pawn.x += (dx / distance) * step;
+        pawn.y += (dy / distance) * step;
+      }
+    }
+
+    function updateCamera(delta) {
+      let x = 0;
+      let y = 0;
+      if (pressed.has('a') || pressed.has('arrowleft')) x += 1;
+      if (pressed.has('d') || pressed.has('arrowright')) x -= 1;
+      if (pressed.has('w') || pressed.has('arrowup')) y += 1;
+      if (pressed.has('s') || pressed.has('arrowdown')) y -= 1;
+      if (x || y) {
+        const length = Math.hypot(x, y);
+        camera.x += x / length * 540 * delta;
+        camera.y += y / length * 540 * delta;
+      }
+    }
+
+    function setTool(tool) {
+      currentTool = tool;
+      document.querySelectorAll('[data-tool]').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
+      setStatus(`${tool[0].toUpperCase()}${tool.slice(1)} tool selected.`);
+    }
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      document.body.classList.toggle('testing', mode === 'test');
+      document.getElementById('buildModeButton').classList.toggle('active', mode === 'build');
+      document.getElementById('testModeButton').classList.toggle('active', mode === 'test');
+      selectedObjectId = null;
+      selectedTile = null;
+      draggingObject = false;
+      pointerPainting = false;
+      resetPawnToEntry();
+      updateInspector();
+      setStatus(mode === 'test' ? 'Test mode: click a walkable tile to move.' : 'Builder mode.');
+    }
+
+    function exportMapData() {
+      return {
+        ...cloneMap(),
+        exportedAt: new Date().toISOString()
+      };
+    }
+
+    function exportMap() {
+      const data = JSON.stringify(exportMapData(), null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${map.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'station-map'}.stationmap.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+      setStatus('Map package exported.');
+    }
+
+    function importMapData(data) {
+      const candidate = data.map && typeof data.map === 'object' ? data.map : data;
+      const normalized = normalizeMap(candidate);
+      undoStack.push(cloneMap());
+      redoStack = [];
+      map = normalized;
+      selectedObjectId = null;
+      selectedTile = null;
+      syncMapControls();
+      resetPawnToEntry();
+      updateInspector();
+      setStatus(`Imported “${map.name}”.`);
+      return map;
+    }
+
+    function syncMapControls() {
+      document.getElementById('mapName').value = map.name;
+      document.getElementById('mapWidth').value = map.width;
+      document.getElementById('mapHeight').value = map.height;
+    }
+
+    canvas.addEventListener('pointermove', event => {
+      updateMouse(event);
+
+      if (mode === 'build' && draggingObject) {
+        const object = getSelectedObject();
+        if (object && mouse.inside && isWalkable(mouse.tileX, mouse.tileY)) {
+          object.x = mouse.tileX;
+          object.y = mouse.tileY;
+          updateInspector();
+        }
+      }
+
+      if (mode === 'build' && pointerPainting && ['floor', 'wall', 'erase'].includes(currentTool)) {
+        applyTool(mouse.tileX, mouse.tileY, true);
+      }
+    });
+
+    canvas.addEventListener('pointerdown', event => {
+      updateMouse(event);
+      if (event.button === 2) return;
+
+      if (mode === 'test') {
+        orderMove(mouse.tileX, mouse.tileY);
+        return;
+      }
+
+      pushHistory();
+      pointerPainting = true;
+
+      if (currentTool === 'select') {
+        selectAt(mouse.tileX, mouse.tileY);
+      } else {
+        applyTool(mouse.tileX, mouse.tileY, false);
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      pointerPainting = false;
+      if (draggingObject) {
+        draggingObject = false;
+        updateInspector();
+      }
+    });
+
+    canvas.addEventListener('pointerleave', () => {
+      mouse.inside = false;
+    });
+
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
+
+    canvas.addEventListener('wheel', event => {
+      event.preventDefault();
+      const oldZoom = camera.zoom;
+      const factor = event.deltaY > 0 ? 0.9 : 1.1;
+      camera.zoom = clamp(camera.zoom * factor, camera.minZoom, camera.maxZoom);
+      const scale = camera.zoom / oldZoom;
+      camera.x = mouse.x - (mouse.x - camera.x) * scale;
+      camera.y = mouse.y - (mouse.y - camera.y) * scale;
+    }, { passive: false });
+
+    document.querySelectorAll('[data-tool]').forEach(button => {
+      button.addEventListener('click', () => setTool(button.dataset.tool));
+    });
+
+    document.querySelectorAll('[data-floor]').forEach(button => {
+      button.addEventListener('click', () => {
+        currentFloor = button.dataset.floor;
+        document.querySelectorAll('[data-floor]').forEach(candidate => candidate.classList.toggle('active', candidate === button));
+        setTool('floor');
+      });
+    });
+
+    document.querySelectorAll('[data-wall]').forEach(button => {
+      button.addEventListener('click', () => {
+        currentWall = button.dataset.wall;
+        document.querySelectorAll('[data-wall]').forEach(candidate => candidate.classList.toggle('active', candidate === button));
+        setTool('wall');
+      });
+    });
+
+    document.querySelectorAll('[data-object]').forEach(button => {
+      button.addEventListener('click', () => {
+        currentObject = button.dataset.object;
+        document.querySelectorAll('[data-object]').forEach(candidate => candidate.classList.toggle('active', candidate === button));
+        setTool('object');
+      });
+    });
+
+    document.getElementById('buildModeButton').addEventListener('click', () => setMode('build'));
+    document.getElementById('testModeButton').addEventListener('click', () => setMode('test'));
+    document.getElementById('exitTestMode').addEventListener('click', () => setMode('build'));
+    document.getElementById('exportMap').addEventListener('click', exportMap);
+    document.getElementById('importMap').addEventListener('click', () => importInput.click());
+    document.getElementById('undoButton').addEventListener('click', undo);
+    document.getElementById('redoButton').addEventListener('click', redo);
+
+    document.getElementById('mapName').addEventListener('change', event => {
+      pushHistory();
+      map.name = event.target.value.trim() || 'Untitled Deck';
+      setStatus(`Map renamed to “${map.name}”.`);
+    });
+
+    document.getElementById('resizeMap').addEventListener('click', () => {
+      const width = clamp(Number(document.getElementById('mapWidth').value) || map.width, 8, 48);
+      const height = clamp(Number(document.getElementById('mapHeight').value) || map.height, 8, 48);
+      resizeMap(width, height);
+      syncMapControls();
+    });
+
+    document.getElementById('newMap').addEventListener('click', () => {
+      map = createMap('Untitled Deck', 26, 18);
+      undoStack = [];
+      redoStack = [];
+      selectedObjectId = null;
+      selectedTile = null;
+      syncMapControls();
+      resetPawnToEntry();
+      updateInspector();
+      setStatus('New map created.');
+    });
+
+    importInput.addEventListener('change', async event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        importMapData(JSON.parse(await file.text()));
+      } catch (error) {
+        setStatus(`Import failed: ${error.message}`);
+      } finally {
+        importInput.value = '';
+      }
+    });
+
+    inspector.addEventListener('click', event => {
+      const action = event.target.dataset.inspectorAction;
+      if (!action) return;
+      pushHistory();
+
+      if (action === 'delete-object' && selectedObjectId) {
+        map.objects = map.objects.filter(object => object.id !== selectedObjectId);
+        selectedObjectId = null;
+      }
+
+      if (action === 'rotate') {
+        const object = getSelectedObject();
+        if (object) object.rotation = (object.rotation + 30) % 360;
+      }
+
+      if (action === 'clear-wall' && selectedTile) getTile(selectedTile.x, selectedTile.y).wall = null;
+      if (action === 'clear-floor' && selectedTile) {
+        const cell = getTile(selectedTile.x, selectedTile.y);
+        cell.floor = 'void';
+        cell.wall = null;
+      }
+
+      updateInspector();
+    });
+
+    window.addEventListener('keydown', event => {
+      const keyName = event.key.toLowerCase();
+
+      if ((event.ctrlKey || event.metaKey) && keyName === 'z') {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && keyName === 'y') {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && keyName === 's') {
+        event.preventDefault();
+        exportMap();
+        return;
+      }
+
+      if (keyName === 'delete' || keyName === 'backspace') {
+        if (mode === 'build' && selectedObjectId) {
+          pushHistory();
+          map.objects = map.objects.filter(object => object.id !== selectedObjectId);
+          selectedObjectId = null;
+          updateInspector();
+          setStatus('Object deleted.');
+        }
+        return;
+      }
+
+      if (keyName === 'escape') {
+        if (mode === 'test') setMode('build');
+        else {
+          selectedObjectId = null;
+          selectedTile = null;
+          updateInspector();
+        }
+        return;
+      }
+
+      pressed.add(keyName);
+    });
+
+    window.addEventListener('keyup', event => pressed.delete(event.key.toLowerCase()));
+
+    function resize() {
+      const scale = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * scale);
+      canvas.height = Math.floor(window.innerHeight * scale);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    }
+
+    function frame(now) {
+      const delta = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      updateCamera(delta);
+      updatePawn(delta);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('resize', resize);
+
+    window.stationBuilder = {
+      getMap: () => cloneMap(),
+      setMode,
+      setTool,
+      applyTool,
+      importMapData,
+      exportMapData,
+      isWalkable
+    };
+
+    syncMapControls();
+    resetPawnToEntry();
+    resize();
     requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-</script>
+  </script>
 </body>
 </html>
