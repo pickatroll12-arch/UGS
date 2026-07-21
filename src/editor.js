@@ -38,6 +38,7 @@
   // interaction sub-states resolved per gesture
   let painting = false, panning = false, dragged = false;
   let movingObj = null;            // { roomId, objectId }
+  let dragHandle = null;           // { roomId, eventId, kind, poseIndex }
   let strokeChanged = false;       // did the current gesture actually mutate?
   let lastPaintKey = '';           // dedupe repeated paints on the same tile
 
@@ -276,9 +277,20 @@
     updateMouse(e); mouse.down = true; dragged = false;
     mouse.lastX = e.clientX; mouse.lastY = e.clientY;
     lastPaintKey = ''; strokeChanged = false;
-    painting = panning = false; movingObj = null;
+    painting = panning = false; movingObj = null; dragHandle = null;
 
     if (app.mode !== 'build') { panning = true; return; }
+
+    // motion handles take priority when a room is selected with the Select tool
+    if (app.tool === 'select' && app.selection) {
+      const room = roomById(app.selection.roomId);
+      if (room) {
+        const hs = R.motionHandles(app.camera, room);
+        const h = hs.find(hh => Math.abs(hh.sx - mouse.x) + Math.abs(hh.sy - mouse.y) < 12);
+        if (h) { dragHandle = { roomId: room.id, eventId: h.eventId, kind: h.kind, poseIndex: h.poseIndex }; pushHistory(); return; }
+      }
+    }
+
     const hit = pickHit(mouse.x, mouse.y);
 
     if (app.tool === 'floor' || app.tool === 'wall' || app.tool === 'erase') {
@@ -297,6 +309,19 @@
     const moved = Math.abs(e.clientX - mouse.lastX) + Math.abs(e.clientY - mouse.lastY);
     if (mouse.down && moved > 2) dragged = true;
 
+    if (dragHandle) {
+      const room = roomById(dragHandle.roomId);
+      const ev = room && room.events.find(e => e.id === dragHandle.eventId);
+      if (ev) {
+        const P = R.screenToWorld(app.camera, mouse.x, mouse.y);
+        const rc = R.roomCenterWorld(room), t = room.transform;
+        if (dragHandle.kind === 'shift-to') ev.action.to = { x: t.x + (P.x - rc.x), y: t.y + (P.y - rc.y) };
+        else if (dragHandle.kind === 'orbit-center') ev.action.center = { x: P.x, y: P.y };
+        else if (dragHandle.kind === 'carousel-pose') { const p = ev.action.poses[dragHandle.poseIndex]; if (p) { p.x = t.x + (P.x - rc.x); p.y = t.y + (P.y - rc.y); } }
+        strokeChanged = true;
+      }
+      return;
+    }
     if (painting) {
       const hit = pickHit(mouse.x, mouse.y);
       if (hit) strokeChanged = applyPaint(hit) || strokeChanged;
@@ -335,7 +360,9 @@
         if (room && room.movable) { const n = engine.trigger(room); if (n) setStatus(`Fired ${n} event(s) on ${room.name}.`); }
       }
     } else if (mouse.down && app.mode === 'build') {
-      if (painting || movingObj) {
+      if (dragHandle) {
+        if (!strokeChanged) discardHistory();
+      } else if (painting || movingObj) {
         if (!strokeChanged) discardHistory();   // no-op gesture: drop the snapshot
         else updateInspector();
       } else if (!dragged) {
@@ -350,7 +377,7 @@
         }
       }
     }
-    mouse.down = false; painting = panning = false; movingObj = null; dragged = false;
+    mouse.down = false; painting = panning = false; movingObj = null; dragHandle = null; dragged = false;
   }
 
   function onWheel(e) {
@@ -406,13 +433,18 @@
     if (room.events && room.events.length) {
       for (const ev of room.events) {
         const kind = ev.action ? ev.action.kind : '?';
-        h += `<div class="row" style="margin-top:4px"><b>${esc(ev.name)}</b><span>${kind}${ev.loop ? ' ⟳' : ''} · ${ev.trigger ? ev.trigger.type : 'manual'}</span></div>`;
-        h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">Test ▶</button><button class="danger" data-act="evt-del" data-id="${ev.id}">✕</button></div>`;
+        const extra = kind === 'orbit' ? ` ${ev.action.direction === 'ccw' ? '⟲' : '⟳'}` : (ev.loop ? ' ⟳' : '');
+        h += `<div class="row" style="margin-top:4px"><b>${esc(ev.name)}</b><span>${kind}${extra} · ${ev.trigger ? ev.trigger.type : 'manual'}</span></div>`;
+        h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">Test ▶</button>`;
+        if (kind === 'orbit') h += `<button data-act="evt-orbitdir" data-id="${ev.id}">Flip ⟳⟲</button>`;
+        h += `<button class="danger" data-act="evt-del" data-id="${ev.id}">✕</button></div>`;
       }
     } else {
       h += `<div class="row"><span class="muted">No motion events.</span></div>`;
     }
-    h += `<div class="mini"><button data-act="evt-shift">+ Shift</button><button data-act="evt-rotate">+ Rotate</button><button data-act="evt-carousel">+ Carousel</button></div>`;
+    h += `<div class="mini"><button data-act="evt-shift">+ Shift</button><button data-act="evt-rotate">+ Rotate</button></div>`;
+    h += `<div class="mini"><button data-act="evt-orbit">+ Orbit</button><button data-act="evt-carousel">+ Carousel</button></div>`;
+    h += `<div class="hint" style="margin-top:6px">Drag the coloured handle on the map to aim the motion.</div>`;
     inspector.innerHTML = h;
   }
   function floorLabel(id) { return id === 'void' ? 'void (empty)' : ((D.MATERIALS[id] || {}).label || id); }
@@ -428,11 +460,12 @@
     ev.trigger = { type: 'time' }; ev.loop = true;
     if (kind === 'shift') ev.action = { kind: 'shift', to: { x: t.x + 4, y: t.y }, duration: 2 };
     else if (kind === 'rotate') ev.action = { kind: 'rotate', by: 90, duration: 2 };
+    else if (kind === 'orbit') { const rc = R.roomCenterWorld(room); ev.action = { kind: 'orbit', center: { x: rc.x, y: rc.y - 5 }, period: 4, direction: 'cw', selfRotate: false }; }
     else if (kind === 'carousel') ev.action = { kind: 'carousel', interval: 1.8, loop: true, poses: [
       { x: t.x + 4, y: t.y, rotation: t.rotation }, { x: t.x + 4, y: t.y + 4, rotation: t.rotation + 90 }, { x: t.x, y: t.y + 4, rotation: t.rotation + 180 }
     ] };
     room.events.push(ev);
-    updateInspector(); setStatus(`Added ${kind} event to ${room.name}. Hit Play to see it.`);
+    updateInspector(); setStatus(`Added ${kind} event. Drag the handle to aim it, hit Play to see it.`);
   }
   function deleteRoomEvent(room, id) { pushHistory(); room.events = room.events.filter(e => e.id !== id); updateInspector(); }
   function testRoomEvent(room, id) {
@@ -465,6 +498,7 @@
       entry: lvl.entry,
       hiddenLayers: app.hiddenLayers,
       activeRoomId: app.selection ? app.selection.roomId : null,
+      previewRoom: (app.mode === 'build' && app.selection) ? roomById(app.selection.roomId) : null,
       showRoomOutlines: app.mode === 'build'
     });
     hud.textContent = `${app.save.name} · ${lvl.name}  [${app.mode}·${app.tool}]\n` +
@@ -548,6 +582,13 @@
     window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 
     document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+
+    // tab switching
+    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+      const name = btn.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
+      document.querySelectorAll('[data-tabpanel]').forEach(p => { p.hidden = p.dataset.tabpanel !== name; });
+    }));
     document.getElementById('buildBtn').addEventListener('click', () => setMode('build'));
     document.getElementById('playBtn').addEventListener('click', () => setMode('play'));
     document.getElementById('undoBtn').addEventListener('click', undo);
@@ -582,9 +623,11 @@
       else if (act === 'delete') deleteSelectedObject();
       else if (act === 'evt-shift' && room) addRoomEvent(room, 'shift');
       else if (act === 'evt-rotate' && room) addRoomEvent(room, 'rotate');
+      else if (act === 'evt-orbit' && room) addRoomEvent(room, 'orbit');
       else if (act === 'evt-carousel' && room) addRoomEvent(room, 'carousel');
       else if (act === 'evt-del' && room) deleteRoomEvent(room, e.target.dataset.id);
       else if (act === 'evt-fire' && room) testRoomEvent(room, e.target.dataset.id);
+      else if (act === 'evt-orbitdir' && room) { const ev = room.events.find(x => x.id === e.target.dataset.id); if (ev) { pushHistory(); ev.action.direction = ev.action.direction === 'ccw' ? 'cw' : 'ccw'; updateInspector(); } }
     });
     inspector.addEventListener('change', e => {
       if (e.target.dataset.act === 'movable') { const room = selectedRoom(); if (room) { pushHistory(); room.movable = e.target.checked; } }

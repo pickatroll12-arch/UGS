@@ -30,6 +30,12 @@
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chips button { padding: 5px 8px; font-size: 11px; }
+  .tabbar { display: flex; gap: 5px; margin: 12px 0 4px; }
+  .tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 4px; font-size: 10px; color: var(--muted); }
+  .tabbar button .ic { font-size: 15px; line-height: 1; }
+  .tabbar button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  .tabpanel[hidden] { display: none; }
   button, select { font: inherit; color: var(--text); background: #27272c;
     border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; cursor: pointer; }
   button:hover { border-color: var(--line-bright); background: #313137; }
@@ -69,85 +75,96 @@
   <h1>UGS · STATION BUILDER</h1>
   <p class="sub">Stage 1 · M4 — movable rooms</p>
 
-  <div class="sect">
-    <p class="lbl">Mode</p>
-    <div class="grid2">
-      <button id="buildBtn" class="active">Build</button>
-      <button id="playBtn">Play</button>
+  <div class="grid2">
+    <button id="buildBtn" class="active">Build</button>
+    <button id="playBtn">Play</button>
+  </div>
+  <select id="levelSelect" style="margin-top:8px;"></select>
+
+  <!-- tabbed toolbox -->
+  <div class="tabbar">
+    <button class="tab active" data-tab="build"><span class="ic">🧱</span>Build</button>
+    <button class="tab" data-tab="rooms"><span class="ic">🎞️</span>Rooms</button>
+    <button class="tab" data-tab="save"><span class="ic">💾</span>Save</button>
+  </div>
+
+  <div class="tabpanel" data-tabpanel="build">
+    <div class="sect">
+      <p class="lbl">Tools</p>
+      <div class="grid3">
+        <button class="tool active" data-tool="select">Select</button>
+        <button class="tool" data-tool="floor">Floor</button>
+        <button class="tool" data-tool="wall">Wall</button>
+        <button class="tool" data-tool="object">Object</button>
+        <button class="tool" data-tool="entry">Entry</button>
+        <button class="tool" data-tool="erase">Erase</button>
+        <button class="tool" data-tool="fill">Fill</button>
+      </div>
+      <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)">Select filter
+        <select id="selectFilter" style="margin-top:4px;">
+          <option value="all">All</option>
+          <option value="object">Objects only</option>
+          <option value="wall">Walls only</option>
+          <option value="floor">Floors only</option>
+        </select>
+      </label>
+    </div>
+    <div class="sect">
+      <p class="lbl">Floor material</p>
+      <div id="floorPalette" class="chips"></div>
+    </div>
+    <div class="sect">
+      <p class="lbl">Wall shape</p>
+      <div id="wallPalette" class="chips"></div>
+      <p class="lbl" style="margin-top:9px;">Wall material</p>
+      <div id="wallMatPalette" class="chips"></div>
+    </div>
+    <div class="sect">
+      <p class="lbl">Objects</p>
+      <div id="objectPalette" class="chips"></div>
     </div>
   </div>
 
-  <div class="sect">
-    <p class="lbl">Level</p>
-    <select id="levelSelect"></select>
-  </div>
-
-  <div class="sect">
-    <p class="lbl">Tools</p>
-    <div class="grid3">
-      <button class="tool active" data-tool="select">Select</button>
-      <button class="tool" data-tool="floor">Floor</button>
-      <button class="tool" data-tool="wall">Wall</button>
-      <button class="tool" data-tool="object">Object</button>
-      <button class="tool" data-tool="entry">Entry</button>
-      <button class="tool" data-tool="erase">Erase</button>
-      <button class="tool" data-tool="fill">Fill</button>
+  <div class="tabpanel" data-tabpanel="rooms" hidden>
+    <div class="sect">
+      <p class="lbl">Layers</p>
+      <div id="layerToggles" class="chips"></div>
+      <button id="dupRoomBtn" style="margin-top:8px;width:100%;">Duplicate room</button>
     </div>
-    <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)">Select filter
-      <select id="selectFilter" style="margin-top:4px;">
-        <option value="all">All</option>
-        <option value="object">Objects only</option>
-        <option value="wall">Walls only</option>
-        <option value="floor">Floors only</option>
-      </select>
-    </label>
+    <div class="sect">
+      <p class="lbl">Room motion</p>
+      <p class="hint">Select a room (Select tool) — its motion events appear in the
+        Inspector below. Add Shift / Rotate / Orbit / Carousel, then drag the
+        coloured handle on the map to aim it. Hit Play to watch.</p>
+    </div>
   </div>
 
-  <div class="sect">
-    <p class="lbl">Floor material</p>
-    <div id="floorPalette" class="chips"></div>
-  </div>
-
-  <div class="sect">
-    <p class="lbl">Wall shape</p>
-    <div id="wallPalette" class="chips"></div>
-    <p class="lbl" style="margin-top:9px;">Wall material</p>
-    <div id="wallMatPalette" class="chips"></div>
-  </div>
-
-  <div class="sect">
-    <p class="lbl">Objects</p>
-    <div id="objectPalette" class="chips"></div>
-  </div>
-
-  <div class="sect">
-    <p class="lbl">Layers</p>
-    <div id="layerToggles" class="chips"></div>
-    <button id="dupRoomBtn" style="margin-top:8px;width:100%;">Duplicate room</button>
+  <div class="tabpanel" data-tabpanel="save" hidden>
+    <div class="sect">
+      <p class="lbl">History</p>
+      <div class="grid2">
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+      </div>
+    </div>
+    <div class="sect">
+      <p class="lbl">Package</p>
+      <div class="grid3">
+        <button id="exportBtn">Export</button>
+        <button id="importBtn">Import</button>
+        <button id="newBtn">New</button>
+      </div>
+      <p class="hint">
+        <span class="kbd">V</span>select <span class="kbd">F</span>floor <span class="kbd">G</span>wall
+        <span class="kbd">B</span>object <span class="kbd">N</span>entry <span class="kbd">X</span>erase
+        <span class="kbd">K</span>fill · <span class="kbd">Ctrl+Z/Y</span> undo · <span class="kbd">Del</span> delete
+      </p>
+    </div>
   </div>
 
   <div class="sect">
     <p class="lbl">Inspector</p>
     <div id="inspector"><span class="muted">Nothing selected.</span></div>
-  </div>
-
-  <div class="sect">
-    <p class="lbl">History &amp; package</p>
-    <div class="grid2" style="margin-bottom:6px;">
-      <button id="undoBtn">Undo</button>
-      <button id="redoBtn">Redo</button>
-    </div>
-    <div class="grid3">
-      <button id="exportBtn">Export</button>
-      <button id="importBtn">Import</button>
-      <button id="newBtn">New</button>
-    </div>
-    <p class="hint">
-      <span class="kbd">V</span>select <span class="kbd">F</span>floor <span class="kbd">G</span>wall
-      <span class="kbd">B</span>object <span class="kbd">N</span>entry <span class="kbd">X</span>erase ·
-      <span class="kbd">Ctrl+Z</span>/<span class="kbd">Y</span> undo/redo ·
-      <span class="kbd">Del</span> delete · drag-paint · wheel zoom
-    </p>
   </div>
 </aside>
 

@@ -92,6 +92,15 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   `rotatePoint` generalizado a ángulo arbitrario (animación suave; exacto en
   0/90/180/270). Verificado headless: engine (11 tests) + integración (slide,
   pausa congela, 3× escala, Build restaura la pose base, autoría de evento).
+  **Refinamiento M4+:** modo **Orbit** real (la sala orbita alrededor de un eje
+  invisible, radio constante, dirección cw/ccw, opción self-rotate) — distinto
+  del carrusel de poses. **Previsualización** en Build de la trayectoria de cada
+  evento (flecha de shift, anillo de órbita + dirección, arco de rotación,
+  polilínea de carrusel) con **handles arrastrables** para apuntar el movimiento
+  libremente (destino del shift, centro de la órbita, poses del carrusel). Menú
+  reorganizado en **pestañas con iconos** (Build / Rooms / Save). Verificado
+  headless: pestañas, +Orbit, arrastre de handle mueve el centro, flip de
+  dirección, y órbita con radio constante en Play. Sin errores.
 - [ ] **M5 · Links & multi-mapa**
   Enlazar tile/objeto (ascensor) → nivel destino + spawn; modos de carga
   **preload** vs **stream**; transición en Play mode; el save contiene todo el
