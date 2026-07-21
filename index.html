@@ -61,6 +61,7 @@
     obstacleTop:'#585858',
     highlight:  '#7a7a7a',
     path:       '#909090',
+    dest:       '#e0e0e0',
     avatar:     '#dcdcdc',
     avatarDark: '#8a8a8a',
   };
@@ -110,6 +111,22 @@
   function inBounds(x, y) { return x >= 0 && y >= 0 && x < GRID_W && y < GRID_H; }
   function walkable(x, y) { return inBounds(x, y) && grid[y][x] === 0; }
 
+  // find the closest walkable tile to (x,y) via an outward ring search.
+  // keeps movement working even if something starts on a blocked tile.
+  function nearestWalkable(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    if (walkable(x, y)) return { x, y };
+    for (let r = 1; r < Math.max(GRID_W, GRID_H); r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // ring only
+          if (walkable(x + dx, y + dy)) return { x: x + dx, y: y + dy };
+        }
+      }
+    }
+    return { x, y };
+  }
+
   // ---- Camera -------------------------------------------------------------
   // Camera stores an offset (screen px) and zoom. Centered on room initially.
   const camera = { x: 0, y: 0, zoom: 1 };
@@ -139,14 +156,20 @@
     camera.x = VIEW_W / 2 - sx;
     camera.y = VIEW_H / 2 - sy;
   }
-  centerCameraOn(GRID_W / 2, GRID_H / 2);
 
   // ---- Avatar -------------------------------------------------------------
+  // spawn on a guaranteed-walkable tile (the old default 15,15 sat inside the
+  // centre obstacle cluster, which blocked every move order).
+  const spawn = nearestWalkable(12, 12);
   const avatar = {
-    x: 15,          // fractional tile pos
-    y: 15,
-    path: [],       // list of {x,y} tile waypoints to follow
+    x: spawn.x,       // fractional tile pos
+    y: spawn.y,
+    path: [],         // list of {x,y} tile waypoints to follow
+    facing: Math.PI / 2,  // screen-space facing angle (default: toward camera)
+    moving: false,
+    animTime: 0,
   };
+  centerCameraOn(avatar.x, avatar.y);
 
   // ---- A* pathfinding (RimWorld-style navigation) -------------------------
   function neighbors(x, y) {
@@ -168,7 +191,9 @@
   }
 
   function findPath(sx, sy, tx, ty) {
-    sx = Math.round(sx); sy = Math.round(sy);
+    // snap a blocked start to the nearest open tile so orders never dead-end
+    const s = nearestWalkable(sx, sy);
+    sx = s.x; sy = s.y;
     if (!walkable(tx, ty)) return null;
     if (!walkable(sx, sy)) return null;
     const key = (x, y) => x + ',' + y;
@@ -239,8 +264,11 @@
     const tx = mouse.tile.x, ty = mouse.tile.y;
     if (!walkable(tx, ty)) return;
     const path = findPath(avatar.x, avatar.y, tx, ty);
-    if (path) {
-      // drop the first node if we're basically already on it
+    if (path && path.length) {
+      // if we're already sitting on the first node, drop it
+      if (Math.round(avatar.x) === path[0].x && Math.round(avatar.y) === path[0].y) {
+        path.shift();
+      }
       avatar.path = path;
     }
   });
@@ -251,8 +279,8 @@
     const before = screenToWorld(mouse.x, mouse.y);
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     camera.zoom = Math.max(0.4, Math.min(2.5, camera.zoom * factor));
-    const after = screenToWorld(mouse.x, mouse.y);
     // keep the tile under the cursor stationary
+    const after = screenToWorld(mouse.x, mouse.y);
     const s1 = worldToScreenRaw(before.x, before.y);
     const s2 = worldToScreenRaw(after.x, after.y);
     camera.x += (s1.x - s2.x);
@@ -276,10 +304,20 @@
 
     // move avatar along its path
     if (avatar.path.length) {
+      avatar.moving = true;
+      avatar.animTime += dt;
       const target = avatar.path[0];
       const dx = target.x - avatar.x;
       const dy = target.y - avatar.y;
       const dist = Math.hypot(dx, dy);
+
+      // face travel direction in screen space (iso-projected)
+      if (dist > 1e-4) {
+        const screenDX = (dx - dy);
+        const screenDY = (dx + dy) * (TILE_H / TILE_W);
+        avatar.facing = Math.atan2(screenDY, screenDX);
+      }
+
       const step = AVATAR_SPEED * dt;
       if (dist <= step) {
         avatar.x = target.x;
@@ -289,6 +327,8 @@
         avatar.x += (dx / dist) * step;
         avatar.y += (dy / dist) * step;
       }
+    } else {
+      avatar.moving = false;
     }
   }
 
@@ -357,6 +397,7 @@
   function drawAvatar() {
     const t = worldToScreen(avatar.x, avatar.y);
     const z = camera.zoom;
+    const bob = avatar.moving ? Math.sin(avatar.animTime * 11) * 1.6 * z : 0;
     const bodyH = 34 * z;
     const rx = 9 * z;
 
@@ -366,9 +407,13 @@
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fill();
 
+    // facing unit vector (screen space, flattened for iso)
+    const fx = Math.cos(avatar.facing);
+    const fy = Math.sin(avatar.facing) * 0.6;
+
     // body (simple capsule/figure)
     ctx.beginPath();
-    ctx.ellipse(t.x, t.y - bodyH * 0.45, rx, bodyH * 0.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(t.x, t.y - bodyH * 0.45 + bob, rx, bodyH * 0.5, 0, 0, Math.PI * 2);
     ctx.fillStyle = COL.avatar;
     ctx.fill();
     ctx.strokeStyle = COL.avatarDark;
@@ -376,11 +421,18 @@
     ctx.stroke();
 
     // head
+    const headY = t.y - bodyH + bob;
     ctx.beginPath();
-    ctx.arc(t.x, t.y - bodyH, 7 * z, 0, Math.PI * 2);
+    ctx.arc(t.x, headY, 7 * z, 0, Math.PI * 2);
     ctx.fillStyle = COL.avatar;
     ctx.fill();
     ctx.stroke();
+
+    // facing nub (points where the avatar looks) — reads direction of travel
+    ctx.beginPath();
+    ctx.arc(t.x + fx * 6 * z, headY + fy * 6 * z, 2 * z, 0, Math.PI * 2);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fill();
   }
 
   function render() {
@@ -406,6 +458,19 @@
       drawTileDiamond(p.x, p.y, null, COL.path);
     }
 
+    // destination marker (X) at the end of the current path
+    if (avatar.path.length) {
+      const last = avatar.path[avatar.path.length - 1];
+      const d = worldToScreen(last.x, last.y);
+      const s = 6 * camera.zoom;
+      ctx.strokeStyle = COL.dest;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(d.x - s, d.y - s); ctx.lineTo(d.x + s, d.y + s);
+      ctx.moveTo(d.x + s, d.y - s); ctx.lineTo(d.x - s, d.y + s);
+      ctx.stroke();
+    }
+
     // walls + obstacles + avatar, drawn back-to-front by (x+y) for correct
     // isometric depth ordering
     const drawables = [];
@@ -422,7 +487,7 @@
         }
       }
     }
-    drawables.push({ depth: avatar.x + avatar.y, kind: 'avatar' });
+    drawables.push({ depth: avatar.x + avatar.y + 0.5, kind: 'avatar' });
     drawables.sort((a, b) => a.depth - b.depth);
 
     for (const d of drawables) {
@@ -437,7 +502,8 @@
       'Mouse wheel       → zoom\n' +
       '\n' +
       'avatar tile: ' + Math.round(avatar.x) + ',' + Math.round(avatar.y) +
-      '   zoom: ' + camera.zoom.toFixed(2);
+      '   zoom: ' + camera.zoom.toFixed(2) +
+      (avatar.moving ? '   [moving]' : '');
   }
 
   // ---- Main loop ----------------------------------------------------------
