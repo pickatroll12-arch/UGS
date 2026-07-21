@@ -60,10 +60,12 @@
   function pushHistory() { undoStack.push(clone(app.save)); if (undoStack.length > 80) undoStack.shift(); redoStack.length = 0; }
   function discardHistory() { undoStack.pop(); }        // for gestures that changed nothing
   function undo() {
+    if (app.mode === 'play') return setStatus('Stop Play to undo.');
     if (!undoStack.length) return setStatus('Nothing to undo.');
     redoStack.push(clone(app.save)); app.save = undoStack.pop(); afterRestore('Undo.');
   }
   function redo() {
+    if (app.mode === 'play') return setStatus('Stop Play to redo.');
     if (!redoStack.length) return setStatus('Nothing to redo.');
     undoStack.push(clone(app.save)); app.save = redoStack.pop(); afterRestore('Redo.');
   }
@@ -377,7 +379,16 @@
     } else if (mouse.down && app.mode === 'build') {
       if (dragHandle) {
         if (!strokeChanged) discardHistory();
-      } else if (painting || movingObj) {
+      } else if (movingObj) {
+        // grabbed an object: a drag moved it; a plain click just selects it
+        if (!strokeChanged) {
+          discardHistory();
+          const room = roomById(movingObj.roomId);
+          const obj = room && room.objects.find(o => o.id === movingObj.objectId);
+          if (obj) app.selection = { roomId: room.id, lx: obj.x, ly: obj.y, objectId: obj.id };
+        }
+        updateInspector();
+      } else if (painting) {
         if (!strokeChanged) discardHistory();   // no-op gesture: drop the snapshot
         else updateInspector();
       } else if (!dragged) {
