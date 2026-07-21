@@ -1,0 +1,122 @@
+# UGS — Roadmap & Diseño
+
+> Documento vivo. Capturamos aquí la visión a largo plazo y el plan por etapas.
+> El código y los identificadores van en inglés; las notas de diseño en español.
+
+---
+
+## Visión (largo plazo)
+
+Simulador / administrador y **life-sim de estación espacial**, con NPCs dinámicos
+al estilo del sistema **A-life de STALKER** (agentes autónomos que "viven" su
+rutina independientemente del jugador).
+
+### Pilares
+
+1. **Simulador + administrador** de estación espacial.
+2. **Perspectiva del jugador**: encarnas al **Capitán** (rol concreto).
+   Un modo "dios" / omnisciente queda como opción futura.
+3. **NPCs dinámicos** (A-life): con diálogo, y *opcionalmente* una IA enchufable
+   para que el jugador escriba y el NPC responda.
+4. **Eventos de estación**: sobrecalentamiento, sobrecarga, incursión / abordaje,
+   base de abastecimiento, y quizá **diplomacia**.
+5. **Expansión** de estación, **gestión de recursos**, **minería espacial**,
+   **reclutamiento**, y tal vez **exploración**.
+6. **Combate** automático o por turnos tipo **XCOM**.
+
+---
+
+## Escenario inicial (MVP de juego)
+
+- Juegas como **Capitán**; tomas las decisiones críticas (p. ej. expansión).
+- Tripulación inicial: **jugador + 3 NPC**, cada uno con un rol:
+  - **Commander Officer**
+  - **Supplies & Resources**
+  - **Deck Monitoring**
+- Estación **pequeña**: operable por ~5 personas, pero con dificultad.
+- Progresión: **expandir base y personal** mediante **minería espacial** y
+  **reclutamiento**.
+
+---
+
+## Principio rector
+
+**Separar la simulación del render.** La lógica del juego (estado, entidades,
+pathfinding, eventos) no sabe nada de cómo se dibuja. Los gráficos son
+*placeholders* (colores planos / "slots" de material con ID) y se pulen después
+**sin tocar la lógica ni el formato de datos**.
+
+---
+
+## Etapa 1 — Motor de Mapas/Niveles + Station Builder *(EN CURSO)*
+
+El editor y el motor que cargan/guardan mapas. Es la base de todo.
+
+- [x] **M1 · Modelo de datos + formato de guardado** *(núcleo puro, sin UI)* ✅
+  Esquemas Level / Room / Tile / Object / Link / Event; save file = colección de
+  niveles + grafo de links + versión; serializar / validar / import-export.
+  → `src/data.js` (esquemas, factories, registries, normalización),
+    `src/save.js` (serialize/deserialize, versión + migración, import/export),
+    `src/core.test.js` (22 tests headless, `node src/core.test.js`). Todo verde.
+- [ ] **M2 · Renderer + shell del editor**
+  Render isométrico que dibuja las salas **a través de su transform**; toggle
+  Build/Play, cámara, selección de tile. (Adaptar el prototipo Station Builder.)
+- [ ] **M3 · Herramientas de construcción**
+  Materiales de suelo, muros, objetos (interactivos / decorativos + colisión +
+  propiedades), puntos de entrada/salida, borrar / seleccionar / inspeccionar,
+  undo-redo.
+- [ ] **M4 · Salas como unidades móviles**
+  Agrupar tiles en salas con nombre; transform (posición + rotación + pivote);
+  presets de evento (**shift / rotación / carrusel**) + mini-DSL de script;
+  timeline con **tiempo real + pausa/velocidad**.
+- [ ] **M5 · Links & multi-mapa**
+  Enlazar tile/objeto (ascensor) → nivel destino + spawn; modos de carga
+  **preload** vs **stream**; transición en Play mode; el save contiene todo el
+  grafo de niveles.
+- [ ] **M6 · Slice jugable (test)**
+  Meter el pawn de prueba, caminar, disparar un link y un evento de sala de punta
+  a punta para validar el motor.
+
+---
+
+## Decisiones de arquitectura
+
+- **Render** — ✅ **Canvas 2D (HTML5)** por ahora, no WebGL. El render está
+  aislado del sim, así que se puede cambiar a WebGL/PixiJS más adelante solo para
+  el pulido visual, sin tocar mecánicas.
+- **Estructura de código** — ✅ varios archivos `.js` clásicos bajo un namespace
+  global `UGS`, incluidos desde el HTML. Se abre con doble clic (sin servidor ni
+  build) y ya queda modular. Restricción: cargar mapas va por file-picker /
+  import-export, no por `fetch` (bloqueado en `file://`). Los módulos del core
+  llevan cola UMD para poder testearse en Node.
+- **Salas transformables** — ✅ **sí**, salas como entidades de primera clase con
+  transform (offset + rotación + pivote) desde el inicio; mover/rotar/carrusel es
+  nativo en el data model.
+- **Modelo de entidades** — pawns y objetos como "entidades con propiedades".
+  Desde M1 se **reservan** campos aunque no se simulen: en pawns `role` / `skills`
+  / `assignment`; en objetos `power` / `heat` / subsistemas.
+
+---
+
+## Etapas futuras (borrador, se planifican una por una)
+
+- **Etapa 2 · Entidades & tripulación** — pawns con rol/skills; controlador del
+  jugador (el Capitán); selección y órdenes; roster inicial (jugador + 3 NPC).
+- **Etapa 3 · Sistema de eventos/triggers general** — reutiliza el timeline de
+  salas; base para los eventos de estación.
+- **Etapa 4 · Subsistemas de estación** — energía, calor, atmósfera →
+  habilita sobrecalentamiento / sobrecarga.
+- **Etapa 5 · Economía** — recursos, minería espacial, reclutamiento, expansión.
+- **Etapa 6 · A-life / IA de NPCs** — rutinas autónomas, diálogo, IA enchufable
+  opcional.
+- **Etapa 7 · Combate** — automático o por turnos tipo XCOM.
+
+---
+
+## Estado actual del repo
+
+- `index.html` — placeholder isométrico (sala monocromática + pawn con
+  click-to-move y A*). Sirve como **sandbox de movimiento/IA** para etapas
+  posteriores; no es la base del builder.
+- El prototipo "Station Builder" (editor + export/import + links/events
+  scaffolded) es el punto de partida real de la Etapa 1.

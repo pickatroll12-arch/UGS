@@ -1,0 +1,321 @@
+/*
+ * UGS — core data model  (Stage 1 · Milestone 1)
+ * ------------------------------------------------------------------
+ * Pure data layer: schemas, factories, registries and validation.
+ * No rendering, no DOM, no game logic — this is the shape of the world
+ * and the contract every other layer (engine, editor, renderer) builds on.
+ *
+ * Coordinate model (important):
+ *   SaveFile ─▶ Level ─▶ Room ─▶ Tile / ObjectInstance
+ *   - Tiles and objects live in ROOM-LOCAL coordinates.
+ *   - Each Room carries a `transform` (offset + rotation + pivot), so a room
+ *     can be shifted / rotated / carouselled without touching its contents.
+ *   - The engine composes rooms into world space each frame.
+ *
+ * Runs both in the browser (attaches to window.UGS.data) and in Node
+ * (module.exports) so the core can be unit-tested headlessly.
+ */
+(function (root, factory) {
+  const api = factory();
+  root.UGS = root.UGS || {};
+  root.UGS.data = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  // Bump when the on-disk shape changes in a non-backward-compatible way.
+  const FORMAT = 'ugs-station';
+  const FORMAT_VERSION = 1;
+
+  // ---- small helpers ------------------------------------------------------
+  let idSeq = 0;
+  function uid(prefix) {
+    idSeq += 1;
+    return `${prefix}-${Date.now().toString(36)}-${idSeq.toString(36)}`;
+  }
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function isObj(v) { return v && typeof v === 'object' && !Array.isArray(v); }
+  function num(v, fallback = 0) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+  function str(v, fallback = '') { return v == null ? fallback : String(v); }
+  function bool(v, fallback = false) { return v == null ? fallback : Boolean(v); }
+
+  // ---- registries ---------------------------------------------------------
+  // Materials are "slots": today they render as flat colours; later the same
+  // id maps to a texture, with NO change to any saved map. That is how we keep
+  // "polish the graphics later" honest — data references an id, not a look.
+  const MATERIALS = {
+    deck:     { id: 'deck',     label: 'Deck',      kind: 'floor', color: '#2d2d31', line: '#414147' },
+    dark:     { id: 'dark',     label: 'Dark',      kind: 'floor', color: '#222225', line: '#37373d' },
+    light:    { id: 'light',    label: 'Light',     kind: 'floor', color: '#3b3b40', line: '#53535a' },
+    roundPad: { id: 'roundPad', label: 'Round pad', kind: 'floor', color: '#29292d', line: '#45454b' },
+    service:  { id: 'service',  label: 'Service',   kind: 'floor', color: '#25262d', line: '#424755' },
+    hull:     { id: 'hull',     label: 'Hull',      kind: 'wall',  color: '#494950', line: '#5c5c64' }
+  };
+
+  // Wall shapes are geometry, independent of material.
+  const WALL_SHAPES = ['solid', 'diagA', 'diagB'];
+
+  // Object catalogue. `category`: interactive | decorative | functional.
+  // `power` / `heat` are reserved subsystem fields (not simulated yet) so the
+  // save format is ready for Stage 4 (overheating / overload) without migration.
+  const OBJECT_DEFS = {
+    console:  { type: 'console',  label: 'Console',       category: 'interactive', collision: true,  interactive: true,  power: 2,  heat: 1 },
+    crate:    { type: 'crate',    label: 'Storage crate', category: 'functional',  collision: true,  interactive: false, power: 0,  heat: 0 },
+    light:    { type: 'light',    label: 'Wall light',    category: 'decorative',  collision: false, interactive: false, power: 1,  heat: 0 },
+    plant:    { type: 'plant',    label: 'Plant',         category: 'decorative',  collision: false, interactive: false, power: 0,  heat: 0 },
+    elevator: { type: 'elevator', label: 'Elevator pad',  category: 'functional',  collision: false, interactive: true,  power: 3,  heat: 1 },
+    miner:    { type: 'miner',    label: 'Mining rig',    category: 'functional',  collision: true,  interactive: true,  power: 5,  heat: 4 }
+  };
+
+  function isMaterial(id) { return Object.prototype.hasOwnProperty.call(MATERIALS, id); }
+  function isObjectType(t) { return Object.prototype.hasOwnProperty.call(OBJECT_DEFS, t); }
+  function isWallShape(s) { return WALL_SHAPES.indexOf(s) !== -1; }
+
+  // ---- factories ----------------------------------------------------------
+  function createTile(floor = 'deck') {
+    return { floor: isMaterial(floor) ? floor : 'deck', wall: null, wallMaterial: null };
+  }
+
+  function createTransform(x = 0, y = 0, rotation = 0) {
+    // rotation is stored in degrees, normalised to 0/90/180/270.
+    const rot = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+    return { x: num(x), y: num(y), rotation: rot, pivot: { x: 0, y: 0 } };
+  }
+
+  function createRoom(name = 'Room', w = 8, h = 8) {
+    w = clamp(Math.round(num(w, 8)), 1, 64);
+    h = clamp(Math.round(num(h, 8)), 1, 64);
+    return {
+      id: uid('room'),
+      name: str(name, 'Room'),
+      size: { w, h },
+      transform: createTransform(0, 0, 0),
+      // local-coordinate grid [h][w]
+      tiles: Array.from({ length: h }, () => Array.from({ length: w }, () => createTile())),
+      objects: [],
+      movable: false,
+      events: []      // RoomEvent[] — shift / rotate / carousel / script
+    };
+  }
+
+  function createObjectInstance(type, x, y) {
+    const def = OBJECT_DEFS[type] || OBJECT_DEFS.crate;
+    return {
+      id: uid('obj'),
+      type: def.type,
+      name: def.label,
+      x: Math.round(num(x)),
+      y: Math.round(num(y)),
+      rotation: 0,
+      interactive: def.interactive,
+      collision: def.collision,
+      power: def.power,
+      heat: def.heat,
+      properties: {}
+    };
+  }
+
+  // A RoomEvent moves/animates a room. `action` is either a preset or a script.
+  //   preset.kind: 'shift'    { to:{x,y}, duration }
+  //                'rotate'   { by:90, duration }
+  //                'carousel' { poses:[{x,y,rotation}...], interval, loop }
+  //   script: steps[] mini-DSL, e.g. [{op:'move',x,y,duration},{op:'wait',t},...]
+  function createRoomEvent(name = 'Event') {
+    return {
+      id: uid('evt'),
+      name: str(name, 'Event'),
+      enabled: true,
+      trigger: { type: 'manual' },      // manual | time | signal
+      action: { kind: 'shift', to: { x: 0, y: 0 }, duration: 1.0 },
+      loop: false
+    };
+  }
+
+  // A Link is an edge in the level graph — an elevator/door/etc. connecting a
+  // source tile to a spawn point, possibly in another level.
+  //   mode: 'preload' (target kept in memory) | 'stream' (load on demand)
+  function createLink(fromLevelId, toLevelId) {
+    return {
+      id: uid('link'),
+      kind: 'elevator',                 // elevator | door | hatch | ...
+      mode: 'stream',
+      bidirectional: true,
+      from: { levelId: str(fromLevelId), roomId: null, x: 0, y: 0 },
+      to:   { levelId: str(toLevelId),   roomId: null, x: 0, y: 0 }
+    };
+  }
+
+  function createLevel(name = 'Level') {
+    const room = createRoom('Main', 12, 10);
+    return {
+      id: uid('level'),
+      name: str(name, 'Level'),
+      rooms: [room],
+      entry: { roomId: room.id, x: 2, y: 2 },
+      metadata: {}
+    };
+  }
+
+  // The SaveFile is the whole package: a graph of levels plus global data.
+  function createSaveFile(name = 'Untitled Station') {
+    const level = createLevel('Deck 1');
+    return {
+      format: FORMAT,
+      formatVersion: FORMAT_VERSION,
+      id: uid('save'),
+      name: str(name, 'Untitled Station'),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      startLevelId: level.id,
+      levels: [level],
+      links: [],
+      // reserved for later stages (crew roster, resources, flags). Kept out of
+      // the way now but declared so the format doesn't churn later.
+      reserved: { crew: [], resources: {}, flags: {} },
+      metadata: { createdBy: 'ugs-core', engine: FORMAT_VERSION }
+    };
+  }
+
+  // ---- validation / normalisation ----------------------------------------
+  // normalizeSave() takes untrusted input (an imported file, hand-edited JSON)
+  // and returns a clean, fully-formed SaveFile, collecting warnings for
+  // anything it had to coerce or drop. It never throws on recoverable issues.
+  function normalizeSave(input) {
+    const warnings = [];
+    if (!isObj(input)) throw new Error('Save file is not an object.');
+
+    const out = createSaveFile(str(input.name, 'Imported Station'));
+    out.id = str(input.id, out.id);
+    out.formatVersion = FORMAT_VERSION;
+    if (input.createdAt) out.createdAt = str(input.createdAt);
+    out.updatedAt = new Date().toISOString();
+    if (isObj(input.reserved)) out.reserved = { ...out.reserved, ...input.reserved };
+    if (isObj(input.metadata)) out.metadata = { ...out.metadata, ...input.metadata };
+
+    const levels = Array.isArray(input.levels) ? input.levels : [];
+    if (!levels.length) {
+      warnings.push('No levels found; created an empty Deck 1.');
+      return { save: out, warnings };
+    }
+
+    out.levels = levels.map((lvl, li) => normalizeLevel(lvl, li, warnings));
+
+    // links: keep only those whose endpoints resolve to real levels
+    const levelIds = new Set(out.levels.map(l => l.id));
+    const rawLinks = Array.isArray(input.links) ? input.links : [];
+    out.links = rawLinks
+      .map(lk => normalizeLink(lk))
+      .filter(lk => {
+        const ok = levelIds.has(lk.from.levelId) && levelIds.has(lk.to.levelId);
+        if (!ok) warnings.push(`Dropped link ${lk.id}: endpoint level missing.`);
+        return ok;
+      });
+
+    // start level must exist
+    out.startLevelId = levelIds.has(str(input.startLevelId)) ? str(input.startLevelId) : out.levels[0].id;
+    return { save: out, warnings };
+  }
+
+  function normalizeLevel(input, index, warnings) {
+    const lvl = { id: uid('level'), name: `Level ${index + 1}`, rooms: [], entry: null, metadata: {} };
+    if (!isObj(input)) { warnings.push(`Level ${index} was not an object; replaced with empty.`); lvl.rooms = [createRoom()]; lvl.entry = { roomId: lvl.rooms[0].id, x: 0, y: 0 }; return lvl; }
+    lvl.id = str(input.id, lvl.id);
+    lvl.name = str(input.name, lvl.name);
+    if (isObj(input.metadata)) lvl.metadata = { ...input.metadata };
+
+    const rooms = Array.isArray(input.rooms) ? input.rooms : [];
+    lvl.rooms = rooms.length ? rooms.map(r => normalizeRoom(r, warnings)) : [createRoom()];
+
+    const roomIds = new Set(lvl.rooms.map(r => r.id));
+    const e = isObj(input.entry) ? input.entry : {};
+    const entryRoom = roomIds.has(str(e.roomId)) ? str(e.roomId) : lvl.rooms[0].id;
+    lvl.entry = { roomId: entryRoom, x: Math.round(num(e.x)), y: Math.round(num(e.y)) };
+    return lvl;
+  }
+
+  function normalizeRoom(input, warnings) {
+    if (!isObj(input)) { warnings.push('A room was not an object; replaced with empty 8x8.'); return createRoom(); }
+    const w = clamp(Math.round(num(input.size && input.size.w, 8)), 1, 64);
+    const h = clamp(Math.round(num(input.size && input.size.h, 8)), 1, 64);
+    const room = createRoom(str(input.name, 'Room'), w, h);
+    room.id = str(input.id, room.id);
+    room.movable = bool(input.movable, false);
+
+    // transform
+    const t = isObj(input.transform) ? input.transform : {};
+    room.transform = createTransform(num(t.x), num(t.y), num(t.rotation));
+    if (isObj(t.pivot)) room.transform.pivot = { x: num(t.pivot.x), y: num(t.pivot.y) };
+
+    // tiles (local grid)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const src = input.tiles && input.tiles[y] && input.tiles[y][x];
+        const floor = src && isMaterial(src.floor) ? src.floor : 'deck';
+        const wall = src && isWallShape(src.wall) ? src.wall : null;
+        const wallMat = src && isMaterial(src.wallMaterial) ? src.wallMaterial : (wall ? 'hull' : null);
+        room.tiles[y][x] = { floor, wall, wallMaterial: wallMat };
+      }
+    }
+
+    // objects (clamped to local bounds, unknown types dropped)
+    const objs = Array.isArray(input.objects) ? input.objects : [];
+    room.objects = objs.filter(o => o && isObjectType(o.type)).map(o => {
+      const inst = createObjectInstance(o.type, clamp(Math.round(num(o.x)), 0, w - 1), clamp(Math.round(num(o.y)), 0, h - 1));
+      inst.id = str(o.id, inst.id);
+      inst.name = str(o.name, inst.name);
+      inst.rotation = num(o.rotation) % 360;
+      if (o.interactive != null) inst.interactive = bool(o.interactive);
+      if (o.collision != null) inst.collision = bool(o.collision);
+      if (o.power != null) inst.power = num(o.power);
+      if (o.heat != null) inst.heat = num(o.heat);
+      if (isObj(o.properties)) inst.properties = { ...o.properties };
+      return inst;
+    });
+
+    // room events (movement presets / scripts)
+    const evs = Array.isArray(input.events) ? input.events : [];
+    room.events = evs.filter(isObj).map(ev => normalizeRoomEvent(ev));
+    return room;
+  }
+
+  function normalizeRoomEvent(input) {
+    const ev = createRoomEvent(str(input.name, 'Event'));
+    ev.id = str(input.id, ev.id);
+    ev.enabled = bool(input.enabled, true);
+    ev.loop = bool(input.loop, false);
+    if (isObj(input.trigger)) ev.trigger = { type: str(input.trigger.type, 'manual'), ...input.trigger };
+    if (isObj(input.action)) {
+      const a = input.action;
+      const kind = ['shift', 'rotate', 'carousel', 'script'].indexOf(a.kind) !== -1 ? a.kind : 'shift';
+      if (kind === 'shift')    ev.action = { kind, to: { x: num(a.to && a.to.x), y: num(a.to && a.to.y) }, duration: num(a.duration, 1) };
+      if (kind === 'rotate')   ev.action = { kind, by: num(a.by, 90), duration: num(a.duration, 1) };
+      if (kind === 'carousel') ev.action = { kind, poses: Array.isArray(a.poses) ? a.poses.map(p => ({ x: num(p.x), y: num(p.y), rotation: num(p.rotation) })) : [], interval: num(a.interval, 2), loop: bool(a.loop, true) };
+      if (kind === 'script')   ev.action = { kind, steps: Array.isArray(a.steps) ? a.steps : [] };
+    }
+    return ev;
+  }
+
+  function normalizeLink(input) {
+    const lk = createLink('', '');
+    if (!isObj(input)) return lk;
+    lk.id = str(input.id, lk.id);
+    lk.kind = str(input.kind, 'elevator');
+    lk.mode = input.mode === 'preload' ? 'preload' : 'stream';
+    lk.bidirectional = bool(input.bidirectional, true);
+    const f = isObj(input.from) ? input.from : {};
+    const t = isObj(input.to) ? input.to : {};
+    lk.from = { levelId: str(f.levelId), roomId: f.roomId != null ? str(f.roomId) : null, x: Math.round(num(f.x)), y: Math.round(num(f.y)) };
+    lk.to   = { levelId: str(t.levelId), roomId: t.roomId != null ? str(t.roomId) : null, x: Math.round(num(t.x)), y: Math.round(num(t.y)) };
+    return lk;
+  }
+
+  return {
+    FORMAT, FORMAT_VERSION,
+    MATERIALS, WALL_SHAPES, OBJECT_DEFS,
+    isMaterial, isObjectType, isWallShape,
+    uid, clamp,
+    createTile, createTransform, createRoom, createObjectInstance,
+    createRoomEvent, createLink, createLevel, createSaveFile,
+    normalizeSave, normalizeLevel, normalizeRoom, normalizeRoomEvent, normalizeLink
+  };
+});
