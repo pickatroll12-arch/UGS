@@ -437,11 +437,32 @@
     ctx.beginPath(); ctx.moveTo(s.x - 6, s.y); ctx.lineTo(s.x + 6, s.y); ctx.moveTo(s.x, s.y - 6); ctx.lineTo(s.x, s.y + 6); ctx.stroke();
   }
 
-  // Preview the motion path/direction of a room's events (Build mode aid).
+  function orbitRadius(room, a) {
+    if (a.radius != null) return Number(a.radius);
+    const rc = roomCenterWorld(room);
+    return Math.hypot(rc.x - a.center.x, rc.y - a.center.y);
+  }
+
+  // Preview the motion path/direction of a room's events (Build mode aid), plus
+  // the room move/rotate gizmo.
   function drawRoomMotion(ctx, cam, room) {
-    if (!room || !room.events || !room.events.length) return;
+    if (!room) return;
     const rc = roomCenterWorld(room), t = room.transform;
     const w = (x, y) => worldToScreen(cam, x, y);
+
+    // --- room move/rotate gizmo ---
+    const grip = localToWorld(room, room.size.w / 2, -1);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(230,230,238,0.6)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(w(rc.x, rc.y).x, w(rc.x, rc.y).y); ctx.lineTo(w(grip.x, grip.y).x, w(grip.x, grip.y).y); ctx.stroke();
+    const ms = w(rc.x, rc.y);                                  // move handle (square)
+    ctx.fillStyle = '#14141a'; ctx.strokeStyle = '#e6e6ee'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.rect(ms.x - 6, ms.y - 6, 12, 12); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ms.x - 3, ms.y); ctx.lineTo(ms.x + 3, ms.y); ctx.moveTo(ms.x, ms.y - 3); ctx.lineTo(ms.x, ms.y + 3); ctx.stroke();
+    handleDot(ctx, w(grip.x, grip.y), '#e6e6ee');              // rotate grip (circle)
+    ctx.restore();
+
+    if (!room.events || !room.events.length) return;
     for (const ev of room.events) {
       const a = ev.action; if (!a) continue;
       ctx.save();
@@ -450,7 +471,7 @@
         arrowLine(ctx, w(rc.x, rc.y), w(to.x, to.y), '#8fd0ff');
         handleDot(ctx, w(to.x, to.y), '#8fd0ff');
       } else if (a.kind === 'orbit') {
-        const C = a.center, Rr = Math.hypot(rc.x - C.x, rc.y - C.y);
+        const C = a.center, Rr = orbitRadius(room, a);
         ctx.strokeStyle = 'rgba(255,196,120,0.85)'; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5;
         ctx.beginPath();
         for (let i = 0; i <= 48; i++) { const th = i / 48 * Math.PI * 2; const p = w(C.x + Rr * Math.cos(th), C.y + Rr * Math.sin(th)); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
@@ -458,6 +479,8 @@
         const dir = a.direction === 'ccw' ? -1 : 1, th0 = Math.atan2(rc.y - C.y, rc.x - C.x);
         arrowLine(ctx, w(C.x + Rr * Math.cos(th0), C.y + Rr * Math.sin(th0)), w(C.x + Rr * Math.cos(th0 + dir * 0.5), C.y + Rr * Math.sin(th0 + dir * 0.5)), '#ffc478');
         crossMark(ctx, w(C.x, C.y), '#ffc478'); handleDot(ctx, w(C.x, C.y), '#ffc478');
+        // radius handle sits on the ring toward the room
+        handleDot(ctx, w(C.x + Rr * Math.cos(th0), C.y + Rr * Math.sin(th0)), '#ffe0a0');
       } else if (a.kind === 'rotate') {
         const piv = localToWorld(room, t.pivot.x, t.pivot.y);
         crossMark(ctx, w(piv.x, piv.y), '#c8a8ff');
@@ -474,14 +497,25 @@
     }
   }
 
-  // Draggable handles for a room's motion (screen coords for hit-testing).
+  // Draggable handles for a room's move/rotate gizmo and its motion events
+  // (screen coords for hit-testing). Room handles come first so they win ties.
   function motionHandles(cam, room) {
-    const out = []; if (!room || !room.events) return out;
+    const out = []; if (!room) return out;
     const rc = roomCenterWorld(room), t = room.transform;
-    for (const ev of room.events) {
+    const ms = worldToScreen(cam, rc.x, rc.y);
+    out.push({ kind: 'room-move', sx: ms.x, sy: ms.y });
+    const grip = localToWorld(room, room.size.w / 2, -1);
+    const gs = worldToScreen(cam, grip.x, grip.y);
+    out.push({ kind: 'room-rotate', sx: gs.x, sy: gs.y });
+    for (const ev of (room.events || [])) {
       const a = ev.action; if (!a) continue;
       if (a.kind === 'shift') { const wx = rc.x + (a.to.x - t.x), wy = rc.y + (a.to.y - t.y); const s = worldToScreen(cam, wx, wy); out.push({ eventId: ev.id, kind: 'shift-to', sx: s.x, sy: s.y }); }
-      else if (a.kind === 'orbit') { const s = worldToScreen(cam, a.center.x, a.center.y); out.push({ eventId: ev.id, kind: 'orbit-center', sx: s.x, sy: s.y }); }
+      else if (a.kind === 'orbit') {
+        const s = worldToScreen(cam, a.center.x, a.center.y); out.push({ eventId: ev.id, kind: 'orbit-center', sx: s.x, sy: s.y });
+        const Rr = orbitRadius(room, a), th0 = Math.atan2(rc.y - a.center.y, rc.x - a.center.x);
+        const rs = worldToScreen(cam, a.center.x + Rr * Math.cos(th0), a.center.y + Rr * Math.sin(th0));
+        out.push({ eventId: ev.id, kind: 'orbit-radius', sx: rs.x, sy: rs.y });
+      }
       else if (a.kind === 'carousel') { (a.poses || []).forEach((p, idx) => { const wx = rc.x + (p.x - t.x), wy = rc.y + (p.y - t.y); const s = worldToScreen(cam, wx, wy); out.push({ eventId: ev.id, kind: 'carousel-pose', poseIndex: idx, sx: s.x, sy: s.y }); }); }
     }
     return out;
