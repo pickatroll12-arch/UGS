@@ -60,7 +60,7 @@
 
 <aside class="panel">
   <h1>UGS · STATION BUILDER</h1>
-  <p class="sub">Stage 1 · M3 — build tools</p>
+  <p class="sub">Stage 1 · M3+ — expanded toolbox</p>
 
   <div class="sect">
     <p class="lbl">Mode</p>
@@ -84,7 +84,16 @@
       <button class="tool" data-tool="object">Object</button>
       <button class="tool" data-tool="entry">Entry</button>
       <button class="tool" data-tool="erase">Erase</button>
+      <button class="tool" data-tool="fill">Fill</button>
     </div>
+    <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)">Select filter
+      <select id="selectFilter" style="margin-top:4px;">
+        <option value="all">All</option>
+        <option value="object">Objects only</option>
+        <option value="wall">Walls only</option>
+        <option value="floor">Floors only</option>
+      </select>
+    </label>
   </div>
 
   <div class="sect">
@@ -95,11 +104,19 @@
   <div class="sect">
     <p class="lbl">Wall shape</p>
     <div id="wallPalette" class="chips"></div>
+    <p class="lbl" style="margin-top:9px;">Wall material</p>
+    <div id="wallMatPalette" class="chips"></div>
   </div>
 
   <div class="sect">
     <p class="lbl">Objects</p>
     <div id="objectPalette" class="chips"></div>
+  </div>
+
+  <div class="sect">
+    <p class="lbl">Layers</p>
+    <div id="layerToggles" class="chips"></div>
+    <button id="dupRoomBtn" style="margin-top:8px;width:100%;">Duplicate room</button>
   </div>
 
   <div class="sect">

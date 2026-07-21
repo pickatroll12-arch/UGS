@@ -49,27 +49,42 @@
     light:    { id: 'light',    label: 'Light',     kind: 'floor', color: '#3b3b40', line: '#53535a' },
     roundPad: { id: 'roundPad', label: 'Round pad', kind: 'floor', color: '#29292d', line: '#45454b' },
     service:  { id: 'service',  label: 'Service',   kind: 'floor', color: '#25262d', line: '#424755' },
-    hull:     { id: 'hull',     label: 'Hull',      kind: 'wall',  color: '#494950', line: '#5c5c64' }
+    catwalk:  { id: 'catwalk',  label: 'Catwalk',   kind: 'floor', color: '#33333a', line: '#6d6d78', raised: true },
+    hull:     { id: 'hull',     label: 'Hull',      kind: 'wall',  color: '#494950', line: '#5c5c64' },
+    glass:    { id: 'glass',    label: 'Glass',     kind: 'wall',  color: '#4a5a66', line: '#8fb0c4', glass: true }
   };
 
   // Wall shapes are geometry, independent of material.
   const WALL_SHAPES = ['solid', 'diagA', 'diagB'];
 
-  // Object catalogue. `category`: interactive | decorative | functional.
-  // `power` / `heat` are reserved subsystem fields (not simulated yet) so the
-  // save format is ready for Stage 4 (overheating / overload) without migration.
+  // Build layers — used to toggle visibility and filter selection.
+  const LAYERS = ['structural', 'decor', 'electrical', 'traversal'];
+
+  // Object catalogue. `category`: interactive | decorative | functional | structural.
+  // `layer` groups objects for the layer toggles. `openable` marks doors/airlocks
+  // (they carry an `open` state; collision applies only while closed). `vlink`
+  // marks vertical-traversal anchors (stairs/ladders/ramps/elevator) that Stage 1
+  // M5 will bind to actual level links. `power`/`heat` are reserved subsystem
+  // fields (Stage 4) so the format never has to churn.
   const OBJECT_DEFS = {
-    console:  { type: 'console',  label: 'Console',       category: 'interactive', collision: true,  interactive: true,  power: 2,  heat: 1 },
-    crate:    { type: 'crate',    label: 'Storage crate', category: 'functional',  collision: true,  interactive: false, power: 0,  heat: 0 },
-    light:    { type: 'light',    label: 'Wall light',    category: 'decorative',  collision: false, interactive: false, power: 1,  heat: 0 },
-    plant:    { type: 'plant',    label: 'Plant',         category: 'decorative',  collision: false, interactive: false, power: 0,  heat: 0 },
-    elevator: { type: 'elevator', label: 'Elevator pad',  category: 'functional',  collision: false, interactive: true,  power: 3,  heat: 1 },
-    miner:    { type: 'miner',    label: 'Mining rig',    category: 'functional',  collision: true,  interactive: true,  power: 5,  heat: 4 }
+    console:  { type: 'console',  label: 'Console',       category: 'interactive', layer: 'electrical', collision: true,  interactive: true,  power: 2, heat: 1 },
+    crate:    { type: 'crate',    label: 'Storage crate', category: 'functional',  layer: 'decor',      collision: true,  interactive: false, power: 0, heat: 0 },
+    light:    { type: 'light',    label: 'Wall light',    category: 'decorative',  layer: 'electrical', collision: false, interactive: false, power: 1, heat: 0 },
+    plant:    { type: 'plant',    label: 'Plant',         category: 'decorative',  layer: 'decor',      collision: false, interactive: false, power: 0, heat: 0 },
+    elevator: { type: 'elevator', label: 'Elevator pad',  category: 'functional',  layer: 'traversal',  collision: false, interactive: true,  power: 3, heat: 1, vlink: true },
+    miner:    { type: 'miner',    label: 'Mining rig',    category: 'functional',  layer: 'electrical', collision: true,  interactive: true,  power: 5, heat: 4 },
+    pillar:   { type: 'pillar',   label: 'Pillar',        category: 'structural',  layer: 'structural', collision: true,  interactive: false, power: 0, heat: 0 },
+    door:     { type: 'door',     label: 'Door',          category: 'interactive', layer: 'structural', collision: true,  interactive: true,  power: 1, heat: 0, openable: true },
+    airlock:  { type: 'airlock',  label: 'Airlock',       category: 'interactive', layer: 'structural', collision: true,  interactive: true,  power: 2, heat: 0, openable: true },
+    stairs:   { type: 'stairs',   label: 'Stairs',        category: 'functional',  layer: 'traversal',  collision: false, interactive: true,  power: 0, heat: 0, vlink: true },
+    ladder:   { type: 'ladder',   label: 'Ladder',        category: 'functional',  layer: 'traversal',  collision: false, interactive: true,  power: 0, heat: 0, vlink: true },
+    ramp:     { type: 'ramp',     label: 'Ramp',          category: 'functional',  layer: 'traversal',  collision: false, interactive: true,  power: 0, heat: 0, vlink: true }
   };
 
   function isMaterial(id) { return Object.prototype.hasOwnProperty.call(MATERIALS, id); }
   function isObjectType(t) { return Object.prototype.hasOwnProperty.call(OBJECT_DEFS, t); }
   function isWallShape(s) { return WALL_SHAPES.indexOf(s) !== -1; }
+  function isLayer(l) { return LAYERS.indexOf(l) !== -1; }
 
   // ---- factories ----------------------------------------------------------
   // 'void' is a valid floor sentinel meaning "no floor" (not rendered, not
@@ -104,19 +119,29 @@
 
   function createObjectInstance(type, x, y) {
     const def = OBJECT_DEFS[type] || OBJECT_DEFS.crate;
-    return {
+    const inst = {
       id: uid('obj'),
       type: def.type,
       name: def.label,
       x: Math.round(num(x)),
       y: Math.round(num(y)),
       rotation: 0,
+      layer: def.layer,
       interactive: def.interactive,
       collision: def.collision,
       power: def.power,
       heat: def.heat,
       properties: {}
     };
+    if (def.openable) inst.open = false;          // doors/airlocks start closed
+    return inst;
+  }
+
+  // Effective collision accounts for door/airlock open state.
+  function objectBlocks(obj) {
+    const def = OBJECT_DEFS[obj.type];
+    if (def && def.openable) return !obj.open;
+    return !!obj.collision;
   }
 
   // A RoomEvent moves/animates a room. `action` is either a preset or a script.
@@ -265,13 +290,16 @@
     const objs = Array.isArray(input.objects) ? input.objects : [];
     room.objects = objs.filter(o => o && isObjectType(o.type)).map(o => {
       const inst = createObjectInstance(o.type, clamp(Math.round(num(o.x)), 0, w - 1), clamp(Math.round(num(o.y)), 0, h - 1));
+      const def = OBJECT_DEFS[o.type];
       inst.id = str(o.id, inst.id);
       inst.name = str(o.name, inst.name);
       inst.rotation = num(o.rotation) % 360;
+      inst.layer = isLayer(o.layer) ? o.layer : def.layer;
       if (o.interactive != null) inst.interactive = bool(o.interactive);
       if (o.collision != null) inst.collision = bool(o.collision);
       if (o.power != null) inst.power = num(o.power);
       if (o.heat != null) inst.heat = num(o.heat);
+      if (def.openable) inst.open = bool(o.open, false);
       if (isObj(o.properties)) inst.properties = { ...o.properties };
       return inst;
     });
@@ -315,8 +343,8 @@
 
   return {
     FORMAT, FORMAT_VERSION,
-    MATERIALS, WALL_SHAPES, OBJECT_DEFS,
-    isMaterial, isObjectType, isWallShape,
+    MATERIALS, WALL_SHAPES, LAYERS, OBJECT_DEFS,
+    isMaterial, isFloor, isObjectType, isWallShape, isLayer, objectBlocks,
     uid, clamp,
     createTile, createTransform, createRoom, createObjectInstance,
     createRoomEvent, createLink, createLevel, createSaveFile,

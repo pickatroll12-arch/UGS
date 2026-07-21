@@ -21,11 +21,13 @@
     save: null,
     activeLevelId: null,
     mode: 'build',
-    tool: 'select',                // select | floor | wall | object | entry | erase
+    tool: 'select',                // select | floor | wall | object | entry | erase | fill
     brush: { floor: 'deck', wallShape: 'solid', wallMat: 'hull', object: 'console' },
     camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4 },
     hover: null,
     selection: null,               // { roomId, lx, ly, objectId }
+    selectFilter: 'all',           // all | floor | object | wall
+    hiddenLayers: new Set(),       // layer names toggled off
   };
   const undoStack = [];
   const redoStack = [];
@@ -44,9 +46,9 @@
   // Select/Erase act on what you SEE (raised walls/objects); the painting/place
   // tools act on the flat ground tile under the cursor.
   function pickHit(px, py) {
-    return (app.tool === 'select' || app.tool === 'erase')
-      ? R.pickTopmost(app.camera, activeLevel(), px, py)
-      : R.pick(app.camera, activeLevel(), px, py);
+    if (app.tool === 'select') return R.pickTopmost(app.camera, activeLevel(), px, py, { hiddenLayers: app.hiddenLayers, filter: app.selectFilter });
+    if (app.tool === 'erase') return R.pickTopmost(app.camera, activeLevel(), px, py, { hiddenLayers: app.hiddenLayers });
+    return R.pick(app.camera, activeLevel(), px, py);
   }
   function setStatus(m) { if (statusEl) statusEl.textContent = m; }
   function clone(o) { return typeof structuredClone === 'function' ? structuredClone(o) : JSON.parse(JSON.stringify(o)); }
@@ -184,6 +186,67 @@
     pushHistory(); obj.rotation = ((obj.rotation || 0) + 45) % 360; updateInspector();
   }
 
+  // Flood-fill floor within a room's connected same-floor region. Walls act as
+  // barriers, so this fills one enclosed area rather than the whole grid.
+  function floodFill(hit) {
+    const room = roomById(hit.roomId); if (!room) return;
+    const from = room.tiles[hit.ly][hit.lx].floor, to = app.brush.floor;
+    if (from === to) return setStatus('Already that floor.');
+    pushHistory();
+    const stack = [[hit.lx, hit.ly]]; const seen = new Set(); let n = 0;
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      if (x < 0 || y < 0 || x >= room.size.w || y >= room.size.h) continue;
+      const k = x + ',' + y; if (seen.has(k)) continue; seen.add(k);
+      const t = room.tiles[y][x];
+      if (t.wall || t.floor !== from) continue;   // barrier / different region
+      t.floor = to; n++;
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+    if (!n) discardHistory(); else setStatus(`Filled ${n} tiles.`);
+  }
+
+  function duplicateSelectedObject() {
+    if (!app.selection || !app.selection.objectId) return;
+    const room = roomById(app.selection.roomId); if (!room) return;
+    const src = room.objects.find(o => o.id === app.selection.objectId); if (!src) return;
+    // find a free nearby tile
+    const spots = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    let tx = src.x, ty = src.y, found = false;
+    for (const [dx, dy] of spots) {
+      const nx = src.x + dx, ny = src.y + dy;
+      if (nx < 0 || ny < 0 || nx >= room.size.w || ny >= room.size.h) continue;
+      const t = room.tiles[ny][nx];
+      if (t.floor !== 'void' && !t.wall && !room.objects.some(o => o.x === nx && o.y === ny)) { tx = nx; ty = ny; found = true; break; }
+    }
+    if (!found) return setStatus('No free tile to duplicate into.');
+    pushHistory();
+    const copy = clone(src); copy.id = D.uid('obj'); copy.x = tx; copy.y = ty;
+    room.objects.push(copy);
+    app.selection = { roomId: room.id, lx: tx, ly: ty, objectId: copy.id };
+    updateInspector(); setStatus(`${copy.name} duplicated.`);
+  }
+
+  function duplicateActiveRoom() {
+    const src = app.selection ? roomById(app.selection.roomId) : activeLevel().rooms[0];
+    if (!src) return;
+    pushHistory();
+    const copy = clone(src); copy.id = D.uid('room'); copy.name = src.name + ' copy';
+    copy.objects.forEach(o => { o.id = D.uid('obj'); });
+    copy.events.forEach(e => { e.id = D.uid('evt'); });
+    copy.transform = D.createTransform(src.transform.x + src.size.w + 2, src.transform.y, src.transform.rotation);
+    activeLevel().rooms.push(copy);
+    setStatus(`Room "${src.name}" duplicated.`);
+  }
+
+  function toggleSelectedDoor() {
+    if (!app.selection || !app.selection.objectId) return false;
+    const room = roomById(app.selection.roomId); if (!room) return false;
+    const obj = room.objects.find(o => o.id === app.selection.objectId); if (!obj) return false;
+    if (!D.OBJECT_DEFS[obj.type].openable) return false;
+    obj.open = !obj.open; updateInspector(); setStatus(`${obj.name} ${obj.open ? 'opened' : 'closed'}.`); return true;
+  }
+
   // ---- input --------------------------------------------------------------
   function updateMouse(e) { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; }
 
@@ -239,7 +302,14 @@
   }
 
   function onPointerUp() {
-    if (mouse.down && app.mode === 'build') {
+    if (mouse.down && app.mode === 'play' && !dragged) {
+      // Play mode: click an openable door/airlock to toggle it
+      const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
+      if (hit && hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
+        hit.object.open = !hit.object.open;
+        setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`);
+      }
+    } else if (mouse.down && app.mode === 'build') {
       if (painting || movingObj) {
         if (!strokeChanged) discardHistory();   // no-op gesture: drop the snapshot
         else updateInspector();
@@ -248,6 +318,7 @@
         const hit = pickHit(mouse.x, mouse.y);
         if (app.tool === 'object') { if (hit) placeObject(hit); }
         else if (app.tool === 'entry') { if (hit) setEntry(hit); }
+        else if (app.tool === 'fill') { if (hit) floodFill(hit); }
         else { // select (default)
           app.selection = hit ? { roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: hit.object ? hit.object.id : null } : null;
           updateInspector();
@@ -293,11 +364,16 @@
       h += `<div class="row"><b>Wall</b><span>${tile.wall || 'none'}</span></div>`;
     }
     if (obj) {
+      const def = D.OBJECT_DEFS[obj.type];
       h += `<hr><div class="row"><b>Object</b><span>${esc(obj.name)}</span></div>`;
       h += `<div class="row"><b>Type</b><span>${obj.type} · ${obj.rotation || 0}°</span></div>`;
+      h += `<div class="row"><b>Layer</b><span>${obj.layer}</span></div>`;
       h += `<div class="row"><b>Flags</b><span>${obj.interactive ? 'interactive ' : ''}${obj.collision ? 'solid' : ''}</span></div>`;
+      if (def.openable) h += `<div class="row"><b>State</b><span>${obj.open ? 'open' : 'closed'}</span></div>`;
       h += `<div class="row"><b>Power/Heat</b><span>${obj.power} / ${obj.heat}</span></div>`;
-      h += `<div class="mini"><button data-act="rotate">Rotate 45°</button><button class="danger" data-act="delete">Delete</button></div>`;
+      h += `<div class="mini"><button data-act="rotate">Rotate 45°</button><button data-act="dup">Duplicate</button>`;
+      if (def.openable) h += `<button data-act="toggle">${obj.open ? 'Close' : 'Open'}</button>`;
+      h += `<button class="danger" data-act="delete">Delete</button></div>`;
     }
     inspector.innerHTML = h;
   }
@@ -325,6 +401,7 @@
       hoverStroke: app.tool === 'erase' ? '#e06a6a' : undefined,
       selection: app.selection,
       entry: lvl.entry,
+      hiddenLayers: app.hiddenLayers,
       activeRoomId: app.selection ? app.selection.roomId : null,
       showRoomOutlines: app.mode === 'build'
     });
@@ -355,6 +432,21 @@
     const wWrap = document.getElementById('wallPalette');
     [['solid', 'Solid'], ['diagA', 'Diag /'], ['diagB', 'Diag \\']].forEach(([id, label]) =>
       wWrap.appendChild(chip(label, () => { app.brush.wallShape = id; markActive(wWrap, id); setTool('wall'); }, id, app.brush.wallShape === id)));
+    // wall materials (hull vs glass/windows)
+    const wmWrap = document.getElementById('wallMatPalette');
+    Object.values(D.MATERIALS).filter(m => m.kind === 'wall').forEach(m =>
+      wmWrap.appendChild(chip(m.label, () => { app.brush.wallMat = m.id; markActive(wmWrap, m.id); setTool('wall'); }, m.id, app.brush.wallMat === m.id)));
+    // layer visibility toggles
+    const lWrap = document.getElementById('layerToggles');
+    D.LAYERS.forEach(name => {
+      const b = document.createElement('button'); b.textContent = name; b.dataset.key = name; b.classList.add('active');
+      b.addEventListener('click', () => {
+        if (app.hiddenLayers.has(name)) app.hiddenLayers.delete(name); else app.hiddenLayers.add(name);
+        b.classList.toggle('active', !app.hiddenLayers.has(name));
+        setStatus(`Layer ${name} ${app.hiddenLayers.has(name) ? 'hidden' : 'shown'}.`);
+      });
+      lWrap.appendChild(b);
+    });
   }
   function chip(label, onClick, key, active) {
     const b = document.createElement('button'); b.textContent = label; b.dataset.key = key;
@@ -380,9 +472,10 @@
       const k = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }
       if (k === 'delete' || k === 'backspace') { if (app.mode === 'build') deleteSelectedObject(); return; }
       if (k === 'escape') { app.selection = null; updateInspector(); return; }
-      const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase' };
+      const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill' };
       if (toolKeys[k] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[k]); return; }
       keys.add(k);
     });
@@ -411,8 +504,14 @@
     inspector.addEventListener('click', e => {
       const act = e.target.dataset.act; if (!act) return;
       if (act === 'rotate') rotateSelectedObject();
+      if (act === 'dup') duplicateSelectedObject();
+      if (act === 'toggle') { pushHistory(); if (!toggleSelectedDoor()) discardHistory(); }
       if (act === 'delete') deleteSelectedObject();
     });
+
+    document.getElementById('dupRoomBtn').addEventListener('click', duplicateActiveRoom);
+    const filterSel = document.getElementById('selectFilter');
+    filterSel.addEventListener('change', e => { app.selectFilter = e.target.value; setStatus(`Select filter: ${e.target.value}.`); });
 
     buildPalettes();
     loadSave(seedDemo(), 'Milestone 3 — build tools ready.');

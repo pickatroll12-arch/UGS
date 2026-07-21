@@ -72,6 +72,15 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   marcador de entrada en `src/render.js`, `void` como suelo válido en `data.js`.
   Verificado headless: paint, place, undo/redo (5→6→5→6), round-trip export/
   import, void persiste, picking en sala rotada. Sin errores.
+  **Ampliación del toolbox (M3+):** nuevos construibles — Pillar, Door, Airlock,
+  Stairs, Ladder, Ramp (objetos), Glass wall (ventanas), Catwalk (piso sobre
+  vacío). QoL — Fill/bote, Duplicate (objeto Ctrl+D + sala), Layers con toggles
+  de visibilidad, Selection filter (All/Objects/Walls/Floors), y puertas que
+  abren/cierran en modo Play. Escaleras/rampas quedan como anclas de traversía
+  para el M5. Diferido: escalar/estirar muros y clonar selección rectangular.
+  Verificado headless: fill, door toggle (collision on/off), duplicate obj+room,
+  glass, layer-hide bloquea el pick, filtro de selección, round-trip de campos
+  nuevos. Todo verde.
 - [ ] **M4 · Salas como unidades móviles**
   Agrupar tiles en salas con nombre; transform (posición + rotación + pivote);
   presets de evento (**shift / rotación / carrusel**) + mini-DSL de script;
