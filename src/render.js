@@ -30,6 +30,13 @@
   const WALL_H = 34;   // raised wall height
   const OBJ_H  = 20;   // object base height
 
+  // How far up each object's art reaches (px @ zoom 1) — drives the pick box so
+  // flat pads don't intercept clicks on the tile behind them.
+  const OBJ_PICK_TOP = {
+    console: 30, crate: 22, light: 34, plant: 26, elevator: 10, miner: 28,
+    pillar: 44, door: 40, airlock: 40, stairs: 22, ladder: 36, ramp: 12
+  };
+
   // ---- projection ---------------------------------------------------------
   function worldToScreen(cam, wx, wy) {
     const sx = (wx - wy) * (TILE_W / 2);
@@ -146,8 +153,11 @@
         ];
         hit = pointInPoly(px, py, poly);
       } else {
-        // bounding box roughly matching the object art (see drawObject)
-        hit = px >= s.x - 20 * z && px <= s.x + 20 * z && py >= s.y - 34 * z && py <= s.y + 14 * z;
+        // bounding box matched to the object art's actual height, so FLAT objects
+        // (elevator pad, ramp) don't grab the tile drawn behind them while TALL
+        // ones (pillar, door) stay clickable by their body.
+        const top = OBJ_PICK_TOP[e.o.type] != null ? OBJ_PICK_TOP[e.o.type] : 30;
+        hit = px >= s.x - 19 * z && px <= s.x + 19 * z && py >= s.y - top * z && py <= s.y + 12 * z;
       }
       if (hit) {
         const object = e.kind === 'obj' ? e.o : (e.room.objects.find(o => o.x === e.lx && o.y === e.ly) || null);

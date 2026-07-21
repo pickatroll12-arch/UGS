@@ -110,6 +110,16 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   (rotar en pasos de 90° pivotando sobre el centro). Verificado headless:
   round-trip de orbit, radio independiente del eje, mover/rotar sala, y smoke
   test general sin errores de consola.
+  **Debug a fondo (sesión final):** (a) BUG — clic en un objeto no lo
+  seleccionaba (se agarraba como movingObj y al soltar sin arrastrar solo se
+  descartaba el historial); arreglado → clic selecciona; esto además restauró
+  poder seleccionar/alternar puertas en Build. (b) BUG — los objetos planos
+  (elevator/ramp) interceptaban el clic del tile de atrás porque todos usaban
+  una caja de pick alta; arreglado con altura de caja por tipo (OBJ_PICK_TOP).
+  (c) Robustez — undo/redo bloqueados en modo Play para no desincronizar el
+  motor. Verificado: suites unitarias, tests dirigidos (selección objeto/tile/
+  puerta/pilar, place-en-void rechazado, round-trip, cámara finita) y **fuzz de
+  1200 acciones** sin excepciones ni errores de consola.
 - [ ] **M5 · Links & multi-mapa**
   Enlazar tile/objeto (ascensor) → nivel destino + spawn; modos de carga
   **preload** vs **stream**; transición en Play mode; el save contiene todo el
