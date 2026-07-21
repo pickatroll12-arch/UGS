@@ -588,6 +588,65 @@
     ctx.restore();
   }
 
+  // ---- agents / pawns -----------------------------------------------------
+  // Pawns are stored in room-local coords, so they render through the room
+  // transform (a moving room carries them). opts: { selectedId, time, showPaths }
+  function drawAgents(ctx, cam, level, pawns, opts) {
+    opts = opts || {};
+    const z = cam.zoom, hw = (TILE_W / 2) * z, hh = (TILE_H / 2) * z;
+    // depth-sorted so nearer pawns overlap farther ones
+    const list = pawns.filter(p => p.levelId === level.id).map(p => {
+      const room = level.rooms.find(r => r.id === p.roomId) || level.rooms[0];
+      const c = localToWorld(room, p.x + 0.5, p.y + 0.5);
+      return { p, room, wx: c.x, wy: c.y, depth: c.x + c.y };
+    }).sort((a, b) => a.depth - b.depth);
+
+    // paths first (under the figures)
+    if (opts.showPaths !== false) for (const e of list) {
+      if (!e.p.path.length) continue;
+      ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#dfe6ee'; ctx.lineWidth = Math.max(2, 2 * z); ctx.lineJoin = 'round';
+      ctx.beginPath();
+      const s0 = worldToScreen(cam, e.wx, e.wy); ctx.moveTo(s0.x, s0.y);
+      for (const n of e.p.path) { const c = localToWorld(e.room, n.x + 0.5, n.y + 0.5); const s = worldToScreen(cam, c.x, c.y); ctx.lineTo(s.x, s.y); }
+      ctx.stroke();
+      const last = e.p.path[e.p.path.length - 1]; const lc = localToWorld(e.room, last.x + 0.5, last.y + 0.5); const ls = worldToScreen(cam, lc.x, lc.y);
+      ctx.beginPath(); ctx.moveTo(ls.x - 5 * z, ls.y - 5 * z); ctx.lineTo(ls.x + 5 * z, ls.y + 5 * z); ctx.moveTo(ls.x + 5 * z, ls.y - 5 * z); ctx.lineTo(ls.x - 5 * z, ls.y + 5 * z); ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const e of list) {
+      const s = worldToScreen(cam, e.wx, e.wy);
+      // facing: local dir -> world (room rotation) -> iso screen angle
+      const wd = rotatePoint(e.p.facingLocal.x, e.p.facingLocal.y, e.room.transform.rotation, { x: 0, y: 0 });
+      const facing = Math.atan2((wd.x + wd.y) * (TILE_H / TILE_W), wd.x - wd.y);
+      drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
+    }
+  }
+
+  function drawPawnFigure(ctx, s, z, pawn, facing, selected, time) {
+    const bob = pawn.moving ? Math.sin(time * 11) * 1.6 * z : 0;
+    ctx.save();
+    // shadow
+    ctx.globalAlpha = 0.34; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, 11 * z, 5.5 * z, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    if (selected) {
+      ctx.strokeStyle = '#f2f2f4'; ctx.lineWidth = 1.6 * z; ctx.setLineDash([6 * z, 4 * z]);
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, 15 * z, 7.5 * z, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+    const fx = Math.cos(facing), fy = Math.sin(facing) * 0.6;
+    const bodyH = 34 * z;
+    // body
+    ctx.beginPath(); ctx.ellipse(s.x, s.y - bodyH * 0.45 + bob, 9 * z, bodyH * 0.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#dcdcde'; ctx.fill(); ctx.strokeStyle = '#8a8a92'; ctx.lineWidth = 1.4; ctx.stroke();
+    // head
+    const hy = s.y - bodyH + bob;
+    ctx.beginPath(); ctx.arc(s.x, hy, 7 * z, 0, Math.PI * 2); ctx.fillStyle = '#ededf0'; ctx.fill(); ctx.stroke();
+    // facing nub
+    ctx.beginPath(); ctx.arc(s.x + fx * 6 * z, hy + fy * 6 * z, 2 * z, 0, Math.PI * 2); ctx.fillStyle = '#2a2a2e'; ctx.fill();
+    ctx.restore();
+  }
+
   // centre a camera on a level's overall footprint at a given viewport size
   function centerOn(cam, level, viewW, viewH) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -608,6 +667,6 @@
     TILE_W, TILE_H, WALL_H, OBJ_H,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
-    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, drawLinkMarkers, centerOn, shade
+    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, drawLinkMarkers, drawAgents, centerOn, shade
   };
 });

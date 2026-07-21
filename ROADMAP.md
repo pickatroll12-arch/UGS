@@ -152,9 +152,28 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   La demo trae Deck 1 + Deck 2 con un ascensor enlazado. Verificado headless
   (11 checks): transición ida/vuelta, autoría de link, add deck, preload vs
   stream, round-trip (2 links, 0 warnings, 3 decks). Sin errores.
-- [ ] **M6 · Slice jugable (test)**
-  Meter el pawn de prueba, caminar, disparar un link y un evento de sala de punta
-  a punta para validar el motor.
+- [x] **M6 · Slice jugable (test)** ✅  — cierra la Etapa 1
+  Sistema de **agentes** sobre el heavy-core: `src/nav.js` (A* 8-dir con heap
+  binario + typed arrays sobre `Grid2D`, prevención de corner-cut, puertas
+  cerradas bloquean/abiertas pasan) y `src/agents.js` (pawn como **sistema del
+  engine**, movimiento en el sim determinista de paso fijo). En Play: aparece un
+  pawn en el entry, **clic para caminar** (pathfinding), **clic en puerta** para
+  abrir, y **caminar al ascensor cambia de deck** (transición vía `pawn:arrived`
+  en el EventBus). El pawn está en coords room-local, así que **viaja montado en
+  salas que se mueven** (valida el sistema de transforms de punta a punta).
+  Render de pawns con figura/orientación/breadcrumbs. `src/nav.test.js` (14) +
+  integración headless (spawn, caminar, transición de deck, montar sala móvil).
+  Sin errores.
+
+---
+
+### ✅ Etapa 1 COMPLETA — Motor de Mapas/Niveles + Station Builder
+
+M1 datos+save · M2 render+shell · M3(+) herramientas · M4 salas móviles ·
+M5 links & multi-mapa · M6 slice jugable — todos sobre el **heavy-core**
+(RNG sembrado, EventBus, fixed-timestep determinista, Grid2D, culling +
+render-on-demand). Suites: core 23 · data 24 · engine 15 · nav 14. Base lista
+para la Etapa 2 (tripulación con roles: el Capitán + 3 NPC).
 
 ---
 
