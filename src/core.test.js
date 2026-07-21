@@ -1,100 +1,81 @@
 /*
- * UGS — core self-test (Stage 1 · Milestone 1)
- * Headless test of the data + save layers. Run with:  node src/core.test.js
- * No test framework — just assertions, so it runs anywhere.
+ * UGS — core foundation self-test.  Run: node src/core.test.js
+ * (renamed the old data-layer test to data.test.js)
  */
 'use strict';
-const data = require('./data.js');
-const save = require('./save.js');
+const C = require('./core.js');
 
-let passed = 0, failed = 0;
-function check(name, cond) {
-  if (cond) { passed++; console.log('  ok  ', name); }
-  else { failed++; console.error('  FAIL', name); }
-}
+let pass = 0, fail = 0;
+function check(name, cond) { if (cond) { pass++; console.log('  ok  ', name); } else { fail++; console.error('  FAIL', name); } }
 
-console.log('UGS core self-test\n');
+console.log('UGS core foundation self-test\n');
 
-// 1. a fresh save is well-formed
-const s = data.createSaveFile('Test Station');
-check('save has format tag', s.format === data.FORMAT && s.formatVersion === data.FORMAT_VERSION);
-check('save has one level', s.levels.length === 1);
-check('level has one room', s.levels[0].rooms.length === 1);
-check('startLevelId points at a real level', s.levels.some(l => l.id === s.startLevelId));
-check('room tiles match declared size', (() => {
-  const r = s.levels[0].rooms[0];
-  return r.tiles.length === r.size.h && r.tiles[0].length === r.size.w;
-})());
-check('room has a transform with normalised rotation', (() => {
-  const t = s.levels[0].rooms[0].transform;
-  return typeof t.x === 'number' && [0, 90, 180, 270].includes(t.rotation);
-})());
+// --- math ---
+check('clamp', C.clamp(5, 0, 3) === 3 && C.clamp(-1, 0, 3) === 0);
+check('lerp/invLerp', C.lerp(0, 10, 0.5) === 5 && C.invLerp(0, 10, 5) === 0.5);
+check('smoothstep bounds', C.smoothstep(-1) === 0 && C.smoothstep(2) === 1);
+check('angleDelta wraps shortest', Math.abs(C.angleDelta(0.1, 6.2) - (6.2 - 0.1 - C.TAU)) < 1e-9);
 
-// 2. building it up: object, event, second level, link
-const lvlA = s.levels[0];
-const roomA = lvlA.rooms[0];
-roomA.objects.push(data.createObjectInstance('console', 3, 3));
-roomA.objects.push(data.createObjectInstance('miner', 5, 4));
-roomA.movable = true;
-roomA.events.push(data.createRoomEvent('slide open'));
+// --- vec ---
+check('vec dist', C.vec.dist({ x: 0, y: 0 }, { x: 3, y: 4 }) === 5);
+check('vec rot 90deg', (() => { const r = C.vec.rot({ x: 1, y: 0 }, Math.PI / 2); return C.approx(r.x, 0) && C.approx(r.y, 1); })());
 
-const lvlB = data.createLevel('Deck 2');
-s.levels.push(lvlB);
-const link = data.createLink(lvlA.id, lvlB.id);
-link.from = { levelId: lvlA.id, roomId: roomA.id, x: 5, y: 4 };
-link.to = { levelId: lvlB.id, roomId: lvlB.rooms[0].id, x: 2, y: 2 };
-s.links.push(link);
+// --- rng determinism ---
+const r1 = C.makeRNG(12345), r2 = C.makeRNG(12345);
+const seqA = [r1.next(), r1.next(), r1.next()];
+const seqB = [r2.next(), r2.next(), r2.next()];
+check('same seed → same sequence', seqA.every((v, i) => v === seqB[i]));
+check('different seed → different sequence', C.makeRNG(1).next() !== C.makeRNG(2).next());
+check('rng int in range', (() => { const r = C.makeRNG(7); for (let i = 0; i < 1000; i++) { const v = r.int(6); if (v < 0 || v > 5 || v % 1) return false; } return true; })());
+check('fork is independent + deterministic', (() => { const a = C.makeRNG(9).fork(), b = C.makeRNG(9).fork(); return a.next() === b.next(); })());
 
-check('object carries reserved subsystem fields', roomA.objects[1].power === 5 && roomA.objects[1].heat === 4);
-check('link endpoints reference real levels', link.from.levelId === lvlA.id && link.to.levelId === lvlB.id);
+// --- ids ---
+const ids = C.makeIds();
+check('ids unique + monotonic count', (() => { const a = ids.short('x'), b = ids.short('x'); return a !== b && ids.count === 2; })());
 
-// 3. round-trip: serialize → deserialize → deep-equal on the meaningful parts
-const json = save.serialize(s);
-const { save: s2, warnings } = save.deserialize(json);
-check('round-trip parses without warnings', warnings.length === 0);
-check('round-trip preserves level count', s2.levels.length === 2);
-check('round-trip preserves objects', s2.levels[0].rooms[0].objects.length === 2);
-check('round-trip preserves link', s2.links.length === 1 && s2.links[0].to.levelId === lvlB.id);
-check('round-trip preserves room movability + event', (() => {
-  const r = s2.levels[0].rooms[0];
-  return r.movable === true && r.events.length === 1;
-})());
-check('round-trip keeps startLevelId valid', s2.levels.some(l => l.id === s2.startLevelId));
+// --- event bus ---
+const bus = new C.EventBus();
+let got = 0, payload = null;
+const off = bus.on('tick', p => { got++; payload = p; });
+bus.emit('tick', 42);
+bus.emit('tick', 43);
+check('bus delivers + payload', got === 2 && payload === 43);
+off(); bus.emit('tick', 1);
+check('bus off() unsubscribes', got === 2);
+let onceN = 0; bus.once('boom', () => onceN++); bus.emit('boom'); bus.emit('boom');
+check('bus once fires exactly once', onceN === 1);
 
-// 4. robustness: garbage input is coerced, not crashed
-const dirty = {
-  format: data.FORMAT,
-  name: 'Dirty',
-  startLevelId: 'does-not-exist',
-  levels: [{
-    id: 'L1',
-    rooms: [{
-      id: 'R1',
-      size: { w: 3, h: 2 },
-      tiles: [[{ floor: 'NOPE', wall: 'bogus' }, null, {}], [{ floor: 'deck', wall: 'solid' }]],
-      objects: [{ type: 'ghost', x: 99, y: 99 }, { type: 'crate', x: 1, y: 1 }],
-      transform: { x: 4, y: 4, rotation: 47 }
-    }]
-  }],
-  links: [{ from: { levelId: 'L1' }, to: { levelId: 'MISSING' } }]
-};
-const { save: s3, warnings: w3 } = save.deserialize(dirty);
-check('bad floor material coerced to deck', s3.levels[0].rooms[0].tiles[0][0].floor === 'deck');
-check('bad wall shape coerced to null', s3.levels[0].rooms[0].tiles[0][0].wall === null);
-check('unknown object type dropped, valid kept', s3.levels[0].rooms[0].objects.length === 1 && s3.levels[0].rooms[0].objects[0].type === 'crate');
-check('out-of-bounds object clamped into room', (() => {
-  const o = s3.levels[0].rooms[0].objects[0];
-  return o.x <= 2 && o.y <= 1;
-})());
-check('odd rotation snapped to a right angle', [0, 90, 180, 270].includes(s3.levels[0].rooms[0].transform.rotation));
-check('dangling link dropped with a warning', s3.links.length === 0 && w3.some(w => /link/i.test(w)));
-check('invalid startLevelId repaired', s3.levels.some(l => l.id === s3.startLevelId));
+// --- fixed timestep ---
+const fs = new C.FixedTimestep(60, 5);
+let steps = 0;
+let alpha = fs.advance(1 / 60, () => steps++);           // exactly one frame
+check('fixed step: one slice for one frame', steps === 1);
+steps = 0; fs.reset();
+fs.advance(3.5 / 60, () => steps++);                     // 3 full slices, .5 remainder
+check('fixed step: accumulates whole slices', steps === 3);
+steps = 0; fs.reset();
+alpha = fs.advance(0.5 / 60, () => steps++);             // partial → no step, alpha ~0.5
+check('fixed step: partial gives alpha, no step', steps === 0 && Math.abs(alpha - 0.5) < 1e-6);
+steps = 0; fs.reset();
+fs.advance(100, () => steps++);                          // huge stall clamped to maxSteps
+check('fixed step: clamps catch-up (no spiral)', steps === 5);
 
-// 5. wrong format is rejected loudly
-let rejected = false;
-try { save.deserialize({ format: 'some-other-game', levels: [] }); }
-catch (e) { rejected = true; }
-check('foreign format is rejected', rejected);
+// --- grid2d ---
+const g = new C.Grid2D(8, 4, Int16Array, 0);
+g.set(3, 2, 9);
+check('grid set/get', g.get(3, 2) === 9 && g.get(0, 0) === 0);
+check('grid bounds-safe', g.get(-1, 0) === 0 && (g.set(99, 99, 1), true));
+let sum = 0; g.forEach(v => sum += v);
+check('grid forEach visits all', sum === 9);
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+// --- pool ---
+let made = 0;
+const pool = new C.Pool(() => ({ v: ++made }), o => { o.v = 0; }, 2);
+const a = pool.acquire(), b = pool.acquire();      // from prefill
+check('pool serves prefilled', made === 2);
+pool.release(a);
+const c = pool.acquire();
+check('pool recycles (no new alloc)', made === 2 && c === a && c.v === 0);
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

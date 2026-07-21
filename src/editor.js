@@ -15,7 +15,11 @@
   const D = window.UGS.data;
   const R = window.UGS.render;
   const S = window.UGS.save;
+  const CORE = window.UGS.core;
   const engine = window.UGS.engine.create();
+  const simClock = new CORE.FixedTimestep(30, 6);   // 30 Hz deterministic sim
+  let needsRender = true;                            // render-on-demand (idle editor draws nothing)
+  function invalidate() { needsRender = true; }
 
   // ---- state --------------------------------------------------------------
   const app = {
@@ -534,11 +538,12 @@
   }
 
   function updateCamera(dt) {
-    const pan = 520 * dt;
-    if (keys.has('w') || keys.has('arrowup')) app.camera.y += pan;
-    if (keys.has('s') || keys.has('arrowdown')) app.camera.y -= pan;
-    if (keys.has('a') || keys.has('arrowleft')) app.camera.x += pan;
-    if (keys.has('d') || keys.has('arrowright')) app.camera.x -= pan;
+    const pan = 520 * dt; let moved = false;
+    if (keys.has('w') || keys.has('arrowup')) { app.camera.y += pan; moved = true; }
+    if (keys.has('s') || keys.has('arrowdown')) { app.camera.y -= pan; moved = true; }
+    if (keys.has('a') || keys.has('arrowleft')) { app.camera.x += pan; moved = true; }
+    if (keys.has('d') || keys.has('arrowright')) { app.camera.x -= pan; moved = true; }
+    return moved;
   }
 
   // ---- inspector ----------------------------------------------------------
@@ -630,11 +635,27 @@
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    updateCamera(dt);
-    if (app.mode === 'play' && !app.clock.paused) engine.update(activeLevel(), dt * app.clock.speed);
+    const camMoved = updateCamera(dt);
+    if (camMoved) invalidate();
+
+    // deterministic fixed-timestep simulation (Play only). Speed multiplies the
+    // number of fixed slices, so each slice stays a constant dt (reproducible).
+    if (app.mode === 'play' && !app.clock.paused) {
+      const lvl0 = activeLevel();
+      simClock.advance(dt, (fdt) => { for (let i = 0; i < app.clock.speed; i++) engine.update(lvl0, fdt); });
+      if (engine.activeCount() > 0) invalidate();     // something is moving → redraw
+    }
+
+    // render on demand: an idle editor (no input, nothing animating) skips the
+    // whole draw — keeps a laptop/handheld cool instead of pegging a core.
+    if (!needsRender) { requestAnimationFrame(frame); return; }
+    needsRender = false;
+
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     const lvl = activeLevel();
     R.drawLevel(ctx, app.camera, lvl, {
+      view: { w: canvas.clientWidth, h: canvas.clientHeight },
+      animating: app.mode === 'play' || !!dragHandle || !!movingObj || painting,
       hover: app.mode === 'build' && !panning ? app.hover : null,
       hoverFill: app.tool === 'erase' ? 'rgba(220,90,90,0.22)' : undefined,
       hoverStroke: app.tool === 'erase' ? '#e06a6a' : undefined,
@@ -701,12 +722,17 @@
     hud = document.getElementById('hud'); inspector = document.getElementById('inspector');
     statusEl = document.getElementById('status'); levelSelect = document.getElementById('levelSelect');
 
-    resize(); window.addEventListener('resize', resize);
-    canvas.addEventListener('pointermove', onPointerMove);
-    canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointerup', onPointerUp);
-    canvas.addEventListener('pointerleave', () => { app.hover = null; });
-    canvas.addEventListener('wheel', onWheel, { passive: false });
+    resize(); window.addEventListener('resize', () => { resize(); invalidate(); });
+    canvas.addEventListener('pointermove', e => { onPointerMove(e); invalidate(); });
+    canvas.addEventListener('pointerdown', e => { onPointerDown(e); invalidate(); });
+    window.addEventListener('pointerup', () => { onPointerUp(); invalidate(); });
+    canvas.addEventListener('pointerleave', () => { app.hover = null; invalidate(); });
+    canvas.addEventListener('wheel', e => { onWheel(e); invalidate(); }, { passive: false });
+    // catch-all: any UI click/change/key repaints once (render-on-demand net)
+    document.addEventListener('click', invalidate, true);
+    document.addEventListener('change', invalidate, true);
+    window.addEventListener('keydown', invalidate);
+    window.addEventListener('keyup', invalidate);
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     window.addEventListener('keydown', e => {

@@ -39,6 +39,27 @@ rutina independientemente del jugador).
 
 ---
 
+## Núcleo pesado (heavy-core rework) — capacidad + rendimiento
+
+Refuerzo transversal (M1→M5) para soportar metas ambiciosas (muchos NPCs
+autónomos / A-life, subsistemas, combate) y correr fluido en specs modestas
+(clase Steam Machine: pocos cores, GPU floja, 2D nunca debe sudar).
+
+- **`src/core.js` — fundación** (dependency-free, determinista, consciente de
+  asignaciones): RNG sembrado (mulberry32 → mundos/saves reproducibles),
+  `EventBus` (desacople de sistemas), `FixedTimestep` (sim desacoplada del
+  framerate, con tope de catch-up anti-espiral), `Grid2D` (grid denso sobre
+  typed arrays, sin GC — para mapas grandes y consultas de muchos agentes),
+  `vec` (math 2D), `Pool` (reciclaje en bucles calientes). 23 tests.
+- **Engine → Sim determinista** dirigida por **fixed timestep** (30 Hz): motion
+  determinista e independiente del framerate; `EventBus` (`motion:start/done`);
+  `addSystem()` para sistemas futuros (subsistemas/IA); `time`/`tick`. 15 tests.
+- **Render performante**: **viewport culling** (no dibuja lo fuera de pantalla)
+  y **render-on-demand** en el editor (un editor inactivo no repinta → no quema
+  un core). El sim en Play sí anima y repinta.
+- **Data**: `seed` determinista en el save (round-trip) para contenido
+  procedural/A-life reproducible.
+
 ## Principio rector
 
 **Separar la simulación del render.** La lógica del juego (estado, entidades,
