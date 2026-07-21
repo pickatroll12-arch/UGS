@@ -120,10 +120,17 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   motor. Verificado: suites unitarias, tests dirigidos (selección objeto/tile/
   puerta/pilar, place-en-void rechazado, round-trip, cámara finita) y **fuzz de
   1200 acciones** sin excepciones ni errores de consola.
-- [ ] **M5 · Links & multi-mapa**
-  Enlazar tile/objeto (ascensor) → nivel destino + spawn; modos de carga
-  **preload** vs **stream**; transición en Play mode; el save contiene todo el
-  grafo de niveles.
+- [x] **M5 · Links & multi-mapa** ✅
+  Herramienta **Link** (2 clics: origen → cambiar de deck → spawn) que crea un
+  enlace en `save.links`. Gestión de **decks**: añadir/borrar/renombrar niveles.
+  **Marcadores** de portal/spawn/pending dibujados en el mapa. **Transición en
+  Play**: clic en un tile de enlace viaja al deck destino y centra en el spawn
+  (bidireccional). Modos de carga con semántica real: **preload** marca el
+  destino como residente al arrancar Play; **stream** lo carga en la primera
+  visita (Set `resident`). El save contiene todo el grafo (links round-trip).
+  La demo trae Deck 1 + Deck 2 con un ascensor enlazado. Verificado headless
+  (11 checks): transición ida/vuelta, autoría de link, add deck, preload vs
+  stream, round-trip (2 links, 0 warnings, 3 decks). Sin errores.
 - [ ] **M6 · Slice jugable (test)**
   Meter el pawn de prueba, caminar, disparar un link y un evento de sala de punta
   a punta para validar el motor.
