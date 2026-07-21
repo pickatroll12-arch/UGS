@@ -13,11 +13,12 @@
  * and Node (module.exports) for headless testing.
  */
 (function (root, factory) {
-  const api = factory();
+  const core = (root.UGS && root.UGS.core) || (typeof require !== 'undefined' ? require('./core.js') : null);
+  const api = factory(core);
   root.UGS = root.UGS || {};
   root.UGS.engine = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (core) {
   'use strict';
 
   function pose(x, y, rotation) { return { x, y, rotation }; }
@@ -101,18 +102,21 @@
   function create() {
     const base = new Map();      // roomId -> authored pose (restored on stop)
     const runs = new Map();      // roomId -> runtime ({kind:'segments'|'orbit', ...})
-    let running = false;
+    const bus = core && core.EventBus ? new core.EventBus() : null;   // system decoupling
+    const systems = [];          // pluggable per-step systems (subsystems, AI, …)
+    let running = false, simTime = 0, tick = 0;
 
+    function emit(type, payload) { if (bus) bus.emit(type, payload); }
     function findRoom(level, id) { return level.rooms.find(r => r.id === id) || null; }
 
     function fire(room, event) {
       const rt = buildRuntime(room, event);
-      if (rt.kind === 'orbit' || rt.segs.length) runs.set(room.id, rt);
+      if (rt.kind === 'orbit' || rt.segs.length) { runs.set(room.id, rt); emit('motion:start', { room, event }); }
     }
 
     function start(level) {
       stop(level);
-      base.clear(); runs.clear();
+      base.clear(); runs.clear(); simTime = 0; tick = 0;
       for (const room of level.rooms) base.set(room.id, poseOfRoom(room));
       // auto-fire time-triggered events
       for (const room of level.rooms) {
@@ -137,8 +141,14 @@
       return fired;
     }
 
+    // Advance the simulation by dt seconds. Called with a FIXED dt from the
+    // editor's fixed-timestep clock, so motion is deterministic and independent
+    // of the render framerate.
     function update(level, dt) {
       if (!running || dt <= 0) return;
+      simTime += dt; tick++;
+      // pluggable systems run first (subsystems / AI in later stages)
+      for (const sys of systems) sys.step(level, dt, { time: simTime, tick, emit });
       for (const [id, rt] of runs) {
         const room = findRoom(level, id); if (!room) { runs.delete(id); continue; }
         if (rt.kind === 'orbit') {
@@ -158,16 +168,19 @@
           if (rt.i >= rt.segs.length) { if (rt.loop) rt.i = 0; else { rt.done = true; break; } }
           seg = rt.segs[rt.i];
         }
-        if (rt.done) { runs.delete(id); continue; }
+        if (rt.done) { runs.delete(id); emit('motion:done', { roomId: id }); continue; }
         if (seg) applyPose(room, lerpPose(seg.from, seg.to, seg.dur > 0 ? rt.t / seg.dur : 1));
       }
     }
 
     return {
-      start, stop, update, fire, trigger,
+      start, stop, update, step: update, fire, trigger,
+      addSystem: (sys) => { systems.push(sys); return sys; },
+      bus,
       isRunning: () => running,
       activeCount: () => runs.size,
-      isAnimating: (roomId) => runs.has(roomId)
+      isAnimating: (roomId) => runs.has(roomId),
+      get time() { return simTime; }, get tick() { return tick; }
     };
   }
 

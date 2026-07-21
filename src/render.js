@@ -320,6 +320,14 @@
     const hw = (TILE_W / 2) * cam.zoom;
     const hh = (TILE_H / 2) * cam.zoom;
 
+    // viewport-culling bounds (world screen px + a generous margin so tall
+    // walls/objects and moving rooms near the edge still draw). Skips draw calls
+    // for everything off-screen — the main perf lever when zoomed in.
+    const vw = opts.view ? opts.view.w : (typeof window !== 'undefined' ? window.innerWidth : 1e5);
+    const vh = opts.view ? opts.view.h : (typeof window !== 'undefined' ? window.innerHeight : 1e5);
+    const mx = 3 * TILE_W * cam.zoom, my = 3 * TILE_H * cam.zoom + WALL_H * cam.zoom;
+    const onScreen = (s) => s.x >= -mx && s.x <= vw + mx && s.y >= -my && s.y <= vh + my;
+
     // --- pass 1: floors (depth-sorted across all rooms) ---
     const floors = [];
     for (const room of level.rooms) {
@@ -328,6 +336,7 @@
           const tile = room.tiles[ly][lx];
           if (!tile || tile.floor === 'void') continue;
           const c = tileCenterWorld(room, lx, ly);
+          if (!onScreen(worldToScreen(cam, c.x, c.y))) continue;
           floors.push({ room, lx, ly, tile, wx: c.x, wy: c.y, depth: c.x + c.y });
         }
       }
@@ -372,6 +381,7 @@
           const tile = room.tiles[ly][lx];
           if (tile && tile.wall) {
             const c = tileCenterWorld(room, lx, ly);
+            if (!onScreen(worldToScreen(cam, c.x, c.y))) continue;
             ents.push({ kind: 'wall', tile, wx: c.x, wy: c.y, depth: c.x + c.y });
           }
         }
@@ -379,6 +389,7 @@
       for (const obj of room.objects) {
         if (hidden && hidden.has(obj.layer)) continue;
         const c = tileCenterWorld(room, obj.x, obj.y);
+        if (!onScreen(worldToScreen(cam, c.x, c.y))) continue;
         const sel = opts.selection && opts.selection.objectId === obj.id;
         ents.push({ kind: 'obj', obj, sel, wx: c.x, wy: c.y, depth: c.x + c.y + 0.01 });
       }

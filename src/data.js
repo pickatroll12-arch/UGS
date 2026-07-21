@@ -196,6 +196,9 @@
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       startLevelId: level.id,
+      // deterministic world seed — feeds the core RNG so procedural content,
+      // A-life, and mid-sim saves replay identically.
+      seed: (Math.random() * 0xffffffff) >>> 0,
       levels: [level],
       links: [],
       // reserved for later stages (crew roster, resources, flags). Kept out of
@@ -216,6 +219,7 @@
     const out = createSaveFile(str(input.name, 'Imported Station'));
     out.id = str(input.id, out.id);
     out.formatVersion = FORMAT_VERSION;
+    if (input.seed != null && Number.isFinite(Number(input.seed))) out.seed = Number(input.seed) >>> 0;
     if (input.createdAt) out.createdAt = str(input.createdAt);
     out.updatedAt = new Date().toISOString();
     if (isObj(input.reserved)) out.reserved = { ...out.reserved, ...input.reserved };
