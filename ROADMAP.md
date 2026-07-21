@@ -58,9 +58,12 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   → `src/data.js` (esquemas, factories, registries, normalización),
     `src/save.js` (serialize/deserialize, versión + migración, import/export),
     `src/core.test.js` (22 tests headless, `node src/core.test.js`). Todo verde.
-- [ ] **M2 · Renderer + shell del editor**
+- [x] **M2 · Renderer + shell del editor** ✅
   Render isométrico que dibuja las salas **a través de su transform**; toggle
-  Build/Play, cámara, selección de tile. (Adaptar el prototipo Station Builder.)
+  Build/Play, cámara (pan/zoom), selección de tile con picking que invierte el
+  transform (world→room-local). → `src/render.js`, `src/editor.js`, `index.html`
+  (app builder). Demo con 2 salas (una desplazada + rotada 90°) que prueba el
+  pipeline. Verificado en Chromium headless: render OK, picking OK, sin errores.
 - [ ] **M3 · Herramientas de construcción**
   Materiales de suelo, muros, objetos (interactivos / decorativos + colisión +
   propiedades), puntos de entrada/salida, borrar / seleccionar / inspeccionar,
@@ -115,8 +118,9 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
 
 ## Estado actual del repo
 
-- `index.html` — placeholder isométrico (sala monocromática + pawn con
-  click-to-move y A*). Sirve como **sandbox de movimiento/IA** para etapas
-  posteriores; no es la base del builder.
-- El prototipo "Station Builder" (editor + export/import + links/events
-  scaffolded) es el punto de partida real de la Etapa 1.
+- `index.html` — **app Station Builder** (Etapa 1). Carga `src/data.js`,
+  `src/save.js`, `src/render.js`, `src/editor.js` como scripts clásicos.
+- `src/` — el núcleo: data model, save/load, renderer iso, shell del editor,
+  y `core.test.js` (tests headless del núcleo de datos).
+- `sandbox/placeholder.html` — el placeholder isométrico original (sala + pawn
+  con click-to-move y A*). **Sandbox de movimiento/IA** para etapas posteriores.
