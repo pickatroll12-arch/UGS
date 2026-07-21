@@ -52,9 +52,12 @@ pathfinding, eventos) no sabe nada de cómo se dibuja. Los gráficos son
 
 El editor y el motor que cargan/guardan mapas. Es la base de todo.
 
-- [ ] **M1 · Modelo de datos + formato de guardado** *(núcleo puro, sin UI)*
+- [x] **M1 · Modelo de datos + formato de guardado** *(núcleo puro, sin UI)* ✅
   Esquemas Level / Room / Tile / Object / Link / Event; save file = colección de
   niveles + grafo de links + versión; serializar / validar / import-export.
+  → `src/data.js` (esquemas, factories, registries, normalización),
+    `src/save.js` (serialize/deserialize, versión + migración, import/export),
+    `src/core.test.js` (22 tests headless, `node src/core.test.js`). Todo verde.
 - [ ] **M2 · Renderer + shell del editor**
   Render isométrico que dibuja las salas **a través de su transform**; toggle
   Build/Play, cámara, selección de tile. (Adaptar el prototipo Station Builder.)
@@ -78,13 +81,17 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
 
 ## Decisiones de arquitectura
 
-- **Estructura de código** — *PENDIENTE*. Recomendación: varios archivos `.js`
-  clásicos bajo un namespace global `UGS`, incluidos desde `index.html`. Se abre
-  con doble clic (sin servidor ni build) y ya queda modular. Restricción: cargar
-  mapas va por file-picker / import-export, no por `fetch` (bloqueado en `file://`).
-- **Salas transformables** — *PENDIENTE*. Recomendación: **sí**, salas como
-  entidades de primera clase con transform desde el inicio, para que
-  mover/rotar/carrusel sea nativo.
+- **Render** — ✅ **Canvas 2D (HTML5)** por ahora, no WebGL. El render está
+  aislado del sim, así que se puede cambiar a WebGL/PixiJS más adelante solo para
+  el pulido visual, sin tocar mecánicas.
+- **Estructura de código** — ✅ varios archivos `.js` clásicos bajo un namespace
+  global `UGS`, incluidos desde el HTML. Se abre con doble clic (sin servidor ni
+  build) y ya queda modular. Restricción: cargar mapas va por file-picker /
+  import-export, no por `fetch` (bloqueado en `file://`). Los módulos del core
+  llevan cola UMD para poder testearse en Node.
+- **Salas transformables** — ✅ **sí**, salas como entidades de primera clase con
+  transform (offset + rotación + pivote) desde el inicio; mover/rotar/carrusel es
+  nativo en el data model.
 - **Modelo de entidades** — pawns y objetos como "entidades con propiedades".
   Desde M1 se **reservan** campos aunque no se simulen: en pawns `role` / `skills`
   / `assignment`; en objetos `power` / `heat` / subsistemas.
