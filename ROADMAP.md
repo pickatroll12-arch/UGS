@@ -101,6 +101,15 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   reorganizado en **pestañas con iconos** (Build / Rooms / Save). Verificado
   headless: pestañas, +Orbit, arrastre de handle mueve el centro, flip de
   dirección, y órbita con radio constante en Play. Sin errores.
+  **Debugging M4++:** (1) BUG de raíz — `normalizeRoomEvent` no manejaba
+  `orbit`, así que al guardar/cargar se convertía en `shift`; arreglado (+ el
+  round-trip preserva center/radius/period/direction/selfRotate). (2) **Radio
+  de órbita** ahora es explícito e independiente del eje: mover el eje mantiene
+  el radio; hay un **handle de radio** (amarillo) aparte para ajustarlo. (3)
+  **Mover/rotar salas**: gizmo con handle ▪ (mover, snap a tiles enteros) y ●
+  (rotar en pasos de 90° pivotando sobre el centro). Verificado headless:
+  round-trip de orbit, radio independiente del eje, mover/rotar sala, y smoke
+  test general sin errores de consola.
 - [ ] **M5 · Links & multi-mapa**
   Enlazar tile/objeto (ascensor) → nivel destino + spawn; modos de carga
   **preload** vs **stream**; transición en Play mode; el save contiene todo el

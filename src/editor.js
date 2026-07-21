@@ -311,14 +311,29 @@
 
     if (dragHandle) {
       const room = roomById(dragHandle.roomId);
-      const ev = room && room.events.find(e => e.id === dragHandle.eventId);
-      if (ev) {
+      if (room) {
         const P = R.screenToWorld(app.camera, mouse.x, mouse.y);
         const rc = R.roomCenterWorld(room), t = room.transform;
-        if (dragHandle.kind === 'shift-to') ev.action.to = { x: t.x + (P.x - rc.x), y: t.y + (P.y - rc.y) };
-        else if (dragHandle.kind === 'orbit-center') ev.action.center = { x: P.x, y: P.y };
-        else if (dragHandle.kind === 'carousel-pose') { const p = ev.action.poses[dragHandle.poseIndex]; if (p) { p.x = t.x + (P.x - rc.x); p.y = t.y + (P.y - rc.y); } }
-        strokeChanged = true;
+        if (dragHandle.kind === 'room-move') {
+          t.x = Math.round(t.x + (P.x - rc.x)); t.y = Math.round(t.y + (P.y - rc.y)); strokeChanged = true;
+        } else if (dragHandle.kind === 'room-rotate') {
+          const ang = Math.atan2(P.y - rc.y, P.x - rc.x) * 180 / Math.PI;
+          const rot = ((Math.round((ang + 90) / 90) * 90) % 360 + 360) % 360;   // grip points "up" at rot 0
+          const before = R.roomCenterWorld(room);
+          t.rotation = rot;
+          const after = R.roomCenterWorld(room);
+          t.x += before.x - after.x; t.y += before.y - after.y;                  // pivot around centre
+          strokeChanged = true;
+        } else {
+          const ev = room.events.find(e => e.id === dragHandle.eventId);
+          if (ev) {
+            if (dragHandle.kind === 'shift-to') ev.action.to = { x: t.x + (P.x - rc.x), y: t.y + (P.y - rc.y) };
+            else if (dragHandle.kind === 'orbit-center') ev.action.center = { x: P.x, y: P.y };
+            else if (dragHandle.kind === 'orbit-radius') ev.action.radius = Math.max(0.3, Math.hypot(P.x - ev.action.center.x, P.y - ev.action.center.y));
+            else if (dragHandle.kind === 'carousel-pose') { const p = ev.action.poses[dragHandle.poseIndex]; if (p) { p.x = t.x + (P.x - rc.x); p.y = t.y + (P.y - rc.y); } }
+            strokeChanged = true;
+          }
+        }
       }
       return;
     }
@@ -444,7 +459,7 @@
     }
     h += `<div class="mini"><button data-act="evt-shift">+ Shift</button><button data-act="evt-rotate">+ Rotate</button></div>`;
     h += `<div class="mini"><button data-act="evt-orbit">+ Orbit</button><button data-act="evt-carousel">+ Carousel</button></div>`;
-    h += `<div class="hint" style="margin-top:6px">Drag the coloured handle on the map to aim the motion.</div>`;
+    h += `<div class="hint" style="margin-top:6px">On the map: drag the white ▪ to move the room, the white ● to rotate it. Coloured handles aim each motion (orbit: orange = axis, yellow = radius).</div>`;
     inspector.innerHTML = h;
   }
   function floorLabel(id) { return id === 'void' ? 'void (empty)' : ((D.MATERIALS[id] || {}).label || id); }
@@ -460,7 +475,7 @@
     ev.trigger = { type: 'time' }; ev.loop = true;
     if (kind === 'shift') ev.action = { kind: 'shift', to: { x: t.x + 4, y: t.y }, duration: 2 };
     else if (kind === 'rotate') ev.action = { kind: 'rotate', by: 90, duration: 2 };
-    else if (kind === 'orbit') { const rc = R.roomCenterWorld(room); ev.action = { kind: 'orbit', center: { x: rc.x, y: rc.y - 5 }, period: 4, direction: 'cw', selfRotate: false }; }
+    else if (kind === 'orbit') { const rc = R.roomCenterWorld(room); ev.action = { kind: 'orbit', center: { x: rc.x, y: rc.y - 5 }, radius: 5, period: 4, direction: 'cw', selfRotate: false }; }
     else if (kind === 'carousel') ev.action = { kind: 'carousel', interval: 1.8, loop: true, poses: [
       { x: t.x + 4, y: t.y, rotation: t.rotation }, { x: t.x + 4, y: t.y + 4, rotation: t.rotation + 90 }, { x: t.x, y: t.y + 4, rotation: t.rotation + 180 }
     ] };

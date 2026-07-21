@@ -80,7 +80,9 @@
     const center = { x: Number(a.center && a.center.x) || 0, y: Number(a.center && a.center.y) || 0 };
     const baseRot = room.transform.rotation;
     const wc = roomCenterWorld(room, baseRot);
-    const R = Math.hypot(wc.x - center.x, wc.y - center.y);
+    // radius is explicit (adjustable independently of the axis); fall back to the
+    // room's current distance to the axis only if not authored.
+    const R = a.radius != null ? Number(a.radius) : Math.hypot(wc.x - center.x, wc.y - center.y);
     const theta0 = Math.atan2(wc.y - center.y, wc.x - center.x);
     const period = Math.max(0.1, Number(a.period) || 4);
     return {

@@ -318,9 +318,10 @@
     if (isObj(input.trigger)) ev.trigger = { type: str(input.trigger.type, 'manual'), ...input.trigger };
     if (isObj(input.action)) {
       const a = input.action;
-      const kind = ['shift', 'rotate', 'carousel', 'script'].indexOf(a.kind) !== -1 ? a.kind : 'shift';
+      const kind = ['shift', 'rotate', 'orbit', 'carousel', 'script'].indexOf(a.kind) !== -1 ? a.kind : 'shift';
       if (kind === 'shift')    ev.action = { kind, to: { x: num(a.to && a.to.x), y: num(a.to && a.to.y) }, duration: num(a.duration, 1) };
       if (kind === 'rotate')   ev.action = { kind, by: num(a.by, 90), duration: num(a.duration, 1) };
+      if (kind === 'orbit')    ev.action = { kind, center: { x: num(a.center && a.center.x), y: num(a.center && a.center.y) }, radius: num(a.radius, 5), period: num(a.period, 4), direction: a.direction === 'ccw' ? 'ccw' : 'cw', selfRotate: bool(a.selfRotate, false) };
       if (kind === 'carousel') ev.action = { kind, poses: Array.isArray(a.poses) ? a.poses.map(p => ({ x: num(p.x), y: num(p.y), rotation: num(p.rotation) })) : [], interval: num(a.interval, 2), loop: bool(a.loop, true) };
       if (kind === 'script')   ev.action = { kind, steps: Array.isArray(a.steps) ? a.steps : [] };
     }
