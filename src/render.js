@@ -353,6 +353,9 @@
     // --- entry marker ---
     if (opts.entry) drawEntry(ctx, cam, level, opts.entry, hw, hh);
 
+    // --- link markers (level graph) ---
+    if (opts.linkMarkers && opts.linkMarkers.length) drawLinkMarkers(ctx, cam, level, opts.linkMarkers);
+
     // --- room motion preview (Build aid) ---
     if (opts.previewRoom) drawRoomMotion(ctx, cam, opts.previewRoom);
 
@@ -404,6 +407,32 @@
     if (ref.lx < 0 || ref.ly < 0 || ref.lx >= room.size.w || ref.ly >= room.size.h) return;
     const c = tileCenterWorld(room, ref.lx, ref.ly);
     diamondAt(ctx, worldToScreen(cam, c.x, c.y), hw, hh, fill, stroke);
+  }
+
+  // Link markers: source/spawn endpoints of the level graph on THIS level.
+  // markers: [{ roomId, x, y, label, kind:'source'|'spawn'|'pending' }]
+  function drawLinkMarkers(ctx, cam, level, markers) {
+    for (const m of markers) {
+      const room = level.rooms.find(r => r.id === m.roomId) || level.rooms[0];
+      if (!room) continue;
+      const c = tileCenterWorld(room, m.x, m.y);
+      const s = worldToScreen(cam, c.x, c.y);
+      const col = m.kind === 'spawn' ? '#8fe0a0' : (m.kind === 'pending' ? '#ffd060' : '#8fd0ff');
+      ctx.save();
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
+      ctx.setLineDash(m.kind === 'pending' ? [4, 3] : []);
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, 14 * cam.zoom, 7 * cam.zoom, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      // chevron up for a source/portal, down-dot for a spawn
+      ctx.beginPath();
+      if (m.kind === 'spawn') { ctx.arc(s.x, s.y, 2.5 * cam.zoom, 0, Math.PI * 2); ctx.fill(); }
+      else { ctx.moveTo(s.x - 5 * cam.zoom, s.y + 2 * cam.zoom); ctx.lineTo(s.x, s.y - 5 * cam.zoom); ctx.lineTo(s.x + 5 * cam.zoom, s.y + 2 * cam.zoom); ctx.stroke(); }
+      if (m.label) {
+        ctx.fillStyle = col; ctx.font = `${10 * cam.zoom}px ui-monospace, monospace`; ctx.textAlign = 'center';
+        ctx.fillText(m.label, s.x, s.y - 12 * cam.zoom);
+      }
+      ctx.restore();
+    }
   }
 
   function drawEntry(ctx, cam, level, entry, hw, hh) {
@@ -568,6 +597,6 @@
     TILE_W, TILE_H, WALL_H, OBJ_H,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
-    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, centerOn, shade
+    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, drawLinkMarkers, centerOn, shade
   };
 });

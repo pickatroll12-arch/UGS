@@ -30,6 +30,8 @@
     selectFilter: 'all',           // all | floor | object | wall
     hiddenLayers: new Set(),       // layer names toggled off
     clock: { paused: false, speed: 1 },   // Play-mode simulation clock
+    pendingLink: null,             // { levelId, roomId, lx, ly } source awaiting a target
+    resident: new Set(),           // level ids currently "loaded" (preload/stream model)
   };
   const undoStack = [];
   const redoStack = [];
@@ -102,6 +104,19 @@
     slide.action = { kind: 'shift', to: { x: 12, y: 11 }, duration: 2.2 };
     b.events.push(slide);
     level.rooms.push(b);
+
+    // second deck + an elevator link (Deck 1 elevator <-> Deck 2 spawn)
+    const deck2 = D.createLevel('Deck 2');
+    deck2.rooms[0].name = 'Upper Hall'; deck2.rooms[0].size = { w: 10, h: 8 };
+    deck2.rooms[0].tiles = grid(10, 8, 'dark'); ringWalls(deck2.rooms[0]);
+    deck2.rooms[0].objects.push(D.createObjectInstance('elevator', 2, 2));
+    deck2.rooms[0].objects.push(D.createObjectInstance('console', 6, 3));
+    deck2.entry = { roomId: deck2.rooms[0].id, x: 3, y: 3 };
+    save.levels.push(deck2);
+    const link = D.createLink(level.id, deck2.id); link.kind = 'elevator'; link.mode = 'preload';
+    link.from = { levelId: level.id, roomId: a.id, x: 6, y: 4 };            // the Deck 1 elevator
+    link.to = { levelId: deck2.id, roomId: deck2.rooms[0].id, x: 2, y: 2 }; // the Deck 2 elevator
+    save.links.push(link);
     return save;
   }
   function grid(w, h, floor) { return Array.from({ length: h }, () => Array.from({ length: w }, () => D.createTile(floor))); }
@@ -121,8 +136,15 @@
   }
   function setMode(mode) {
     if (mode === app.mode) return;
-    if (mode === 'play') { engine.start(activeLevel()); app.clock.paused = false; app.clock.speed = 1; app.selection = null; }
-    else { engine.stop(activeLevel()); }
+    if (mode === 'play') {
+      engine.start(activeLevel()); app.clock.paused = false; app.clock.speed = 1; app.selection = null;
+      // resident model: the active deck + every preload-linked target is "loaded";
+      // stream targets load on first visit (see doTransition).
+      app.resident = new Set([app.activeLevelId]);
+      for (const k of app.save.links) {
+        if (k.mode === 'preload') { app.resident.add(k.from.levelId); app.resident.add(k.to.levelId); }
+      }
+    } else { engine.stop(activeLevel()); app.pendingLink = null; }
     app.mode = mode;
     document.getElementById('buildBtn').classList.toggle('active', mode === 'build');
     document.getElementById('playBtn').classList.toggle('active', mode === 'play');
@@ -141,10 +163,12 @@
     [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
   }
   function setTool(tool) {
+    if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
     canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
-    setStatus(tool[0].toUpperCase() + tool.slice(1) + ' tool.');
+    if (tool === 'link') linkStartTool();
+    else setStatus(tool[0].toUpperCase() + tool.slice(1) + ' tool.');
   }
 
   // ---- tool mutations (each returns whether it changed anything) ----------
@@ -194,6 +218,94 @@
     pushHistory();
     activeLevel().entry = { roomId: room.id, x: hit.lx, y: hit.ly };
     setStatus(`Entry set to ${hit.lx},${hit.ly}.`);
+  }
+
+  // ---- levels (decks) -----------------------------------------------------
+  function levelName(id) { const l = app.save.levels.find(x => x.id === id); return l ? l.name : '?'; }
+  function addLevel() {
+    pushHistory();
+    const lvl = D.createLevel('Deck ' + (app.save.levels.length + 1));
+    app.save.levels.push(lvl);
+    switchLevel(lvl.id); refreshLevelSelect();
+    setStatus(`Added ${lvl.name}.`);
+  }
+  function deleteLevel() {
+    if (app.save.levels.length <= 1) return setStatus('Cannot delete the last deck.');
+    pushHistory();
+    const id = app.activeLevelId;
+    app.save.levels = app.save.levels.filter(l => l.id !== id);
+    app.save.links = app.save.links.filter(k => k.from.levelId !== id && k.to.levelId !== id);
+    if (app.save.startLevelId === id) app.save.startLevelId = app.save.levels[0].id;
+    switchLevel(app.save.levels[0].id); refreshLevelSelect();
+    setStatus('Deck deleted.');
+  }
+  function renameLevel(name) {
+    const lvl = activeLevel(); if (!lvl) return;
+    pushHistory(); lvl.name = String(name).trim() || lvl.name; refreshLevelSelect();
+  }
+  function switchLevel(id) {
+    if (app.mode === 'play') engine.stop(activeLevel());
+    app.activeLevelId = id; app.selection = null;
+    if (app.mode === 'play') engine.start(activeLevel());
+    R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
+    updateInspector();
+  }
+
+  // ---- links (level graph) ------------------------------------------------
+  // A link matches a tile if its `from` endpoint sits there, or (bidirectional)
+  // its `to` endpoint does. Returns { link, target, spawn } for a transition.
+  function linkAt(levelId, roomId, lx, ly) {
+    for (const k of app.save.links) {
+      if (k.from.levelId === levelId && (k.from.roomId == null || k.from.roomId === roomId) && k.from.x === lx && k.from.y === ly)
+        return { link: k, target: k.to.levelId, spawn: k.to };
+      if (k.bidirectional && k.to.levelId === levelId && (k.to.roomId == null || k.to.roomId === roomId) && k.to.x === lx && k.to.y === ly)
+        return { link: k, target: k.from.levelId, spawn: k.from };
+    }
+    return null;
+  }
+  function linkStartTool() { app.pendingLink = null; setStatus('Link: click a source tile (e.g. an elevator). Then switch deck and click the spawn.'); }
+  function handleLinkClick(hit) {
+    if (!app.pendingLink) {
+      app.pendingLink = { levelId: app.activeLevelId, roomId: hit.roomId, lx: hit.lx, ly: hit.ly };
+      setStatus(`Source set on ${levelName(app.activeLevelId)} @${hit.lx},${hit.ly}. Switch to the target deck and click the spawn.`);
+      return;
+    }
+    if (app.pendingLink.levelId === app.activeLevelId && app.pendingLink.roomId === hit.roomId && app.pendingLink.lx === hit.lx && app.pendingLink.ly === hit.ly) {
+      return setStatus('Pick a spawn on a different deck (or another tile).');
+    }
+    pushHistory();
+    const link = D.createLink(app.pendingLink.levelId, app.activeLevelId);
+    link.from = { levelId: app.pendingLink.levelId, roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly };
+    link.to = { levelId: app.activeLevelId, roomId: hit.roomId, x: hit.lx, y: hit.ly };
+    app.save.links.push(link);
+    const msg = `Linked ${levelName(link.from.levelId)} → ${levelName(link.to.levelId)} (${link.mode}).`;
+    app.pendingLink = null;
+    setStatus(msg);
+  }
+  // marker list for the active level (both endpoints that live here + pending)
+  function linkMarkers() {
+    const id = app.activeLevelId, out = [];
+    for (const k of app.save.links) {
+      if (k.from.levelId === id) out.push({ roomId: k.from.roomId, x: k.from.x, y: k.from.y, kind: 'source', label: '↑ ' + levelName(k.to.levelId) });
+      if (k.to.levelId === id) out.push({ roomId: k.to.roomId, x: k.to.x, y: k.to.y, kind: 'spawn', label: levelName(k.from.levelId) });
+    }
+    if (app.pendingLink && app.pendingLink.levelId === id) out.push({ roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly, kind: 'pending', label: 'source' });
+    return out;
+  }
+  // Play-mode transition when a link tile is used.
+  function doTransition(match) {
+    const mode = match.link.mode;
+    const already = app.resident.has(match.target);
+    engine.stop(activeLevel());
+    app.activeLevelId = match.target; app.selection = null;
+    app.resident.add(match.target);
+    const spawnRoom = activeLevel().rooms.find(r => r.id === match.spawn.roomId) || activeLevel().rooms[0];
+    const c = R.tileCenterWorld(spawnRoom, match.spawn.x, match.spawn.y);
+    const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom }, c.x, c.y);
+    app.camera.x = canvas.clientWidth / 2 - s.x; app.camera.y = canvas.clientHeight / 2 - s.y;
+    engine.start(activeLevel());
+    refreshLevelSelect();
+    setStatus(`${match.link.kind} → ${levelName(match.target)} · ${mode === 'stream' ? (already ? 'stream (resident)' : 'streaming…') : 'preload'}`);
   }
 
   function deleteSelectedObject() {
@@ -369,7 +481,10 @@
       // Play mode: click an openable door/airlock to toggle it; otherwise click
       // a movable room to fire its manual events.
       const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
-      if (hit && hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
+      const match = hit ? linkAt(app.activeLevelId, hit.roomId, hit.lx, hit.ly) : null;
+      if (match) {
+        doTransition(match);
+      } else if (hit && hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
         hit.object.open = !hit.object.open;
         setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`);
       } else if (hit) {
@@ -397,6 +512,7 @@
         if (app.tool === 'object') { if (hit) placeObject(hit); }
         else if (app.tool === 'entry') { if (hit) setEntry(hit); }
         else if (app.tool === 'fill') { if (hit) floodFill(hit); }
+        else if (app.tool === 'link') { if (hit) handleLinkClick(hit); }
         else { // select (default)
           app.selection = hit ? { roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: hit.object ? hit.object.id : null } : null;
           updateInspector();
@@ -506,6 +622,8 @@
       const o = document.createElement('option'); o.value = lvl.id; o.textContent = lvl.name;
       if (lvl.id === app.activeLevelId) o.selected = true; levelSelect.appendChild(o);
     }
+    const nameInput = document.getElementById('levelName');
+    if (nameInput) nameInput.value = (activeLevel() || {}).name || '';
   }
 
   // ---- render loop --------------------------------------------------------
@@ -522,6 +640,7 @@
       hoverStroke: app.tool === 'erase' ? '#e06a6a' : undefined,
       selection: app.selection,
       entry: lvl.entry,
+      linkMarkers: linkMarkers(),
       hiddenLayers: app.hiddenLayers,
       activeRoomId: app.selection ? app.selection.roomId : null,
       previewRoom: (app.mode === 'build' && app.selection) ? roomById(app.selection.roomId) : null,
@@ -601,7 +720,7 @@
         if (k === ' ') { e.preventDefault(); app.clock.paused = !app.clock.paused; updatePlayBar(); return; }
         if (k === '1' || k === '2' || k === '3') { app.clock.speed = +k; app.clock.paused = false; updatePlayBar(); return; }
       }
-      const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill' };
+      const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill', l: 'link' };
       if (toolKeys[k] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[k]); return; }
       keys.add(k);
     });
@@ -630,12 +749,7 @@
       try { const { save, warnings } = await S.importFromFile(file); loadSave(save, `Imported "${save.name}"` + (warnings.length ? ` (${warnings.length} warnings)` : '')); if (warnings.length) console.warn(warnings); }
       catch (err) { setStatus('Import failed: ' + err.message); } finally { fileInput.value = ''; }
     });
-    levelSelect.addEventListener('change', e => {
-      if (app.mode === 'play') engine.stop(activeLevel());
-      app.activeLevelId = e.target.value; app.selection = null;
-      if (app.mode === 'play') engine.start(activeLevel());
-      R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight); updateInspector();
-    });
+    levelSelect.addEventListener('change', e => { switchLevel(e.target.value); refreshLevelSelect(); });
 
     // Play-bar controls
     document.getElementById('pauseBtn').addEventListener('click', () => { app.clock.paused = !app.clock.paused; updatePlayBar(); });
@@ -660,6 +774,9 @@
     });
 
     document.getElementById('dupRoomBtn').addEventListener('click', duplicateActiveRoom);
+    document.getElementById('addLevelBtn').addEventListener('click', addLevel);
+    document.getElementById('delLevelBtn').addEventListener('click', deleteLevel);
+    document.getElementById('levelName').addEventListener('change', e => renameLevel(e.target.value));
     const filterSel = document.getElementById('selectFilter');
     filterSel.addEventListener('change', e => { app.selectFilter = e.target.value; setStatus(`Select filter: ${e.target.value}.`); });
 

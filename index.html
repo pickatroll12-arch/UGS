@@ -73,7 +73,7 @@
 
 <aside class="panel">
   <h1>UGS · STATION BUILDER</h1>
-  <p class="sub">Stage 1 · M4 — movable rooms</p>
+  <p class="sub">Stage 1 · M5 — links & multi-map</p>
 
   <div class="grid2">
     <button id="buildBtn" class="active">Build</button>
@@ -99,6 +99,7 @@
         <button class="tool" data-tool="entry">Entry</button>
         <button class="tool" data-tool="erase">Erase</button>
         <button class="tool" data-tool="fill">Fill</button>
+        <button class="tool" data-tool="link">Link</button>
       </div>
       <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)">Select filter
         <select id="selectFilter" style="margin-top:4px;">
@@ -126,6 +127,16 @@
   </div>
 
   <div class="tabpanel" data-tabpanel="rooms" hidden>
+    <div class="sect">
+      <p class="lbl">Decks (levels)</p>
+      <input id="levelName" type="text" style="width:100%;margin-bottom:6px;" placeholder="Deck name">
+      <div class="grid2">
+        <button id="addLevelBtn">+ Add deck</button>
+        <button id="delLevelBtn" class="danger">Delete deck</button>
+      </div>
+      <p class="hint">Use the <b>Link</b> tool to connect decks: click a source tile
+        (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
+    </div>
     <div class="sect">
       <p class="lbl">Layers</p>
       <div id="layerToggles" class="chips"></div>
