@@ -45,6 +45,7 @@
   let painting = false, panning = false, dragged = false;
   let movingObj = null;            // { roomId, objectId }
   let dragHandle = null;           // { roomId, eventId, kind, poseIndex }
+  let agents = null;               // pawn manager (Play mode)
   let strokeChanged = false;       // did the current gesture actually mutate?
   let lastPaintKey = '';           // dedupe repeated paints on the same tile
 
@@ -148,7 +149,8 @@
       for (const k of app.save.links) {
         if (k.mode === 'preload') { app.resident.add(k.from.levelId); app.resident.add(k.to.levelId); }
       }
-    } else { engine.stop(activeLevel()); app.pendingLink = null; }
+      spawnPawnAtEntry();
+    } else { engine.stop(activeLevel()); app.pendingLink = null; if (agents) agents.clear(); }
     app.mode = mode;
     document.getElementById('buildBtn').classList.toggle('active', mode === 'build');
     document.getElementById('playBtn').classList.toggle('active', mode === 'play');
@@ -296,20 +298,46 @@
     if (app.pendingLink && app.pendingLink.levelId === id) out.push({ roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly, kind: 'pending', label: 'source' });
     return out;
   }
-  // Play-mode transition when a link tile is used.
-  function doTransition(match) {
-    const mode = match.link.mode;
-    const already = app.resident.has(match.target);
-    engine.stop(activeLevel());
-    app.activeLevelId = match.target; app.selection = null;
-    app.resident.add(match.target);
-    const spawnRoom = activeLevel().rooms.find(r => r.id === match.spawn.roomId) || activeLevel().rooms[0];
+
+  // ---- pawn / play (Milestone 6) -----------------------------------------
+  function spawnPawnAtEntry() {
+    if (!agents) return;
+    agents.clear();
+    const lvl = activeLevel();
+    const e = lvl.entry || { roomId: lvl.rooms[0].id, x: 1, y: 1 };
+    const room = lvl.rooms.find(r => r.id === e.roomId) || lvl.rooms[0];
+    agents.spawn(lvl.id, room.id, e.x, e.y);
+  }
+  // Fired by the engine bus when a pawn finishes its path. If it landed on a
+  // link tile, travel to the target deck (moving the pawn + following the view).
+  function onPawnArrived(ev) {
+    const pawn = ev.pawn;
+    const match = linkAt(pawn.levelId, pawn.roomId, ev.x, ev.y);
+    if (!match) return;
+    const target = app.save.levels.find(l => l.id === match.target); if (!target) return;
+    const spawnRoom = target.rooms.find(r => r.id === match.spawn.roomId) || target.rooms[0];
+    if (app.mode === 'play') engine.stop(activeLevel());
+    agents.place(pawn, target.id, spawnRoom.id, match.spawn.x, match.spawn.y);
+    app.activeLevelId = target.id; app.selection = null; app.resident.add(target.id);
+    if (app.mode === 'play') engine.start(activeLevel());
     const c = R.tileCenterWorld(spawnRoom, match.spawn.x, match.spawn.y);
     const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom }, c.x, c.y);
     app.camera.x = canvas.clientWidth / 2 - s.x; app.camera.y = canvas.clientHeight / 2 - s.y;
-    engine.start(activeLevel());
-    refreshLevelSelect();
-    setStatus(`${match.link.kind} → ${levelName(match.target)} · ${mode === 'stream' ? (already ? 'stream (resident)' : 'streaming…') : 'preload'}`);
+    refreshLevelSelect(); invalidate();
+    setStatus(`${match.link.kind} → ${levelName(target.id)} · ${match.link.mode === 'stream' ? 'streamed' : 'preloaded'}`);
+  }
+  // Play-mode click: toggle a door, else order the pawn to walk there.
+  function playClick(hit) {
+    if (!hit) return;
+    if (hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
+      hit.object.open = !hit.object.open;
+      setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`); return;
+    }
+    const pawn = agents && agents.selected; if (!pawn) return;
+    if (hit.roomId !== pawn.roomId) { setStatus('The pawn can\'t path to another room yet — use a link.'); return; }
+    const room = roomById(pawn.roomId);
+    if (agents.order(pawn, room, hit.lx, hit.ly)) setStatus(`Moving to ${hit.lx},${hit.ly}.`);
+    else setStatus('No path there.');
   }
 
   function deleteSelectedObject() {
@@ -485,16 +513,7 @@
       // Play mode: click an openable door/airlock to toggle it; otherwise click
       // a movable room to fire its manual events.
       const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
-      const match = hit ? linkAt(app.activeLevelId, hit.roomId, hit.lx, hit.ly) : null;
-      if (match) {
-        doTransition(match);
-      } else if (hit && hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
-        hit.object.open = !hit.object.open;
-        setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`);
-      } else if (hit) {
-        const room = roomById(hit.roomId);
-        if (room && room.movable) { const n = engine.trigger(room); if (n) setStatus(`Fired ${n} event(s) on ${room.name}.`); }
-      }
+      playClick(hit);
     } else if (mouse.down && app.mode === 'build') {
       if (dragHandle) {
         if (!strokeChanged) discardHistory();
@@ -643,7 +662,7 @@
     if (app.mode === 'play' && !app.clock.paused) {
       const lvl0 = activeLevel();
       simClock.advance(dt, (fdt) => { for (let i = 0; i < app.clock.speed; i++) engine.update(lvl0, fdt); });
-      if (engine.activeCount() > 0) invalidate();     // something is moving → redraw
+      if (engine.activeCount() > 0 || (agents && agents.pawns.some(p => p.moving))) invalidate();
     }
 
     // render on demand: an idle editor (no input, nothing animating) skips the
@@ -667,6 +686,7 @@
       previewRoom: (app.mode === 'build' && app.selection) ? roomById(app.selection.roomId) : null,
       showRoomOutlines: app.mode === 'build'
     });
+    if (agents && agents.pawns.length) R.drawAgents(ctx, app.camera, lvl, agents.pawns, { selectedId: agents.selected && agents.selected.id, time: engine.time });
     hud.textContent = `${app.save.name} · ${lvl.name}  [${app.mode}·${app.tool}]\n` +
       `rooms:${lvl.rooms.length}  zoom:${app.camera.zoom.toFixed(2)}` +
       (app.hover ? `  tile:${app.hover.lx},${app.hover.ly}` : '');
@@ -806,13 +826,19 @@
     const filterSel = document.getElementById('selectFilter');
     filterSel.addEventListener('change', e => { app.selectFilter = e.target.value; setStatus(`Select filter: ${e.target.value}.`); });
 
+    // agent manager + deterministic movement system (Play mode)
+    agents = window.UGS.agents.create(engine);
+    agents.install();
+    if (engine.bus) engine.bus.on('pawn:arrived', onPawnArrived);
+
     buildPalettes();
-    loadSave(seedDemo(), 'Milestone 3 — build tools ready.');
+    loadSave(seedDemo(), 'Milestone 6 — playable slice: Build a deck, then Play and click to walk.');
     setMode('build'); setTool('select');
     requestAnimationFrame(frame);
 
     // debug/test hook (harmless): lets headless tests inspect live state
     window.UGS.editorApp = app;
+    window.UGS._agents = agents;
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
