@@ -15,6 +15,7 @@
   const D = window.UGS.data;
   const R = window.UGS.render;
   const S = window.UGS.save;
+  const engine = window.UGS.engine.create();
 
   // ---- state --------------------------------------------------------------
   const app = {
@@ -28,6 +29,7 @@
     selection: null,               // { roomId, lx, ly, objectId }
     selectFilter: 'all',           // all | floor | object | wall
     hiddenLayers: new Set(),       // layer names toggled off
+    clock: { paused: false, speed: 1 },   // Play-mode simulation clock
   };
   const undoStack = [];
   const redoStack = [];
@@ -88,8 +90,14 @@
     const b = D.createRoom('Annex', 6, 6);
     b.tiles = grid(6, 6, 'service'); ringWalls(b); b.movable = true;
     b.transform = D.createTransform(6, 11, 90);   // below the hall, no overlap
+    b.transform.pivot = { x: 3, y: 3 };           // rotate in place if rotated
     b.objects.push(D.createObjectInstance('miner', 2, 2));
     b.objects.push(D.createObjectInstance('light', 4, 1));
+    // authored motion: slides sideways and back forever (visible on Play)
+    const slide = D.createRoomEvent('slide');
+    slide.trigger = { type: 'time' }; slide.loop = true;
+    slide.action = { kind: 'shift', to: { x: 12, y: 11 }, duration: 2.2 };
+    b.events.push(slide);
     level.rooms.push(b);
     return save;
   }
@@ -109,12 +117,25 @@
     refreshLevelSelect(); updateInspector(); setStatus(msg || 'Loaded.');
   }
   function setMode(mode) {
+    if (mode === app.mode) return;
+    if (mode === 'play') { engine.start(activeLevel()); app.clock.paused = false; app.clock.speed = 1; app.selection = null; }
+    else { engine.stop(activeLevel()); }
     app.mode = mode;
     document.getElementById('buildBtn').classList.toggle('active', mode === 'build');
     document.getElementById('playBtn').classList.toggle('active', mode === 'play');
-    if (mode === 'play') app.selection = null;
+    document.body.classList.toggle('playing', mode === 'play');
+    updatePlayBar();
     updateInspector();
-    setStatus(mode === 'play' ? 'Play mode (runtime preview).' : 'Build mode.');
+    setStatus(mode === 'play' ? 'Play mode — sim running. Space to pause, 1/2/3 speed.' : 'Build mode.');
+  }
+
+  function updatePlayBar() {
+    const bar = document.getElementById('playBar');
+    if (!bar) return;
+    bar.style.display = app.mode === 'play' ? 'flex' : 'none';
+    const pb = document.getElementById('pauseBtn');
+    if (pb) pb.textContent = app.clock.paused ? '▶ Resume' : '❚❚ Pause';
+    [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
   }
   function setTool(tool) {
     app.tool = tool;
@@ -303,11 +324,15 @@
 
   function onPointerUp() {
     if (mouse.down && app.mode === 'play' && !dragged) {
-      // Play mode: click an openable door/airlock to toggle it
+      // Play mode: click an openable door/airlock to toggle it; otherwise click
+      // a movable room to fire its manual events.
       const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
       if (hit && hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
         hit.object.open = !hit.object.open;
         setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`);
+      } else if (hit) {
+        const room = roomById(hit.roomId);
+        if (room && room.movable) { const n = engine.trigger(room); if (n) setStatus(`Fired ${n} event(s) on ${room.name}.`); }
       }
     } else if (mouse.down && app.mode === 'build') {
       if (painting || movingObj) {
@@ -357,7 +382,7 @@
     const tile = room.tiles[app.selection.ly] && room.tiles[app.selection.ly][app.selection.lx];
 
     let h = `<div class="row"><b>Room</b><span>${esc(room.name)}</span></div>`;
-    h += `<div class="row"><b>Transform</b><span>@${room.transform.x},${room.transform.y} · ${room.transform.rotation}°${room.movable ? ' · movable' : ''}</span></div>`;
+    h += `<div class="row"><b>Transform</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
     h += `<div class="row"><b>Local tile</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
     if (tile) {
       h += `<div class="row"><b>Floor</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
@@ -375,10 +400,46 @@
       if (def.openable) h += `<button data-act="toggle">${obj.open ? 'Close' : 'Open'}</button>`;
       h += `<button class="danger" data-act="delete">Delete</button></div>`;
     }
+
+    // --- Room motion (Milestone 4) ---
+    h += `<hr><div class="row"><b>Movable</b><span><input type="checkbox" data-act="movable" ${room.movable ? 'checked' : ''}></span></div>`;
+    if (room.events && room.events.length) {
+      for (const ev of room.events) {
+        const kind = ev.action ? ev.action.kind : '?';
+        h += `<div class="row" style="margin-top:4px"><b>${esc(ev.name)}</b><span>${kind}${ev.loop ? ' ⟳' : ''} · ${ev.trigger ? ev.trigger.type : 'manual'}</span></div>`;
+        h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">Test ▶</button><button class="danger" data-act="evt-del" data-id="${ev.id}">✕</button></div>`;
+      }
+    } else {
+      h += `<div class="row"><span class="muted">No motion events.</span></div>`;
+    }
+    h += `<div class="mini"><button data-act="evt-shift">+ Shift</button><button data-act="evt-rotate">+ Rotate</button><button data-act="evt-carousel">+ Carousel</button></div>`;
     inspector.innerHTML = h;
   }
   function floorLabel(id) { return id === 'void' ? 'void (empty)' : ((D.MATERIALS[id] || {}).label || id); }
+  function fmt(n) { return Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(1); }
   function esc(v) { return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // ---- room motion authoring ---------------------------------------------
+  function selectedRoom() { return app.selection ? roomById(app.selection.roomId) : null; }
+  function addRoomEvent(room, kind) {
+    pushHistory();
+    room.movable = true;
+    const t = room.transform, ev = D.createRoomEvent(kind[0].toUpperCase() + kind.slice(1));
+    ev.trigger = { type: 'time' }; ev.loop = true;
+    if (kind === 'shift') ev.action = { kind: 'shift', to: { x: t.x + 4, y: t.y }, duration: 2 };
+    else if (kind === 'rotate') ev.action = { kind: 'rotate', by: 90, duration: 2 };
+    else if (kind === 'carousel') ev.action = { kind: 'carousel', interval: 1.8, loop: true, poses: [
+      { x: t.x + 4, y: t.y, rotation: t.rotation }, { x: t.x + 4, y: t.y + 4, rotation: t.rotation + 90 }, { x: t.x, y: t.y + 4, rotation: t.rotation + 180 }
+    ] };
+    room.events.push(ev);
+    updateInspector(); setStatus(`Added ${kind} event to ${room.name}. Hit Play to see it.`);
+  }
+  function deleteRoomEvent(room, id) { pushHistory(); room.events = room.events.filter(e => e.id !== id); updateInspector(); }
+  function testRoomEvent(room, id) {
+    const ev = room.events.find(e => e.id === id); if (!ev) return;
+    if (app.mode !== 'play') { setMode('play'); }
+    engine.fire(room, ev); setStatus(`Testing "${ev.name}".`);
+  }
 
   function refreshLevelSelect() {
     levelSelect.innerHTML = '';
@@ -393,6 +454,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     updateCamera(dt);
+    if (app.mode === 'play' && !app.clock.paused) engine.update(activeLevel(), dt * app.clock.speed);
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     const lvl = activeLevel();
     R.drawLevel(ctx, app.camera, lvl, {
@@ -475,6 +537,10 @@
       if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }
       if (k === 'delete' || k === 'backspace') { if (app.mode === 'build') deleteSelectedObject(); return; }
       if (k === 'escape') { app.selection = null; updateInspector(); return; }
+      if (app.mode === 'play') {
+        if (k === ' ') { e.preventDefault(); app.clock.paused = !app.clock.paused; updatePlayBar(); return; }
+        if (k === '1' || k === '2' || k === '3') { app.clock.speed = +k; app.clock.paused = false; updatePlayBar(); return; }
+      }
       const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill' };
       if (toolKeys[k] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[k]); return; }
       keys.add(k);
@@ -498,15 +564,30 @@
       catch (err) { setStatus('Import failed: ' + err.message); } finally { fileInput.value = ''; }
     });
     levelSelect.addEventListener('change', e => {
+      if (app.mode === 'play') engine.stop(activeLevel());
       app.activeLevelId = e.target.value; app.selection = null;
+      if (app.mode === 'play') engine.start(activeLevel());
       R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight); updateInspector();
     });
+
+    // Play-bar controls
+    document.getElementById('pauseBtn').addEventListener('click', () => { app.clock.paused = !app.clock.paused; updatePlayBar(); });
+    [1, 2, 3].forEach(sp => document.getElementById('speed' + sp).addEventListener('click', () => { app.clock.speed = sp; app.clock.paused = false; updatePlayBar(); }));
     inspector.addEventListener('click', e => {
       const act = e.target.dataset.act; if (!act) return;
+      const room = selectedRoom();
       if (act === 'rotate') rotateSelectedObject();
-      if (act === 'dup') duplicateSelectedObject();
-      if (act === 'toggle') { pushHistory(); if (!toggleSelectedDoor()) discardHistory(); }
-      if (act === 'delete') deleteSelectedObject();
+      else if (act === 'dup') duplicateSelectedObject();
+      else if (act === 'toggle') { pushHistory(); if (!toggleSelectedDoor()) discardHistory(); }
+      else if (act === 'delete') deleteSelectedObject();
+      else if (act === 'evt-shift' && room) addRoomEvent(room, 'shift');
+      else if (act === 'evt-rotate' && room) addRoomEvent(room, 'rotate');
+      else if (act === 'evt-carousel' && room) addRoomEvent(room, 'carousel');
+      else if (act === 'evt-del' && room) deleteRoomEvent(room, e.target.dataset.id);
+      else if (act === 'evt-fire' && room) testRoomEvent(room, e.target.dataset.id);
+    });
+    inspector.addEventListener('change', e => {
+      if (e.target.dataset.act === 'movable') { const room = selectedRoom(); if (room) { pushHistory(); room.movable = e.target.checked; } }
     });
 
     document.getElementById('dupRoomBtn').addEventListener('click', duplicateActiveRoom);

@@ -81,10 +81,17 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   Verificado headless: fill, door toggle (collision on/off), duplicate obj+room,
   glass, layer-hide bloquea el pick, filtro de selección, round-trip de campos
   nuevos. Todo verde.
-- [ ] **M4 · Salas como unidades móviles**
-  Agrupar tiles en salas con nombre; transform (posición + rotación + pivote);
-  presets de evento (**shift / rotación / carrusel**) + mini-DSL de script;
-  timeline con **tiempo real + pausa/velocidad**.
+- [x] **M4 · Salas como unidades móviles** ✅
+  Motor de movimiento (`src/engine.js`) que anima el `transform` de las salas:
+  presets **shift / rotación / carrusel** + runner de **script** (move/rotate/
+  wait), con loop (ping-pong / ciclo). Timeline con **tiempo real + pausa +
+  velocidad** (Space pausa, 1/2/3 velocidad). No destructivo: snapshot del
+  transform autoral al entrar a Play y restaurado al salir. Autoría en el
+  inspector (Movable + añadir/Test/borrar eventos); en Play, clic en sala
+  movible dispara sus eventos manuales, clic en puerta la abre/cierra.
+  `rotatePoint` generalizado a ángulo arbitrario (animación suave; exacto en
+  0/90/180/270). Verificado headless: engine (11 tests) + integración (slide,
+  pausa congela, 3× escala, Build restaura la pose base, autoría de evento).
 - [ ] **M5 · Links & multi-mapa**
   Enlazar tile/objeto (ascensor) → nivel destino + spawn; modos de carga
   **preload** vs **stream**; transición en Play mode; el save contiene todo el

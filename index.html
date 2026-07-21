@@ -51,6 +51,13 @@
   #status { position: fixed; z-index: 3; right: 12px; bottom: 12px; max-width: 60vw;
     font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line);
     border-radius: 7px; padding: 8px 11px; pointer-events: none; }
+  #playBar { position: fixed; z-index: 4; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 44px rgba(0,0,0,0.4); }
+  #playBar strong { font-size: 11px; letter-spacing: .12em; color: #d8d8dd; }
+  #playBar button { padding: 6px 10px; }
+  #playBar .pb-hint { font-size: 10px; color: var(--muted); margin-left: 4px; }
+  body.playing #game { cursor: pointer; }
   .hint { margin: 8px 0 0; font-size: 10px; color: var(--muted); line-height: 1.5; }
   .kbd { padding: 1px 4px; background: #26262a; border: 1px solid #4a4a51; border-radius: 4px; font-size: 9px; }
 </style>
@@ -60,7 +67,7 @@
 
 <aside class="panel">
   <h1>UGS · STATION BUILDER</h1>
-  <p class="sub">Stage 1 · M3+ — expanded toolbox</p>
+  <p class="sub">Stage 1 · M4 — movable rooms</p>
 
   <div class="sect">
     <p class="lbl">Mode</p>
@@ -144,6 +151,15 @@
   </div>
 </aside>
 
+<div id="playBar">
+  <strong>PLAY</strong>
+  <button id="pauseBtn">❚❚ Pause</button>
+  <button id="speed1" class="active">1×</button>
+  <button id="speed2">2×</button>
+  <button id="speed3">3×</button>
+  <span class="pb-hint">Space pause · 1/2/3 speed · click a movable room / door to interact</span>
+</div>
+
 <div id="hud"></div>
 <div id="status">Loading…</div>
 
@@ -153,6 +169,7 @@
 <script src="src/data.js"></script>
 <script src="src/save.js"></script>
 <script src="src/render.js"></script>
+<script src="src/engine.js"></script>
 <script src="src/editor.js"></script>
 </body>
 </html>
