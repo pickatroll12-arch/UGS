@@ -41,6 +41,13 @@
 
   function activeLevel() { return app.save.levels.find(l => l.id === app.activeLevelId) || app.save.levels[0]; }
   function roomById(id) { return activeLevel().rooms.find(r => r.id === id) || null; }
+  // Select/Erase act on what you SEE (raised walls/objects); the painting/place
+  // tools act on the flat ground tile under the cursor.
+  function pickHit(px, py) {
+    return (app.tool === 'select' || app.tool === 'erase')
+      ? R.pickTopmost(app.camera, activeLevel(), px, py)
+      : R.pick(app.camera, activeLevel(), px, py);
+  }
   function setStatus(m) { if (statusEl) statusEl.textContent = m; }
   function clone(o) { return typeof structuredClone === 'function' ? structuredClone(o) : JSON.parse(JSON.stringify(o)); }
 
@@ -78,7 +85,7 @@
 
     const b = D.createRoom('Annex', 6, 6);
     b.tiles = grid(6, 6, 'service'); ringWalls(b); b.movable = true;
-    b.transform = D.createTransform(12, 1, 90);
+    b.transform = D.createTransform(6, 11, 90);   // below the hall, no overlap
     b.objects.push(D.createObjectInstance('miner', 2, 2));
     b.objects.push(D.createObjectInstance('light', 4, 1));
     level.rooms.push(b);
@@ -188,7 +195,7 @@
     painting = panning = false; movingObj = null;
 
     if (app.mode !== 'build') { panning = true; return; }
-    const hit = R.pick(app.camera, activeLevel(), mouse.x, mouse.y);
+    const hit = pickHit(mouse.x, mouse.y);
 
     if (app.tool === 'floor' || app.tool === 'wall' || app.tool === 'erase') {
       pushHistory(); painting = true;
@@ -207,7 +214,7 @@
     if (mouse.down && moved > 2) dragged = true;
 
     if (painting) {
-      const hit = R.pick(app.camera, activeLevel(), mouse.x, mouse.y);
+      const hit = pickHit(mouse.x, mouse.y);
       if (hit) strokeChanged = applyPaint(hit) || strokeChanged;
       return;
     }
@@ -228,7 +235,7 @@
       app.camera.x += e.clientX - mouse.lastX; app.camera.y += e.clientY - mouse.lastY;
       mouse.lastX = e.clientX; mouse.lastY = e.clientY; app.hover = null; return;
     }
-    app.hover = R.pick(app.camera, activeLevel(), mouse.x, mouse.y);
+    app.hover = pickHit(mouse.x, mouse.y);
   }
 
   function onPointerUp() {
@@ -238,7 +245,7 @@
         else updateInspector();
       } else if (!dragged) {
         // a click
-        const hit = R.pick(app.camera, activeLevel(), mouse.x, mouse.y);
+        const hit = pickHit(mouse.x, mouse.y);
         if (app.tool === 'object') { if (hit) placeObject(hit); }
         else if (app.tool === 'entry') { if (hit) setEntry(hit); }
         else { // select (default)
@@ -314,6 +321,8 @@
     const lvl = activeLevel();
     R.drawLevel(ctx, app.camera, lvl, {
       hover: app.mode === 'build' && !panning ? app.hover : null,
+      hoverFill: app.tool === 'erase' ? 'rgba(220,90,90,0.22)' : undefined,
+      hoverStroke: app.tool === 'erase' ? '#e06a6a' : undefined,
       selection: app.selection,
       entry: lvl.entry,
       activeRoomId: app.selection ? app.selection.roomId : null,

@@ -74,8 +74,10 @@
     return localToWorld(room, lx + 0.5, ly + 0.5);
   }
 
-  // ---- picking: screen → { roomId, lx, ly, object } -----------------------
-  // Topmost room wins (rooms are checked in reverse draw order).
+  // ---- picking ------------------------------------------------------------
+  // pick(): FLAT ground pick — the tile whose floor is under the cursor,
+  // ignoring raised geometry. Used by floor/wall/object/entry tools.
+  // Topmost room wins (rooms checked in reverse draw order).
   function pick(cam, level, px, py) {
     const w = screenToWorld(cam, px, py);
     for (let i = level.rooms.length - 1; i >= 0; i--) {
@@ -88,6 +90,64 @@
       }
     }
     return null;
+  }
+
+  function pointInDiamond(px, py, cx, cy, hw, hh) {
+    return Math.abs(px - cx) / hw + Math.abs(py - cy) / hh <= 1;
+  }
+  function pointInPoly(px, py, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
+  // pickTopmost(): HEIGHT-AWARE pick. Tests raised walls and objects by their
+  // drawn silhouette, front-most first, so clicking the visible body of a wall
+  // or object selects/erases IT — not the tile hiding behind it. Falls back to
+  // the flat ground pick when no raised entity is hit. Used by Select/Erase.
+  function pickTopmost(cam, level, px, py) {
+    const hw = (TILE_W / 2) * cam.zoom, hh = (TILE_H / 2) * cam.zoom;
+    const H = WALL_H * cam.zoom, z = cam.zoom;
+    const ents = [];
+    for (const room of level.rooms) {
+      for (let ly = 0; ly < room.size.h; ly++) {
+        for (let lx = 0; lx < room.size.w; lx++) {
+          const t = room.tiles[ly][lx];
+          if (t && t.wall) {
+            const c = tileCenterWorld(room, lx, ly);
+            ents.push({ kind: 'wall', room, lx, ly, s: worldToScreen(cam, c.x, c.y), depth: c.x + c.y });
+          }
+        }
+      }
+      for (const o of room.objects) {
+        const c = tileCenterWorld(room, o.x, o.y);
+        ents.push({ kind: 'obj', room, o, lx: o.x, ly: o.y, s: worldToScreen(cam, c.x, c.y), depth: c.x + c.y + 0.01 });
+      }
+    }
+    ents.sort((a, b) => b.depth - a.depth);   // front-most first
+    for (const e of ents) {
+      const s = e.s;
+      let hit = false;
+      if (e.kind === 'wall') {
+        // hexagonal silhouette of a raised diamond block
+        const poly = [
+          { x: s.x, y: s.y - hh - H }, { x: s.x + hw, y: s.y - H }, { x: s.x + hw, y: s.y },
+          { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }, { x: s.x - hw, y: s.y - H }
+        ];
+        hit = pointInPoly(px, py, poly);
+      } else {
+        // bounding box roughly matching the object art (see drawObject)
+        hit = px >= s.x - 20 * z && px <= s.x + 20 * z && py >= s.y - 34 * z && py <= s.y + 14 * z;
+      }
+      if (hit) {
+        const object = e.kind === 'obj' ? e.o : (e.room.objects.find(o => o.x === e.lx && o.y === e.ly) || null);
+        return { roomId: e.room.id, lx: e.lx, ly: e.ly, object };
+      }
+    }
+    return pick(cam, level, px, py);
   }
 
   // ---- primitives ---------------------------------------------------------
@@ -236,7 +296,7 @@
     if (opts.entry) drawEntry(ctx, cam, level, opts.entry, hw, hh);
 
     // --- hover / selection tile highlight ---
-    if (opts.hover) highlightTile(ctx, cam, level, opts.hover, 'rgba(255,255,255,0.14)', '#cfcfd6', hw, hh);
+    if (opts.hover) highlightTile(ctx, cam, level, opts.hover, opts.hoverFill || 'rgba(255,255,255,0.14)', opts.hoverStroke || '#cfcfd6', hw, hh);
     if (opts.selection) highlightTile(ctx, cam, level, opts.selection, 'rgba(255,255,255,0.05)', '#ffffff', hw, hh);
 
     // --- pass 2: walls + objects (depth-sorted across all rooms) ---
@@ -329,6 +389,6 @@
     TILE_W, TILE_H, WALL_H, OBJ_H,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld,
-    pick, drawLevel, drawObject, centerOn, shade
+    pick, pickTopmost, drawLevel, drawObject, centerOn, shade
   };
 });
