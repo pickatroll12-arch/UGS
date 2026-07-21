@@ -72,8 +72,12 @@
   function isWallShape(s) { return WALL_SHAPES.indexOf(s) !== -1; }
 
   // ---- factories ----------------------------------------------------------
+  // 'void' is a valid floor sentinel meaning "no floor" (not rendered, not
+  // walkable) — used by the erase tool. It is not a material in the registry.
+  function isFloor(id) { return id === 'void' || isMaterial(id); }
+
   function createTile(floor = 'deck') {
-    return { floor: isMaterial(floor) ? floor : 'deck', wall: null, wallMaterial: null };
+    return { floor: isFloor(floor) ? floor : 'deck', wall: null, wallMaterial: null };
   }
 
   function createTransform(x = 0, y = 0, rotation = 0) {
@@ -250,7 +254,7 @@
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const src = input.tiles && input.tiles[y] && input.tiles[y][x];
-        const floor = src && isMaterial(src.floor) ? src.floor : 'deck';
+        const floor = src && isFloor(src.floor) ? src.floor : 'deck';
         const wall = src && isWallShape(src.wall) ? src.wall : null;
         const wallMat = src && isMaterial(src.wallMaterial) ? src.wallMaterial : (wall ? 'hull' : null);
         room.tiles[y][x] = { floor, wall, wallMaterial: wallMat };

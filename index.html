@@ -27,11 +27,18 @@
   .lbl { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
     color: #ccccd2; margin: 0 0 7px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chips button { padding: 5px 8px; font-size: 11px; }
   button, select { font: inherit; color: var(--text); background: #27272c;
     border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; cursor: pointer; }
   button:hover { border-color: var(--line-bright); background: #313137; }
   button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  button.danger { color: #ffdada; border-color: #6b3c3c; }
   select { width: 100%; }
+  #inspector .mini { display: flex; gap: 6px; margin-top: 8px; }
+  #inspector .mini button { padding: 5px 8px; font-size: 11px; }
+  .panel { max-height: calc(100vh - 24px); overflow-y: auto; }
   #inspector { font-size: 12px; line-height: 1.5; color: var(--text); }
   #inspector .muted { color: var(--muted); }
   #inspector .row { display: flex; justify-content: space-between; gap: 8px; }
@@ -69,21 +76,53 @@
   </div>
 
   <div class="sect">
+    <p class="lbl">Tools</p>
+    <div class="grid3">
+      <button class="tool active" data-tool="select">Select</button>
+      <button class="tool" data-tool="floor">Floor</button>
+      <button class="tool" data-tool="wall">Wall</button>
+      <button class="tool" data-tool="object">Object</button>
+      <button class="tool" data-tool="entry">Entry</button>
+      <button class="tool" data-tool="erase">Erase</button>
+    </div>
+  </div>
+
+  <div class="sect">
+    <p class="lbl">Floor material</p>
+    <div id="floorPalette" class="chips"></div>
+  </div>
+
+  <div class="sect">
+    <p class="lbl">Wall shape</p>
+    <div id="wallPalette" class="chips"></div>
+  </div>
+
+  <div class="sect">
+    <p class="lbl">Objects</p>
+    <div id="objectPalette" class="chips"></div>
+  </div>
+
+  <div class="sect">
     <p class="lbl">Inspector</p>
     <div id="inspector"><span class="muted">Nothing selected.</span></div>
   </div>
 
   <div class="sect">
-    <p class="lbl">Save package</p>
-    <div class="grid2">
+    <p class="lbl">History &amp; package</p>
+    <div class="grid2" style="margin-bottom:6px;">
+      <button id="undoBtn">Undo</button>
+      <button id="redoBtn">Redo</button>
+    </div>
+    <div class="grid3">
       <button id="exportBtn">Export</button>
       <button id="importBtn">Import</button>
-      <button id="newBtn">New demo</button>
+      <button id="newBtn">New</button>
     </div>
     <p class="hint">
-      <span class="kbd">drag</span> pan · <span class="kbd">wheel</span> zoom ·
-      <span class="kbd">WASD</span> pan · <span class="kbd">click</span> select ·
-      <span class="kbd">Esc</span> deselect
+      <span class="kbd">V</span>select <span class="kbd">F</span>floor <span class="kbd">G</span>wall
+      <span class="kbd">B</span>object <span class="kbd">N</span>entry <span class="kbd">X</span>erase ·
+      <span class="kbd">Ctrl+Z</span>/<span class="kbd">Y</span> undo/redo ·
+      <span class="kbd">Del</span> delete · drag-paint · wheel zoom
     </p>
   </div>
 </aside>

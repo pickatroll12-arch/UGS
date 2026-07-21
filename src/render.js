@@ -232,6 +232,9 @@
       }
     }
 
+    // --- entry marker ---
+    if (opts.entry) drawEntry(ctx, cam, level, opts.entry, hw, hh);
+
     // --- hover / selection tile highlight ---
     if (opts.hover) highlightTile(ctx, cam, level, opts.hover, 'rgba(255,255,255,0.14)', '#cfcfd6', hw, hh);
     if (opts.selection) highlightTile(ctx, cam, level, opts.selection, 'rgba(255,255,255,0.05)', '#ffffff', hw, hh);
@@ -274,6 +277,21 @@
     diamondAt(ctx, worldToScreen(cam, c.x, c.y), hw, hh, fill, stroke);
   }
 
+  function drawEntry(ctx, cam, level, entry, hw, hh) {
+    const room = level.rooms.find(r => r.id === entry.roomId);
+    if (!room) return;
+    const c = tileCenterWorld(room, entry.x, entry.y);
+    const s = worldToScreen(cam, c.x, c.y);
+    ctx.save();
+    ctx.strokeStyle = '#f0f0f2'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, hw * 0.5, hh * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f0f0f2'; ctx.font = `${10 * cam.zoom}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('ENTRY', s.x, s.y - hh * 0.7);
+    ctx.restore();
+  }
+
   function outlineRoom(ctx, cam, room, stroke, width) {
     // trace the 4 transformed corners of the room footprint
     const corners = [
@@ -311,6 +329,6 @@
     TILE_W, TILE_H, WALL_H, OBJ_H,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld,
-    pick, drawLevel, centerOn, shade
+    pick, drawLevel, drawObject, centerOn, shade
   };
 });

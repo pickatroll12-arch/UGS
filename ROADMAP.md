@@ -64,10 +64,14 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   transform (world→room-local). → `src/render.js`, `src/editor.js`, `index.html`
   (app builder). Demo con 2 salas (una desplazada + rotada 90°) que prueba el
   pipeline. Verificado en Chromium headless: render OK, picking OK, sin errores.
-- [ ] **M3 · Herramientas de construcción**
-  Materiales de suelo, muros, objetos (interactivos / decorativos + colisión +
-  propiedades), puntos de entrada/salida, borrar / seleccionar / inspeccionar,
-  undo-redo.
+- [x] **M3 · Herramientas de construcción** ✅
+  Pincel de suelo (materiales + void), muros, colocar objetos, borrar, punto de
+  entrada, seleccionar/mover/rotar/borrar objeto, **undo/redo** (Ctrl+Z/Y),
+  atajos de teclado y paletas. Pintar opera en coords room-local (funciona en
+  salas rotadas). → `src/editor.js` (reescrito), paletas en `index.html`,
+  marcador de entrada en `src/render.js`, `void` como suelo válido en `data.js`.
+  Verificado headless: paint, place, undo/redo (5→6→5→6), round-trip export/
+  import, void persiste, picking en sala rotada. Sin errores.
 - [ ] **M4 · Salas como unidades móviles**
   Agrupar tiles en salas con nombre; transform (posición + rotación + pivote);
   presets de evento (**shift / rotación / carrusel**) + mini-DSL de script;
