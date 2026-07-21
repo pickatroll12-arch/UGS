@@ -78,14 +78,15 @@
   // pick(): FLAT ground pick — the tile whose floor is under the cursor,
   // ignoring raised geometry. Used by floor/wall/object/entry tools.
   // Topmost room wins (rooms checked in reverse draw order).
-  function pick(cam, level, px, py) {
+  function pick(cam, level, px, py, opts) {
+    const hidden = opts && opts.hiddenLayers;
     const w = screenToWorld(cam, px, py);
     for (let i = level.rooms.length - 1; i >= 0; i--) {
       const room = level.rooms[i];
       const loc = worldToLocal(room, w.x, w.y);
       const lx = Math.floor(loc.x), ly = Math.floor(loc.y);
       if (lx >= 0 && ly >= 0 && lx < room.size.w && ly < room.size.h) {
-        const object = room.objects.find(o => o.x === lx && o.y === ly) || null;
+        const object = room.objects.find(o => o.x === lx && o.y === ly && !(hidden && hidden.has(o.layer))) || null;
         return { roomId: room.id, lx, ly, object };
       }
     }
@@ -108,23 +109,33 @@
   // drawn silhouette, front-most first, so clicking the visible body of a wall
   // or object selects/erases IT — not the tile hiding behind it. Falls back to
   // the flat ground pick when no raised entity is hit. Used by Select/Erase.
-  function pickTopmost(cam, level, px, py) {
+  // opts: { hiddenLayers:Set, filter:'all'|'floor'|'object'|'wall' }
+  function pickTopmost(cam, level, px, py, opts) {
+    opts = opts || {};
+    const hidden = opts.hiddenLayers, filter = opts.filter || 'all';
     const hw = (TILE_W / 2) * cam.zoom, hh = (TILE_H / 2) * cam.zoom;
     const H = WALL_H * cam.zoom, z = cam.zoom;
     const ents = [];
-    for (const room of level.rooms) {
-      for (let ly = 0; ly < room.size.h; ly++) {
-        for (let lx = 0; lx < room.size.w; lx++) {
-          const t = room.tiles[ly][lx];
-          if (t && t.wall) {
-            const c = tileCenterWorld(room, lx, ly);
-            ents.push({ kind: 'wall', room, lx, ly, s: worldToScreen(cam, c.x, c.y), depth: c.x + c.y });
+    if (filter !== 'floor' && filter !== 'object') {
+      for (const room of level.rooms) {
+        for (let ly = 0; ly < room.size.h; ly++) {
+          for (let lx = 0; lx < room.size.w; lx++) {
+            const t = room.tiles[ly][lx];
+            if (t && t.wall) {
+              const c = tileCenterWorld(room, lx, ly);
+              ents.push({ kind: 'wall', room, lx, ly, s: worldToScreen(cam, c.x, c.y), depth: c.x + c.y });
+            }
           }
         }
       }
-      for (const o of room.objects) {
-        const c = tileCenterWorld(room, o.x, o.y);
-        ents.push({ kind: 'obj', room, o, lx: o.x, ly: o.y, s: worldToScreen(cam, c.x, c.y), depth: c.x + c.y + 0.01 });
+    }
+    if (filter !== 'floor' && filter !== 'wall') {
+      for (const room of level.rooms) {
+        for (const o of room.objects) {
+          if (hidden && hidden.has(o.layer)) continue;
+          const c = tileCenterWorld(room, o.x, o.y);
+          ents.push({ kind: 'obj', room, o, lx: o.x, ly: o.y, s: worldToScreen(cam, c.x, c.y), depth: c.x + c.y + 0.01 });
+        }
       }
     }
     ents.sort((a, b) => b.depth - a.depth);   // front-most first
@@ -147,7 +158,8 @@
         return { roomId: e.room.id, lx: e.lx, ly: e.ly, object };
       }
     }
-    return pick(cam, level, px, py);
+    if (filter === 'object' || filter === 'wall') return null;   // nothing of that kind here
+    return pick(cam, level, px, py, opts);
   }
 
   // ---- primitives ---------------------------------------------------------
@@ -247,6 +259,42 @@
         ctx.strokeStyle = '#7a7a82'; ctx.lineWidth = 2; ctx.strokeRect(-15, -14, 30, 24);
         ctx.strokeStyle = '#9a9aa2';
         ctx.beginPath(); ctx.moveTo(-8, -14); ctx.lineTo(0, -26); ctx.lineTo(8, -14); ctx.stroke(); break;
+      case 'pillar':
+        ctx.fillStyle = '#43434a'; ctx.fillRect(-9, -40, 18, 50);
+        ctx.fillStyle = '#54545c'; ctx.fillRect(-9, -40, 18, 6);
+        ctx.fillStyle = '#33333a'; ctx.fillRect(-11, 6, 22, 6);
+        ctx.strokeStyle = '#6c6c74'; ctx.strokeRect(-9, -40, 18, 50); break;
+      case 'door':
+      case 'airlock': {
+        const open = !!obj.open, wide = obj.type === 'airlock';
+        const fw = wide ? 15 : 12;
+        // frame
+        ctx.strokeStyle = wide ? '#9aa6b0' : '#84848c'; ctx.lineWidth = 3;
+        ctx.strokeRect(-fw, -34, fw * 2, 44);
+        // panels (slid apart when open)
+        ctx.fillStyle = open ? '#2c3a34' : (wide ? '#4a5560' : '#50505a');
+        const gap = open ? fw * 0.75 : 0;
+        ctx.fillRect(-fw + 2, -32, (fw - 3) - gap, 40);
+        ctx.fillRect(gap + 1, -32, (fw - 3) - gap, 40);
+        // status light
+        ctx.fillStyle = open ? '#8ee0a0' : '#e08a8a';
+        ctx.beginPath(); ctx.arc(0, -38, 3, 0, Math.PI * 2); ctx.fill(); break;
+      }
+      case 'stairs':
+        ctx.fillStyle = '#3c3c44';
+        for (let i = 0; i < 4; i++) ctx.fillRect(-14 + i * 5, 6 - i * 7, 12, 6);
+        ctx.strokeStyle = '#7a7a82'; ctx.lineWidth = 1.5;
+        for (let i = 0; i < 4; i++) ctx.strokeRect(-14 + i * 5, 6 - i * 7, 12, 6); break;
+      case 'ladder':
+        ctx.strokeStyle = '#9a9aa2'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(-5, 10); ctx.lineTo(-5, -34); ctx.moveTo(5, 10); ctx.lineTo(5, -34); ctx.stroke();
+        ctx.lineWidth = 2;
+        for (let y = 6; y >= -32; y -= 8) { ctx.beginPath(); ctx.moveTo(-5, y); ctx.lineTo(5, y); ctx.stroke(); } break;
+      case 'ramp':
+        ctx.fillStyle = '#3a3a42';
+        ctx.beginPath(); ctx.moveTo(-16, 10); ctx.lineTo(16, 10); ctx.lineTo(16, -8); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#7a7a82'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-16, 10); ctx.lineTo(16, -8); ctx.stroke(); break;
       default:
         ctx.fillStyle = '#555'; ctx.fillRect(-12, -12, 24, 22);
     }
@@ -281,7 +329,11 @@
     floors.sort((a, b) => a.depth - b.depth);
     for (const f of floors) {
       const mat = data.MATERIALS[f.tile.floor] || data.MATERIALS.deck;
-      diamondAt(ctx, worldToScreen(cam, f.wx, f.wy), hw, hh, mat.color, mat.line);
+      const s = worldToScreen(cam, f.wx, f.wy);
+      diamondAt(ctx, s, hw, hh, mat.color, mat.line);
+      if (mat.raised) {   // catwalk: inset plate to read as a raised walkway
+        diamondAt(ctx, { x: s.x, y: s.y }, hw * 0.62, hh * 0.62, null, mat.line);
+      }
     }
 
     // --- room outlines (editor aid) ---
@@ -300,6 +352,7 @@
     if (opts.selection) highlightTile(ctx, cam, level, opts.selection, 'rgba(255,255,255,0.05)', '#ffffff', hw, hh);
 
     // --- pass 2: walls + objects (depth-sorted across all rooms) ---
+    const hidden = opts.hiddenLayers;
     const ents = [];
     for (const room of level.rooms) {
       for (let ly = 0; ly < room.size.h; ly++) {
@@ -312,6 +365,7 @@
         }
       }
       for (const obj of room.objects) {
+        if (hidden && hidden.has(obj.layer)) continue;
         const c = tileCenterWorld(room, obj.x, obj.y);
         const sel = opts.selection && opts.selection.objectId === obj.id;
         ents.push({ kind: 'obj', obj, sel, wx: c.x, wy: c.y, depth: c.x + c.y + 0.01 });
@@ -322,7 +376,13 @@
       const s = worldToScreen(cam, e.wx, e.wy);
       if (e.kind === 'wall') {
         const mat = data.MATERIALS[e.tile.wallMaterial] || data.MATERIALS.hull;
-        blockAt(ctx, s, hw, hh, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
+        if (mat.glass) {
+          ctx.save(); ctx.globalAlpha = 0.5;
+          blockAt(ctx, s, hw, hh, WALL_H * 0.82 * cam.zoom, shade(mat.color, 30), mat.color);
+          ctx.restore();
+        } else {
+          blockAt(ctx, s, hw, hh, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
+        }
       } else {
         drawObject(ctx, s, cam.zoom, e.obj, e.sel);
       }
