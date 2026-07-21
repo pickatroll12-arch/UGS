@@ -45,17 +45,13 @@
     };
   }
 
-  // ---- room transform math (90° steps) ------------------------------------
+  // ---- room transform math (arbitrary angle, so animation is smooth) -------
+  // Exact for 0/90/180/270 (matches the old switch) and continuous in between.
   function rotatePoint(px, py, rotation, pivot) {
+    const rad = rotation * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
     const rx = px - pivot.x, ry = py - pivot.y;
-    let x, y;
-    switch (((rotation % 360) + 360) % 360) {
-      case 90:  x = -ry; y = rx; break;
-      case 180: x = -rx; y = -ry; break;
-      case 270: x = ry;  y = -rx; break;
-      default:  x = rx;  y = ry;  break;   // 0
-    }
-    return { x: x + pivot.x, y: y + pivot.y };
+    return { x: rx * cos - ry * sin + pivot.x, y: rx * sin + ry * cos + pivot.y };
   }
   // continuous local (u,v) → world
   function localToWorld(room, u, v) {
