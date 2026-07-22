@@ -83,6 +83,11 @@
   #inspector hr { border: 0; border-top: 1px solid var(--line); margin: 7px 0; }
   #inspector .mini { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   #inspector .mini button { padding: 5px 8px; font-size: 11px; }
+  #inspector .resize { display: flex; align-items: center; gap: 5px; margin: 6px 0 2px; }
+  #inspector .resize input[type=number] { width: 46px; padding: 4px 5px; font-size: 11px; text-align: center; }
+  #inspector .resize .rz-x { color: var(--muted); font-size: 11px; }
+  #inspector .resize select { flex: 1; min-width: 0; padding: 4px 5px; font-size: 11px; }
+  #inspector .resize button { padding: 5px 8px; font-size: 11px; white-space: nowrap; }
 
   /* ── BOTTOM BAR (build mode) ─────────────────────────────── */
   #bottombar { position: fixed; z-index: 4; left: var(--rail-w); right: var(--side-w); bottom: 0;

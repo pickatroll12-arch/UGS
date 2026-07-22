@@ -689,6 +689,15 @@ The next objective is therefore not “more features.” It is:
   plus a live tool hint. Play mode hides the bottom bar and shows the play bar.
   Verified headless at 1280×720: all regions present, no overflow, palettes
   switch per tool, EN/ES live — no clipping (the old Spanish clipping is gone).
-- **Next: S1-R3 — Room resizing** (pure data-layer resize + inspector controls
-  + dependent-data repair + undo + tests; owner rule: shrinking never deletes
-  objects silently).
+- **S1-R3 — Room resizing — ✅ done.** Pure `data.resizeRoom(room, w, h, {anchor,
+  fill, force})`: clamps 1..64, anchors nw/center/se, preserves overlapping
+  tiles + objects, fills new tiles, clamps the rotation pivot, and (owner rule)
+  a shrink that would drop objects returns `{ok:false, wouldDrop}` **without
+  mutating** unless `force` is set — it never deletes silently. Inspector gains
+  a size row (W × H + anchor + Resize); the editor confirms before a
+  destructive shrink, then repairs the level entry, link endpoints, and
+  selection by the applied offset, all under one undo step. Tests: +12 in
+  `data.test.js` (enlarge/center/blocked-shrink/forced-shrink/pivot/clamp);
+  headless-verified the full UI flow incl. confirm accept/dismiss and undo.
+- **Next: S1-R4 — Room selection & manipulation UX** (rooms as first-class
+  selectable entities: clear outlines, a room list, room-level actions).

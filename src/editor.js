@@ -558,6 +558,18 @@
 
     let h = `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
     h += `<div class="row"><b>${esc(t('insp.transform'))}</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
+    h += `<div class="row"><b>${esc(t('insp.size'))}</b><span>${room.size.w} × ${room.size.h}</span></div>`;
+    h += `<div class="resize">`
+      + `<input type="number" data-rz="w" min="1" max="64" value="${room.size.w}" title="W">`
+      + `<span class="rz-x">×</span>`
+      + `<input type="number" data-rz="h" min="1" max="64" value="${room.size.h}" title="H">`
+      + `<select data-rz="anchor" title="${esc(t('insp.anchor'))}">`
+      + `<option value="nw">${esc(t('anchor.nw'))}</option>`
+      + `<option value="center">${esc(t('anchor.center'))}</option>`
+      + `<option value="se">${esc(t('anchor.se'))}</option>`
+      + `</select>`
+      + `<button data-act="resize">${esc(t('insp.applySize'))}</button>`
+      + `</div>`;
     h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
     if (tile) {
       h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
@@ -601,6 +613,57 @@
 
   // ---- room motion authoring ---------------------------------------------
   function selectedRoom() { return app.selection ? roomById(app.selection.roomId) : null; }
+
+  // Resize the selected room from the inspector inputs. Non-destructive: a
+  // shrink that would drop objects asks for confirmation first (owner rule),
+  // then repairs the level entry, links, and selection by the applied offset.
+  function resizeSelectedRoom() {
+    const room = selectedRoom(); if (!room) return;
+    const wEl = inspector.querySelector('[data-rz="w"]');
+    const hEl = inspector.querySelector('[data-rz="h"]');
+    const aEl = inspector.querySelector('[data-rz="anchor"]');
+    if (!wEl || !hEl) return;
+    const nw = Math.round(+wEl.value), nh = Math.round(+hEl.value);
+    const anchor = aEl ? aEl.value : 'nw';
+    if (!(nw >= 1) || !(nh >= 1)) return;
+    if (nw === room.size.w && nh === room.size.h) { setStatus(t('status.sizeUnchanged')); return; }
+
+    pushHistory();
+    let res = D.resizeRoom(room, nw, nh, { anchor, force: false });
+    if (!res.ok) {
+      if (!window.confirm(t('confirm.dropObjects', { n: res.wouldDrop.length }))) {
+        discardHistory(); setStatus(t('status.resizeCancelled')); return;
+      }
+      res = D.resizeRoom(room, nw, nh, { anchor, force: true });
+    }
+    const { dx, dy } = res.offset;
+    repairAfterResize(room, dx, dy, res.newW, res.newH);
+    if (app.selection && app.selection.roomId === room.id) {
+      app.selection.lx = CORE.clamp(app.selection.lx + dx, 0, res.newW - 1);
+      app.selection.ly = CORE.clamp(app.selection.ly + dy, 0, res.newH - 1);
+    }
+    updateInspector(); refreshLevelSelect(); invalidate();
+    const extra = res.dropped.length ? ' ' + t('status.droppedN', { n: res.dropped.length }) : '';
+    setStatus(t('status.resized', { w: res.newW, h: res.newH }) + extra);
+  }
+
+  // After a room resize, shift/clamp everything that references its tiles.
+  function repairAfterResize(room, dx, dy, w, h) {
+    const clampX = (x) => CORE.clamp(Math.round(x), 0, w - 1);
+    const clampY = (y) => CORE.clamp(Math.round(y), 0, h - 1);
+    // level entry (entry lives on the level, not the room)
+    for (const lvl of app.save.levels) {
+      if (lvl.entry && lvl.entry.roomId === room.id) {
+        lvl.entry.x = clampX(lvl.entry.x + dx);
+        lvl.entry.y = clampY(lvl.entry.y + dy);
+      }
+    }
+    // link endpoints that land in this room
+    for (const k of (app.save.links || [])) {
+      if (k.from && k.from.roomId === room.id) { k.from.x = clampX(k.from.x + dx); k.from.y = clampY(k.from.y + dy); }
+      if (k.to && k.to.roomId === room.id) { k.to.x = clampX(k.to.x + dx); k.to.y = clampY(k.to.y + dy); }
+    }
+  }
   function addRoomEvent(room, kind) {
     pushHistory();
     room.movable = true;
@@ -815,6 +878,7 @@
       const act = e.target.dataset.act; if (!act) return;
       const room = selectedRoom();
       if (act === 'rotate') rotateSelectedObject();
+      else if (act === 'resize') resizeSelectedRoom();
       else if (act === 'dup') duplicateSelectedObject();
       else if (act === 'toggle') { pushHistory(); if (!toggleSelectedDoor()) discardHistory(); }
       else if (act === 'delete') deleteSelectedObject();
