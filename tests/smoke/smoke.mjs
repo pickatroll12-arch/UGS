@@ -108,6 +108,15 @@ const run = async () => {
   const afterR = await page.evaluate(() => ({ rot: window.UGS.editorApp.brush.objectRotation, tool: window.UGS.editorApp.tool }));
   ck('R rotates the object brush by 45° and selects Object', afterR.rot === (brushBefore + 45) % 360 && afterR.tool === 'object', afterR);
 
+  // contextual cursor changes per tool (R2-01)
+  const cursorFor = async (key) => { await page.keyboard.press(key); return page.evaluate(() => document.getElementById('game').style.cursor); };
+  const curSelect = await cursorFor('1');
+  const curFloor = await cursorFor('3');
+  const curWall = await cursorFor('4');
+  ck('cursor differs between tools (not colour-only)', curSelect !== curFloor && curFloor !== curWall, { curSelect, curFloor });
+  ck('paint tools use a custom svg cursor', /svg/.test(curFloor) && /svg/.test(curWall));
+  await page.keyboard.press('1');
+
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);
   await page.waitForFunction(() => window.UGS.editorApp.save.levels.length === 2, { timeout: 5000 });

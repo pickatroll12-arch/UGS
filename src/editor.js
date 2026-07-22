@@ -135,6 +135,7 @@
     // deck manually would leave the pawn stranded on the previous deck; during
     // Play the deck may only change through in-world travel (links / elevators).
     if (levelSelect) levelSelect.disabled = mode === 'play';
+    applyCursor();   // R2-01: pointer in Play, tool cursor in Build
     updatePlayBar();
     updateInspector();
     setStatus(t(mode === 'play' ? 'status.playMode' : 'status.buildMode'));
@@ -171,11 +172,34 @@
     setTool('object');
     setStatus(t('status.brushRotated', { deg: app.brush.objectRotation }));
   }
+  // R2-01: a distinct cursor per tool (glyph, not just colour) so the active
+  // tool is legible right at the pointer. Built as tiny inline SVG data-URIs
+  // that reuse the tool-rail glyphs; hotspot roughly at the glyph centre.
+  function svgCursor(glyph, hx, hy) {
+    const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'>" +
+      "<text x='14' y='20' font-size='17' text-anchor='middle' fill='white' stroke='black' stroke-width='0.7' font-family='sans-serif'>" +
+      glyph + "</text></svg>";
+    return "url(\"data:image/svg+xml," + encodeURIComponent(svg) + "\") " + hx + " " + hy + ", crosshair";
+  }
+  const TOOL_CURSORS = {
+    select: 'default',
+    erase: svgCursor('⌫', 14, 14),
+    floor: svgCursor('▦', 14, 14),
+    wall: svgCursor('▤', 14, 14),
+    object: svgCursor('◈', 14, 14),
+    entry: svgCursor('⚑', 7, 22),
+    fill: svgCursor('▩', 14, 14),
+    link: svgCursor('⛓', 14, 14)
+  };
+  function applyCursor() {
+    if (!canvas) return;
+    canvas.style.cursor = app.mode === 'play' ? 'pointer' : (TOOL_CURSORS[app.tool] || 'crosshair');
+  }
   function setTool(tool) {
     if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
-    canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+    applyCursor();
     syncToolContext(tool);
     if (tool === 'link') linkStartTool();
     else setStatus(t('status.tool', { tool: t('tool.' + tool) }));
