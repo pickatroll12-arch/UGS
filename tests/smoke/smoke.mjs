@@ -117,6 +117,22 @@ const run = async () => {
   ck('paint tools use a custom svg cursor', /svg/.test(curFloor) && /svg/.test(curWall));
   await page.keyboard.press('1');
 
+  // ── 3b'. camera projection (R2-03): E/Q switch, picking survives both ─────
+  const proj0 = await page.evaluate(() => window.UGS.editorApp.camera.projection);
+  await page.keyboard.press('e'); await page.waitForTimeout(60);
+  const proj1 = await page.evaluate(() => window.UGS.editorApp.camera.projection);
+  const pickRoundTrips = await page.evaluate(() => {
+    const app = window.UGS.editorApp, R = window.UGS.render;
+    const c = R.tileCenterWorld(app.save.levels[0].rooms[0], 5, 4);
+    const s = R.worldToScreen(app.camera, c.x, c.y);
+    const w = R.screenToWorld(app.camera, s.x, s.y);
+    return Math.abs(w.x - c.x) < 0.02 && Math.abs(w.y - c.y) < 0.02;
+  });
+  await page.keyboard.press('q'); await page.waitForTimeout(40);
+  const proj2 = await page.evaluate(() => window.UGS.editorApp.camera.projection);
+  ck('projection: E/Q switch and back', proj0 === 'isoTilted' && proj1 === 'isoFlat' && proj2 === 'isoTilted', { proj0, proj1, proj2 });
+  ck('projection: picking round-trips in the flat view', pickRoundTrips);
+
   // ── 3c. selection model (R2-02): click object / dblclick room / alt+click ─
   const sm = await page.evaluate(() => {
     const app = window.UGS.editorApp, D = window.UGS.data, R = window.UGS.render;

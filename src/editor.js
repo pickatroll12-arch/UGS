@@ -30,7 +30,7 @@
     mode: 'build',
     tool: 'select',                // select | floor | wall | object | entry | erase | fill
     brush: { floor: 'deck', wallKind: 'block', wallOrient: 0, wallMat: 'hull', object: 'console', objectRotation: 0 },
-    camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4 },
+    camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4, projection: 'isoTilted' },
     hover: null,
     selection: null,               // { roomId, lx, ly, objectId }
     selectFilter: 'all',           // all | floor | object | wall
@@ -202,6 +202,22 @@
     if (!canvas) return;
     canvas.style.cursor = app.mode === 'play' ? 'pointer' : (TOOL_CURSORS[app.tool] || 'crosshair');
   }
+  // R2-03: Q/E change the camera projection (steeper "tilted" ↔ flatter view).
+  // The world point under the screen centre is kept fixed so the view re-projects
+  // in place instead of jumping.
+  function cycleProjection(dir) {
+    const ids = R.PROJECTION_IDS;
+    const i = ids.indexOf(app.camera.projection);
+    const next = ids[((i < 0 ? 0 : i) + dir + ids.length) % ids.length];
+    if (next === app.camera.projection) return;
+    const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2;
+    const anchor = R.screenToWorld(app.camera, cx, cy);      // world point at screen centre
+    app.camera.projection = next;
+    const s = R.worldToScreen(Object.assign({}, app.camera, { x: 0, y: 0 }), anchor.x, anchor.y);
+    app.camera.x = cx - s.x; app.camera.y = cy - s.y;        // keep that point centred
+    invalidate();
+    setStatus(t('status.projection', { name: t('proj.' + next) }));
+  }
   function setTool(tool) {
     if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
@@ -362,7 +378,7 @@
     app.activeLevelId = target.id; app.selection = null; app.resident.add(target.id);
     if (app.mode === 'play') engine.start(activeLevel());
     const c = R.tileCenterWorld(spawnRoom, match.spawn.x, match.spawn.y);
-    const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom }, c.x, c.y);
+    const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom, projection: app.camera.projection }, c.x, c.y);
     app.camera.x = canvas.clientWidth / 2 - s.x; app.camera.y = canvas.clientHeight / 2 - s.y;
     refreshLevelSelect(); invalidate();
     setStatus(t('status.traveled', { kind: I.label('linkKind.' + (match.link.kind || 'custom'), match.link.kind), deck: levelName(target.id), mode: t('mode.' + (match.link.mode === 'preload' ? 'preload' : 'stream')) }));
@@ -1171,6 +1187,9 @@
       // R2-01: hotkeys are ignored while the user is typing in a field, so
       // e.g. renaming a room or editing a resize value never fires a tool.
       if (isTypingTarget(e.target)) return;
+      // R2-03: camera projection (works in Build and Play)
+      if (k === 'e' && !e.ctrlKey && !e.metaKey) { cycleProjection(1); return; }
+      if (k === 'q' && !e.ctrlKey && !e.metaKey) { cycleProjection(-1); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }

@@ -38,17 +38,26 @@
   };
 
   // ---- projection ---------------------------------------------------------
+  // R2-03: the camera carries a projection that only changes the iso tile
+  // HEIGHT — a steeper "tilted" view vs a flatter, more top-down one. Tile width
+  // is constant, so the same diamond math (world<->screen, picking, draw order)
+  // works for both projections; no second render path.
+  const PROJECTIONS = { isoTilted: 32, isoFlat: 52 };
+  const PROJECTION_IDS = ['isoTilted', 'isoFlat'];
+  function projH(cam) { return (cam && PROJECTIONS[cam.projection]) || TILE_H; }
+
   function worldToScreen(cam, wx, wy) {
     const sx = (wx - wy) * (TILE_W / 2);
-    const sy = (wx + wy) * (TILE_H / 2);
+    const sy = (wx + wy) * (projH(cam) / 2);
     return { x: sx * cam.zoom + cam.x, y: sy * cam.zoom + cam.y };
   }
   function screenToWorld(cam, px, py) {
     const sx = (px - cam.x) / cam.zoom;
     const sy = (py - cam.y) / cam.zoom;
+    const th = projH(cam);
     return {
-      x: (sx / (TILE_W / 2) + sy / (TILE_H / 2)) / 2,
-      y: (sy / (TILE_H / 2) - sx / (TILE_W / 2)) / 2
+      x: (sx / (TILE_W / 2) + sy / (th / 2)) / 2,
+      y: (sy / (th / 2) - sx / (TILE_W / 2)) / 2
     };
   }
 
@@ -116,7 +125,7 @@
   function pickTopmost(cam, level, px, py, opts) {
     opts = opts || {};
     const hidden = opts.hiddenLayers, filter = opts.filter || 'all';
-    const hw = (TILE_W / 2) * cam.zoom, hh = (TILE_H / 2) * cam.zoom;
+    const hw = (TILE_W / 2) * cam.zoom, hh = (projH(cam) / 2) * cam.zoom;
     const H = WALL_H * cam.zoom, z = cam.zoom;
     const ents = [];
     if (filter !== 'floor' && filter !== 'object') {
@@ -352,14 +361,14 @@
   function drawLevel(ctx, cam, level, opts) {
     opts = opts || {};
     const hw = (TILE_W / 2) * cam.zoom;
-    const hh = (TILE_H / 2) * cam.zoom;
+    const hh = (projH(cam) / 2) * cam.zoom;
 
     // viewport-culling bounds (world screen px + a generous margin so tall
     // walls/objects and moving rooms near the edge still draw). Skips draw calls
     // for everything off-screen — the main perf lever when zoomed in.
     const vw = opts.view ? opts.view.w : (typeof window !== 'undefined' ? window.innerWidth : 1e5);
     const vh = opts.view ? opts.view.h : (typeof window !== 'undefined' ? window.innerHeight : 1e5);
-    const mx = 3 * TILE_W * cam.zoom, my = 3 * TILE_H * cam.zoom + WALL_H * cam.zoom;
+    const mx = 3 * TILE_W * cam.zoom, my = 3 * projH(cam) * cam.zoom + WALL_H * cam.zoom;
     const onScreen = (s) => s.x >= -mx && s.x <= vw + mx && s.y >= -my && s.y <= vh + my;
 
     // --- pass 1: floors (depth-sorted across all rooms) ---
@@ -676,7 +685,7 @@
   // transform (a moving room carries them). opts: { selectedId, time, showPaths }
   function drawAgents(ctx, cam, level, pawns, opts) {
     opts = opts || {};
-    const z = cam.zoom, hw = (TILE_W / 2) * z, hh = (TILE_H / 2) * z;
+    const z = cam.zoom, hw = (TILE_W / 2) * z, hh = (projH(cam) / 2) * z;
     // depth-sorted so nearer pawns overlap farther ones
     const list = pawns.filter(p => p.levelId === level.id).map(p => {
       const room = level.rooms.find(r => r.id === p.roomId) || level.rooms[0];
@@ -701,7 +710,7 @@
       const s = worldToScreen(cam, e.wx, e.wy);
       // facing: local dir -> world (room rotation) -> iso screen angle
       const wd = rotatePoint(e.p.facingLocal.x, e.p.facingLocal.y, e.room.transform.rotation, { x: 0, y: 0 });
-      const facing = Math.atan2((wd.x + wd.y) * (TILE_H / TILE_W), wd.x - wd.y);
+      const facing = Math.atan2((wd.x + wd.y) * (projH(cam) / TILE_W), wd.x - wd.y);
       drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
     }
   }
@@ -741,13 +750,13 @@
       }
     }
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    const s = worldToScreen({ x: 0, y: 0, zoom: cam.zoom }, cx, cy);
+    const s = worldToScreen({ x: 0, y: 0, zoom: cam.zoom, projection: cam.projection }, cx, cy);
     cam.x = viewW / 2 - s.x;
     cam.y = viewH / 2 - s.y;
   }
 
   return {
-    TILE_W, TILE_H, WALL_H, OBJ_H,
+    TILE_W, TILE_H, WALL_H, OBJ_H, PROJECTION_IDS, projH,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
     pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, resizeHandles, drawLinkMarkers, drawAgents, centerOn, shade
