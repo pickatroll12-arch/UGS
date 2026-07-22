@@ -73,12 +73,12 @@
   function isWallKind(k) { return WALL_KINDS.indexOf(k) !== -1; }
 
   function createWall(kind, orientation, material, collision) {
-    return {
-      kind: isWallKind(kind) ? kind : 'block',
-      orientation: snapAngle(orientation),
-      collision: collision === 'partial' ? 'partial' : 'full',
-      material: isMaterial(material) ? material : 'hull'
-    };
+    const k = isWallKind(kind) ? kind : 'block';
+    // A block fills the tile (full collision); diagonal/rounded pieces occupy
+    // only part of it, so they default to partial collision (nav lets a pawn
+    // pass the open side — R2-06 phase 2). An explicit value always wins.
+    const col = collision ? (collision === 'partial' ? 'partial' : 'full') : (k === 'block' ? 'full' : 'partial');
+    return { kind: k, orientation: snapAngle(orientation), collision: col, material: isMaterial(material) ? material : 'hull' };
   }
   // Coerce any stored/legacy wall value into a piece (or null). `legacyMat` is
   // the old sibling tile.wallMaterial, folded into the piece when upgrading.
@@ -86,7 +86,7 @@
     if (!raw) return null;
     if (typeof raw === 'string') {
       const L = LEGACY_WALL[raw]; if (!L) return null;
-      return createWall(L.kind, L.orientation, isMaterial(legacyMat) ? legacyMat : 'hull', 'full');
+      return createWall(L.kind, L.orientation, isMaterial(legacyMat) ? legacyMat : 'hull');   // collision defaults by kind
     }
     if (typeof raw === 'object') {
       if (!isWallKind(raw.kind)) return null;

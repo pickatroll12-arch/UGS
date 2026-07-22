@@ -193,8 +193,9 @@ check('createTransform snaps rotation to 45', data.createTransform(0, 0, 100).ro
 
 // 8. wall pieces + versioned migration (R2-06)
 check('createWall snaps orientation + defaults', (() => {
-  const w = data.createWall('diagonal', 47, 'glass'); return w.kind === 'diagonal' && w.orientation === 45 && w.material === 'glass' && w.collision === 'full';
+  const w = data.createWall('diagonal', 47, 'glass'); return w.kind === 'diagonal' && w.orientation === 45 && w.material === 'glass';
 })());
+check('block defaults to full collision, diagonal to partial', data.createWall('block', 0, 'hull').collision === 'full' && data.createWall('diagonal', 0, 'hull').collision === 'partial');
 check('createWall coerces bad kind to block', data.createWall('nope', 0, 'hull').kind === 'block');
 check('normalizeWall upgrades legacy solid', (() => { const w = data.normalizeWall('solid', 'hull'); return w && w.kind === 'block' && w.material === 'hull'; })());
 check('normalizeWall upgrades diagA/diagB to diagonal', (() => {

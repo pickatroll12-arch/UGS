@@ -154,6 +154,17 @@ const run = async () => {
   ck('resize handle: dragging the east handle grows width', w1 > rz.w0, { w0: rz.w0, w1 });
   await page.evaluate(() => { window.UGS.editorApp.selection = null; });
 
+  // ── 3e. partial-wall nav (R2-06 ph2): open side passable, closed side not ─
+  const pw = await page.evaluate(() => {
+    const D = window.UGS.data, N = window.UGS.nav;
+    const mk = (w, h) => { const r = D.createRoom('t', w, h); r.tiles = Array.from({ length: h }, () => Array.from({ length: w }, () => D.createTile('deck'))); return r; };
+    const r = mk(3, 3);
+    r.tiles[1][1].wall = D.createWall('diagonal', 0, 'hull');   // partial, closes E/S/SE
+    const grid = N.buildWalkGrid(r, D.objectBlocks);
+    return { walkable: grid.get(1, 1) === 1, eastBlocked: N.crossBlocked(r, 1, 1, 1, 0), westOpen: !N.crossBlocked(r, 1, 1, -1, 0) };
+  });
+  ck('partial wall: tile walkable, closed side blocked, open side passable', pw.walkable && pw.eastBlocked && pw.westOpen, pw);
+
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);
   await page.waitForFunction(() => window.UGS.editorApp.save.levels.length === 2, { timeout: 5000 });
