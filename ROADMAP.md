@@ -172,8 +172,14 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
 M1 datos+save · M2 render+shell · M3(+) herramientas · M4 salas móviles ·
 M5 links & multi-mapa · M6 slice jugable — todos sobre el **heavy-core**
 (RNG sembrado, EventBus, fixed-timestep determinista, Grid2D, culling +
-render-on-demand). Suites: core 23 · data 24 · engine 15 · nav 13 (75 en total,
-`npm test`). Base lista para la Etapa 2 (tripulación con roles: el Capitán + 3 NPC).
+render-on-demand).
+
+**Etapa 1 revisada (pasada de usabilidad, S1-R0…R9) — COMPLETA.** Ver
+`CURRENT_OBJECTIVE.md`: `npm test` + CI, localización EN/ES, layout de 4
+regiones, redimensión de salas, salas seleccionables, modo Build/Play seguro,
+onboarding, rotación 45° unificada, pulido de links y de motion/eventos.
+Suites: core 23 · data 41 · engine 22 · i18n 19 · nav 13 = **118** (`npm test`).
+Base lista para la Etapa 2 (tripulación con roles: el Capitán + 3 NPC).
 
 ---
 
