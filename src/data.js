@@ -128,14 +128,18 @@
   //     opts.fill   : floor id for newly exposed tiles (default 'deck')
   //     opts.force  : when shrinking would drop objects, only actually drop
   //                   them if force===true; otherwise abort untouched.
+  //     opts.dryRun : assess only — never mutate the room. Returns the same
+  //                   result shape (wouldDrop / trimmedTiles / trimmedWalls /
+  //                   pivotClamped / offset) so the caller can preview a
+  //                   destructive resize and decide before committing.
   //
   // The function is pure w.r.t. the caller's decision-making: when it would
-  // lose objects and force is not set, it returns { ok:false, wouldDrop:[...] }
-  // and does NOT mutate the room, so the editor can warn/confirm first. On
-  // success it mutates the room (tiles, size, object coords, pivot) and returns
-  // the applied { dx, dy } offset so the caller can repair external references
-  // (level entry, links, selection). Tile trimming (floor/wall loss on shrink)
-  // is expected and only surfaced via `warnings`, never blocked.
+  // lose objects and force is not set (or dryRun is set), it does NOT mutate the
+  // room, so the editor can warn/confirm first WITHOUT pushing an undo entry. On
+  // a real commit it mutates the room (tiles, size, object coords, pivot) and
+  // returns the applied { dx, dy } offset plus structured counts of what was
+  // trimmed so the caller can report it (localized) and repair external
+  // references (level entry, links, selection).
   function resizeRoom(room, newW, newH, opts) {
     opts = opts || {};
     const anchor = opts.anchor || 'nw';
@@ -149,48 +153,48 @@
     if (anchor === 'se') { dx = newW - oldW; dy = newH - oldH; }
     else if (anchor === 'center') { dx = Math.floor((newW - oldW) / 2); dy = Math.floor((newH - oldH) / 2); }
 
-    const warnings = [];
     const inBounds = (x, y) => x >= 0 && y >= 0 && x < newW && y < newH;
 
-    // which objects would fall outside the new bounds?
+    // assess: objects that would fall outside, and floor/wall tiles trimmed
     const wouldDrop = room.objects.filter(o => !inBounds(o.x + dx, o.y + dy));
-    if (wouldDrop.length && !opts.force) {
-      return { ok: false, wouldDrop, dropped: [], offset: { dx, dy }, newW, newH,
-        warnings: [`${wouldDrop.length} object(s) fall outside the new size`] };
+    let trimmedTiles = 0, trimmedWalls = 0;
+    for (let y = 0; y < oldH; y++) {
+      for (let x = 0; x < oldW; x++) {
+        if (inBounds(x + dx, y + dy)) continue;
+        const src = room.tiles[y][x]; if (!src) continue;
+        if (src.wall) trimmedWalls++;
+        if (src.floor && src.floor !== 'void') trimmedTiles++;
+      }
     }
+    const pivotP = room.transform && room.transform.pivot;
+    const pivotClamped = !!pivotP && (clamp(num(pivotP.x) + dx, 0, newW) !== pivotP.x || clamp(num(pivotP.y) + dy, 0, newH) !== pivotP.y);
 
-    // build the new grid, copying overlapping tiles
-    let trimmed = 0;
+    const warnings = [];
+    if (trimmedTiles || trimmedWalls) warnings.push(`${trimmedTiles + trimmedWalls} tile(s) trimmed off the edge`);
+    if (pivotClamped) warnings.push('rotation pivot clamped to new bounds');
+
+    const assessment = { wouldDrop, dropped: [], offset: { dx, dy }, newW, newH, trimmedTiles, trimmedWalls, pivotClamped, warnings };
+
+    // abort untouched when it would lose objects (unless forced) or on a dry run
+    if (opts.dryRun) return Object.assign({ ok: !wouldDrop.length }, assessment);
+    if (wouldDrop.length && !opts.force) return Object.assign({ ok: false }, assessment);
+
+    // commit: mutate the room
     const grid = Array.from({ length: newH }, () => Array.from({ length: newW }, () => createTile(fill)));
     for (let y = 0; y < oldH; y++) {
       for (let x = 0; x < oldW; x++) {
         const nx = x + dx, ny = y + dy;
-        if (inBounds(nx, ny)) {
-          const src = room.tiles[y][x];
-          grid[ny][nx] = { floor: src.floor, wall: src.wall, wallMaterial: src.wallMaterial };
-        } else if (room.tiles[y][x] && (room.tiles[y][x].wall || room.tiles[y][x].floor !== 'void')) {
-          trimmed++;
-        }
+        if (inBounds(nx, ny)) { const s = room.tiles[y][x]; grid[ny][nx] = { floor: s.floor, wall: s.wall, wallMaterial: s.wallMaterial }; }
       }
     }
-    if (trimmed) warnings.push(`${trimmed} tile(s) trimmed off the edge`);
-
-    // commit: mutate the room
     room.tiles = grid;
     room.size = { w: newW, h: newH };
     const dropped = wouldDrop;
     if (dropped.length) room.objects = room.objects.filter(o => inBounds(o.x + dx, o.y + dy));
     for (const o of room.objects) { o.x += dx; o.y += dy; }
+    if (pivotP) room.transform.pivot = { x: clamp(num(pivotP.x) + dx, 0, newW), y: clamp(num(pivotP.y) + dy, 0, newH) };
 
-    // keep the rotation pivot inside the room
-    if (room.transform && room.transform.pivot) {
-      const px = clamp(num(room.transform.pivot.x) + dx, 0, newW);
-      const py = clamp(num(room.transform.pivot.y) + dy, 0, newH);
-      if (px !== room.transform.pivot.x || py !== room.transform.pivot.y) warnings.push('rotation pivot clamped to new bounds');
-      room.transform.pivot = { x: px, y: py };
-    }
-
-    return { ok: true, wouldDrop: [], dropped, offset: { dx, dy }, newW, newH, warnings };
+    return Object.assign({ ok: true }, assessment, { wouldDrop: [], dropped });
   }
 
   function createObjectInstance(type, x, y) {

@@ -156,6 +156,21 @@ function mkRoom(w, h) {
   check('resize clamps size to 1..64', r.size.w === 64 && r.size.h === 1);
 }
 
+// 6b. resizeRoom dryRun + structured trim counts (BUG-04)
+{
+  const r = mkRoom(5, 5);
+  // paint a wall on the far edge that a shrink will trim
+  r.tiles[4][4] = { floor: 'deck', wall: 'solid', wallMaterial: 'hull' };
+  r.objects.push(data.createObjectInstance('crate', 4, 0));   // will fall outside a 3x3 nw shrink
+  const dry = data.resizeRoom(r, 3, 3, { anchor: 'nw', dryRun: true });
+  check('dryRun does not mutate the room', r.size.w === 5 && r.size.h === 5 && r.objects.length === 1);
+  check('dryRun reports objects that would drop', dry.wouldDrop.length === 1);
+  check('dryRun reports trimmed walls and tiles separately', dry.trimmedWalls === 1 && dry.trimmedTiles > 0);
+  const real = data.resizeRoom(r, 3, 3, { anchor: 'nw', force: true });
+  check('real resize returns the same trim counts', real.trimmedWalls === 1 && real.trimmedTiles === dry.trimmedTiles);
+  check('real resize actually shrank', r.size.w === 3 && r.size.h === 3);
+}
+
 // 7. rotation authoring step (45°)
 check('ROT_STEP is 45', data.ROT_STEP === 45);
 check('snapAngle rounds to nearest 45', data.snapAngle(47) === 45 && data.snapAngle(30) === 45 && data.snapAngle(20) === 0);

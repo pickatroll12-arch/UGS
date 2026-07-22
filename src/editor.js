@@ -777,9 +777,12 @@
   // ---- room motion authoring ---------------------------------------------
   function selectedRoom() { return app.selection ? roomById(app.selection.roomId) : null; }
 
-  // Resize the selected room from the inspector inputs. Non-destructive: a
-  // shrink that would drop objects asks for confirmation first (owner rule),
-  // then repairs the level entry, links, and selection by the applied offset.
+  // Resize the selected room from the inspector inputs. Non-destructive: it
+  // assesses the change first (dryRun, no undo entry). A destructive resize —
+  // dropping objects OR trimming floor/wall tiles — is confirmed before any
+  // mutation, so a cancelled resize leaves NO trace in the undo history
+  // (BUG-04). On commit it repairs the level entry, links, and selection by the
+  // applied offset, and reports the trimmed tiles/walls (localized).
   function resizeSelectedRoom() {
     if (!requireBuild()) return;
     const room = selectedRoom(); if (!room) return;
@@ -792,23 +795,27 @@
     if (!(nw >= 1) || !(nh >= 1)) return;
     if (nw === room.size.w && nh === room.size.h) { setStatus(t('status.sizeUnchanged')); return; }
 
-    pushHistory();
-    let res = D.resizeRoom(room, nw, nh, { anchor, force: false });
-    if (!res.ok) {
-      if (!window.confirm(t('confirm.dropObjects', { n: res.wouldDrop.length }))) {
-        discardHistory(); setStatus(t('status.resizeCancelled')); return;
-      }
-      res = D.resizeRoom(room, nw, nh, { anchor, force: true });
+    // assess without mutating and without touching the undo stack
+    const dry = D.resizeRoom(room, nw, nh, { anchor, dryRun: true });
+    const lostObjects = dry.wouldDrop.length, lostTiles = dry.trimmedTiles, lostWalls = dry.trimmedWalls;
+    if (lostObjects || lostTiles || lostWalls) {
+      const msg = t('confirm.resizeLoss', { objects: lostObjects, tiles: lostTiles, walls: lostWalls });
+      if (!window.confirm(msg)) { setStatus(t('status.resizeCancelled')); return; }   // no history touched
     }
+
+    pushHistory();
+    const res = D.resizeRoom(room, nw, nh, { anchor, force: true });
     const { dx, dy } = res.offset;
     repairAfterResize(room, dx, dy, res.newW, res.newH);
     if (app.selection && app.selection.roomId === room.id) {
       app.selection.lx = CORE.clamp(app.selection.lx + dx, 0, res.newW - 1);
       app.selection.ly = CORE.clamp(app.selection.ly + dy, 0, res.newH - 1);
     }
-    updateInspector(); refreshLevelSelect(); invalidate();
-    const extra = res.dropped.length ? ' ' + t('status.droppedN', { n: res.dropped.length }) : '';
-    setStatus(t('status.resized', { w: res.newW, h: res.newH }) + extra);
+    updateInspector(); refreshLevelSelect(); refreshLinkList(); invalidate();
+    let msg = t('status.resized', { w: res.newW, h: res.newH });
+    if (res.trimmedTiles || res.trimmedWalls) msg += ' ' + t('status.resizeTrimmed', { tiles: res.trimmedTiles, walls: res.trimmedWalls });
+    if (res.dropped.length) msg += ' ' + t('status.droppedN', { n: res.dropped.length });
+    setStatus(msg);
   }
 
   // After a room resize, shift/clamp everything that references its tiles.
