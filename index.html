@@ -6,8 +6,11 @@
 <title>UGS — Station Builder</title>
 <style>
   :root {
-    --bg: #0e0e10; --panel: rgba(20,20,24,0.96); --panel-solid: #16161a; --line: #3a3a41;
-    --line-bright: #6a6a72; --text: #ececf0; --muted: #9a9aa2; --accent: #fff;
+    /* R2-09: controlled sci-fi theme — deep hull blues + a cyan signal accent.
+       Kept high-contrast; no animated backgrounds, no legibility loss. */
+    --bg: #0a0c10; --panel: rgba(16,20,28,0.94); --panel-solid: #12161e; --line: #2c3340;
+    --line-bright: #4a5666; --text: #e8eef4; --muted: #8b95a6;
+    --accent: #62e0ef; --accent-ink: #06202a; --glow: rgba(98,224,239,0.22);
     --top-h: 48px; --rail-w: 74px; --side-w: 268px; --bottom-h: 96px;
   }
   * { box-sizing: border-box; }
@@ -21,7 +24,7 @@
   button, select, input { font: inherit; color: var(--text); background: #27272c;
     border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; cursor: pointer; }
   button:hover { border-color: var(--line-bright); background: #313137; }
-  button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  button.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 700; }
   button.danger { color: #ffdada; border-color: #6b3c3c; }
   select { cursor: pointer; }
   input { cursor: text; }
@@ -49,7 +52,7 @@
   .modeswitch { display: flex; gap: 4px; padding: 3px; background: #1c1c20;
     border: 1px solid var(--line); border-radius: 9px; }
   .modeswitch button { padding: 5px 14px; border: 0; background: transparent; border-radius: 6px; }
-  .modeswitch button.active { background: var(--accent); color: #111; }
+  .modeswitch button.active { background: var(--accent); color: var(--accent-ink); }
   .langpick { display: flex; align-items: center; gap: 6px; }
   .langpick .ic { font-size: 14px; opacity: .8; }
   .langpick select { padding: 5px 8px; font-size: 12px; }
@@ -74,7 +77,7 @@
   .help-card h3 { margin: 14px 0 3px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #cfcfd6; }
   .help-card p { margin: 0; font-size: 12.5px; color: var(--text); line-height: 1.55; }
   .help-actions { margin-top: 20px; display: flex; justify-content: flex-end; }
-  .help-actions button { padding: 8px 18px; background: var(--accent); color: #111; font-weight: 700; border-color: var(--accent); }
+  .help-actions button { padding: 8px 18px; background: var(--accent); color: var(--accent-ink); font-weight: 700; border-color: var(--accent); }
   /* editing controls are inert while simulating */
   body.playing #toolrail,
   body.playing .editing-only { opacity: .4; pointer-events: none; filter: grayscale(1); }
@@ -89,7 +92,7 @@
   #toolrail button .ic { font-size: 17px; line-height: 1; }
   #toolrail button .rk { position: absolute; top: 3px; right: 4px; font-size: 8px; font-weight: 700;
     color: var(--muted); opacity: .8; }
-  #toolrail button.active .rk { color: #333; }
+  #toolrail button.active .rk { color: var(--accent-ink); }
   .rail-sep { height: 1px; background: var(--line); margin: 4px 2px; }
   #toolrail .rail-mini button { padding: 6px 2px; font-size: 9px; }
 
@@ -110,7 +113,7 @@
   #inspector .selkind { font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
     padding: 3px 7px; border-radius: 5px; margin-bottom: 8px; display: inline-block;
     background: #26262c; border: 1px solid var(--line); color: var(--muted); }
-  #inspector .selkind-room { color: #111; background: var(--accent); border-color: var(--accent); }
+  #inspector .selkind-room { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
   #inspector .row { display: flex; justify-content: space-between; gap: 8px; }
   #inspector .row b { color: var(--muted); font-weight: 600; }
   #inspector hr { border: 0; border-top: 1px solid var(--line); margin: 7px 0; }
@@ -125,7 +128,7 @@
   .roomlist button { text-align: left; padding: 6px 9px; font-size: 12px; display: flex;
     justify-content: space-between; align-items: center; gap: 8px; }
   .roomlist button .rl-meta { font-size: 10px; color: var(--muted); }
-  .roomlist button.active .rl-meta { color: #333; }
+  .roomlist button.active .rl-meta { color: var(--accent-ink); }
   .linklist { display: flex; flex-direction: column; gap: 5px; }
   .linkrow { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 7px; }
   .linkrow.active { background: rgba(255,255,255,0.09); outline: 1px solid var(--line-bright); }
@@ -173,7 +176,7 @@
   .mm-sub { font-size: 12px; color: var(--muted); margin: 6px 0 22px; }
   .mm-btns { display: flex; flex-direction: column; gap: 8px; width: 264px; }
   .mm-btns button { padding: 11px 14px; font-size: 14px; text-align: left; }
-  .mm-btns button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
+  .mm-btns button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
   .mm-btns button:disabled { opacity: .4; cursor: default; }
   .mm-lang { margin-top: 18px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
   .mm-lang select { padding: 5px 8px; font-size: 12px; }
@@ -207,6 +210,17 @@
   .tb-menu { padding: 5px 10px; }
   .modechip { font-size: 10px; font-weight: 800; letter-spacing: .12em; padding: 3px 8px;
     border-radius: 5px; background: #26262c; border: 1px solid var(--line); color: var(--muted); }
+
+  /* ── R2-09 sci-fi accents (subtle; no legibility loss) ───── */
+  button.active { box-shadow: 0 0 12px var(--glow); }
+  #topbar, #bottombar { box-shadow: 0 0 18px rgba(0,0,0,0.35); }
+  #toolrail button.active, .modeswitch button.active { text-shadow: none; }
+  .modechip { color: var(--accent); border-color: rgba(98,224,239,0.38); background: rgba(98,224,239,0.08); }
+  .mm-title, .tb-logo { text-shadow: 0 0 18px var(--glow); }
+  .mm-btns button.primary, .help-actions button, #buildBar, #playBar, #gameBar { box-shadow: 0 0 16px var(--glow), 0 16px 44px rgba(0,0,0,0.4); }
+  #mainMenu, #helpOverlay.on, #buildBar, #gameBar, #playBar { animation: uiFade .18s ease-out; }
+  @keyframes uiFade { from { opacity: 0; } to { opacity: 1; } }
+  .sp-sect { border-bottom-color: rgba(98,224,239,0.10); }
 
   /* keep it usable on shorter/narrower screens */
   @media (max-width: 1180px) { :root { --side-w: 240px; --rail-w: 66px; } }
