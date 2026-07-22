@@ -232,6 +232,7 @@
     const id = app.activeLevelId;
     app.save.levels = app.save.levels.filter(l => l.id !== id);
     app.save.links = app.save.links.filter(k => k.from.levelId !== id && k.to.levelId !== id);
+    app.selectedLinkId = null;   // BUG-03: a selected link may have just been dropped
     if (app.save.startLevelId === id) app.save.startLevelId = app.save.levels[0].id;
     switchLevel(app.save.levels[0].id); refreshLevelSelect();
     setStatus('Deck deleted.');
@@ -464,7 +465,11 @@
       const first = lvl.rooms[0];
       lvl.entry = { roomId: first.id, x: Math.min(2, first.size.w - 1), y: Math.min(2, first.size.h - 1) };
     }
+    // BUG-03: the Links list must reflect the links we just dropped, and any
+    // link that was selected may no longer exist.
+    app.selectedLinkId = null;
     selectRoom(lvl.rooms[0]);
+    refreshLinkList();
     setStatus(t('status.roomDeleted', { name }));
   }
 
