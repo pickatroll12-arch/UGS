@@ -29,7 +29,7 @@
     activeLevelId: null,
     mode: 'build',
     tool: 'select',                // select | floor | wall | object | entry | erase | fill
-    brush: { floor: 'deck', wallShape: 'solid', wallMat: 'hull', object: 'console', objectRotation: 0 },
+    brush: { floor: 'deck', wallKind: 'block', wallOrient: 0, wallMat: 'hull', object: 'console', objectRotation: 0 },
     camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4 },
     hover: null,
     selection: null,               // { roomId, lx, ly, objectId }
@@ -107,7 +107,7 @@
     for (let x = 0; x < w; x++) { setWall(room, x, 0); setWall(room, x, h - 1); }
     for (let y = 0; y < h; y++) { setWall(room, 0, y); setWall(room, w - 1, y); }
   }
-  function setWall(room, x, y) { room.tiles[y][x] = { floor: 'deck', wall: 'solid', wallMaterial: 'hull' }; }
+  function setWall(room, x, y) { room.tiles[y][x] = { floor: 'deck', wall: D.createWall('block', 0, 'hull') }; }
 
   // ---- lifecycle ----------------------------------------------------------
   function loadSave(save, msg) {
@@ -168,6 +168,12 @@
   // that the Object tool will stamp onto the next piece it places.
   function rotateBrushOrPiece() {
     if (app.mode !== 'build') return;
+    // Wall tool: R rotates the wall brush's orientation (diagonal/rounded).
+    if (app.tool === 'wall') {
+      app.brush.wallOrient = ((app.brush.wallOrient || 0) + D.ROT_STEP) % 360;
+      setStatus(t('status.wallRotated', { deg: app.brush.wallOrient }));
+      return;
+    }
     if (app.selection && app.selection.objectId) { rotateSelectedObject(); return; }
     app.brush.objectRotation = ((app.brush.objectRotation || 0) + D.ROT_STEP) % 360;
     setTool('object');
@@ -220,14 +226,15 @@
       tile.floor = app.brush.floor; return true;
     }
     if (app.tool === 'wall') {
-      if (tile.wall === app.brush.wallShape && tile.wallMaterial === app.brush.wallMat) return false;
+      const w = tile.wall;
+      if (w && w.kind === app.brush.wallKind && w.orientation === app.brush.wallOrient && w.material === app.brush.wallMat) return false;
       if (tile.floor === 'void') tile.floor = 'deck';
-      tile.wall = app.brush.wallShape; tile.wallMaterial = app.brush.wallMat; return true;
+      tile.wall = D.createWall(app.brush.wallKind, app.brush.wallOrient, app.brush.wallMat); return true;
     }
     if (app.tool === 'erase') {
       const obj = room.objects.find(o => o.x === hit.lx && o.y === hit.ly);
       if (obj) { room.objects = room.objects.filter(o => o !== obj); if (app.selection && app.selection.objectId === obj.id) app.selection = null; return true; }
-      if (tile.wall) { tile.wall = null; tile.wallMaterial = null; return true; }
+      if (tile.wall) { tile.wall = null; return true; }
       if (tile.floor !== 'void') { tile.floor = 'void'; return true; }
       return false;
     }
@@ -818,7 +825,7 @@
       h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
       if (tile) {
         h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
-        h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall, tile.wall)) : esc(t('val.none'))}</span></div>`;
+        h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall.kind, tile.wall.kind)) + (tile.wall.kind !== 'block' ? ' · ' + (tile.wall.orientation || 0) + '°' : '') : esc(t('val.none'))}</span></div>`;
       }
     }
     if (obj) {
@@ -1055,7 +1062,6 @@
   // language. Rebuilt on language change; wraps are cleared first (idempotent).
   function matLabel(m) { return I.label('mat.' + m.id, m.label); }
   function objLabel(def) { return I.label('obj.' + def.type, def.label); }
-  function wallShapeLabel(id, fallback) { return I.label('wall.' + id, fallback); }
   function layerLabel(id) { return I.label('layer.' + id, id); }
 
   function buildPalettes() {
@@ -1067,10 +1073,10 @@
     // objects
     const oWrap = document.getElementById('objectPalette'); oWrap.innerHTML = '';
     for (const def of Object.values(D.OBJECT_DEFS)) oWrap.appendChild(chip(objLabel(def), () => { app.brush.object = def.type; markActive(oWrap, def.type); setTool('object'); }, def.type, app.brush.object === def.type));
-    // wall shapes
+    // wall kinds (block / diagonal / rounded) — R rotates the orientation
     const wWrap = document.getElementById('wallPalette'); wWrap.innerHTML = '';
-    [['solid', 'Solid'], ['diagA', 'Diag /'], ['diagB', 'Diag \\']].forEach(([id, label]) =>
-      wWrap.appendChild(chip(wallShapeLabel(id, label), () => { app.brush.wallShape = id; markActive(wWrap, id); setTool('wall'); }, id, app.brush.wallShape === id)));
+    D.WALL_KINDS.forEach(k =>
+      wWrap.appendChild(chip(I.label('wall.' + k, k), () => { app.brush.wallKind = k; markActive(wWrap, k); setTool('wall'); }, k, app.brush.wallKind === k)));
     // wall materials (hull vs glass/windows)
     const wmWrap = document.getElementById('wallMatPalette'); wmWrap.innerHTML = '';
     Object.values(D.MATERIALS).filter(m => m.kind === 'wall').forEach(m =>

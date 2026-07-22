@@ -191,5 +191,36 @@ check('snapAngle keeps cardinals', data.snapAngle(90) === 90 && data.snapAngle(2
 check('snapAngle wraps negatives and >=360', data.snapAngle(-45) === 315 && data.snapAngle(360) === 0);
 check('createTransform snaps rotation to 45', data.createTransform(0, 0, 100).rotation === 90 && data.createTransform(0, 0, 115).rotation === 135);
 
+// 8. wall pieces + versioned migration (R2-06)
+check('createWall snaps orientation + defaults', (() => {
+  const w = data.createWall('diagonal', 47, 'glass'); return w.kind === 'diagonal' && w.orientation === 45 && w.material === 'glass' && w.collision === 'full';
+})());
+check('createWall coerces bad kind to block', data.createWall('nope', 0, 'hull').kind === 'block');
+check('normalizeWall upgrades legacy solid', (() => { const w = data.normalizeWall('solid', 'hull'); return w && w.kind === 'block' && w.material === 'hull'; })());
+check('normalizeWall upgrades diagA/diagB to diagonal', (() => {
+  const a = data.normalizeWall('diagA', 'hull'), b = data.normalizeWall('diagB', 'hull');
+  return a.kind === 'diagonal' && b.kind === 'diagonal' && a.orientation !== b.orientation;
+})());
+check('normalizeWall rejects garbage', data.normalizeWall('bogus') === null && data.normalizeWall({ kind: 'x' }) === null);
+check('normalizeWall passes through a valid piece', (() => { const w = data.normalizeWall({ kind: 'rounded', orientation: 90, material: 'glass', collision: 'full' }); return w.kind === 'rounded' && w.orientation === 90; })());
+check('wallBlocks true for any wall, false for null', data.wallBlocks(data.createWall('block', 0, 'hull')) === true && data.wallBlocks(null) === false);
+// versioned migration: a v1 save with string walls migrates to v2 pieces
+{
+  const v1 = {
+    format: data.FORMAT, formatVersion: 1, id: 's', name: 'Old', startLevelId: 'L1',
+    levels: [{ id: 'L1', name: 'D', entry: { roomId: 'R1', x: 1, y: 1 }, rooms: [{
+      id: 'R1', size: { w: 2, h: 2 }, transform: { x: 0, y: 0, rotation: 0 }, objects: [], events: [],
+      tiles: [[{ floor: 'deck', wall: 'solid', wallMaterial: 'glass' }, { floor: 'deck', wall: 'diagA', wallMaterial: 'hull' }], [{ floor: 'deck', wall: null }, { floor: 'deck', wall: null }]]
+    }] }], links: []
+  };
+  const { save: up } = save.deserialize(JSON.stringify(v1));
+  const w00 = up.levels[0].rooms[0].tiles[0][0].wall;
+  const w01 = up.levels[0].rooms[0].tiles[0][1].wall;
+  check('migration lifts save to current version', up.formatVersion === data.FORMAT_VERSION);
+  check('migration converts solid → block piece w/ material', w00 && w00.kind === 'block' && w00.material === 'glass');
+  check('migration converts diagA → diagonal piece', w01 && w01.kind === 'diagonal');
+  check('migration drops legacy wallMaterial field', up.levels[0].rooms[0].tiles[0][0].wallMaterial === undefined);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

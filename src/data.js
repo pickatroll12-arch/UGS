@@ -25,7 +25,7 @@
 
   // Bump when the on-disk shape changes in a non-backward-compatible way.
   const FORMAT = 'ugs-station';
-  const FORMAT_VERSION = 1;
+  const FORMAT_VERSION = 2;   // v2: walls are pieces {kind,orientation,collision,material} (R2-06)
 
   // ---- small helpers ------------------------------------------------------
   let idSeq = 0;
@@ -55,7 +55,47 @@
   };
 
   // Wall shapes are geometry, independent of material.
+  // Legacy (format v1): a plain string 'solid' | 'diagA' | 'diagB'.
   const WALL_SHAPES = ['solid', 'diagA', 'diagB'];
+  // R2-06: a wall is now a piece — { kind, orientation, collision, material }.
+  //   kind        : 'block' | 'diagonal' | 'rounded'
+  //   orientation : 0..315 in 45° steps (which corner a diagonal/rounded cuts)
+  //   collision   : 'full' | 'partial'   (Phase 1 keeps 'full'; nav treats any
+  //                 wall as blocking until partial-collision nav lands)
+  //   material    : wall material id ('hull' | 'glass')
+  const WALL_KINDS = ['block', 'diagonal', 'rounded'];
+  // legacy string → piece
+  const LEGACY_WALL = {
+    solid: { kind: 'block', orientation: 0 },
+    diagA: { kind: 'diagonal', orientation: 0 },     // "/"
+    diagB: { kind: 'diagonal', orientation: 90 }     // "\"
+  };
+  function isWallKind(k) { return WALL_KINDS.indexOf(k) !== -1; }
+
+  function createWall(kind, orientation, material, collision) {
+    return {
+      kind: isWallKind(kind) ? kind : 'block',
+      orientation: snapAngle(orientation),
+      collision: collision === 'partial' ? 'partial' : 'full',
+      material: isMaterial(material) ? material : 'hull'
+    };
+  }
+  // Coerce any stored/legacy wall value into a piece (or null). `legacyMat` is
+  // the old sibling tile.wallMaterial, folded into the piece when upgrading.
+  function normalizeWall(raw, legacyMat) {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      const L = LEGACY_WALL[raw]; if (!L) return null;
+      return createWall(L.kind, L.orientation, isMaterial(legacyMat) ? legacyMat : 'hull', 'full');
+    }
+    if (typeof raw === 'object') {
+      if (!isWallKind(raw.kind)) return null;
+      return createWall(raw.kind, raw.orientation, isMaterial(raw.material) ? raw.material : legacyMat, raw.collision);
+    }
+    return null;
+  }
+  // does a wall block movement? (Phase 1: any wall blocks; partial nav is Phase 2)
+  function wallBlocks(wall) { return !!wall; }
 
   // Build layers — used to toggle visibility and filter selection.
   const LAYERS = ['structural', 'decor', 'electrical', 'traversal'];
@@ -92,7 +132,7 @@
   function isFloor(id) { return id === 'void' || isMaterial(id); }
 
   function createTile(floor = 'deck') {
-    return { floor: isFloor(floor) ? floor : 'deck', wall: null, wallMaterial: null };
+    return { floor: isFloor(floor) ? floor : 'deck', wall: null };
   }
 
   // Authoring rotation step (degrees). Objects, rooms, and gizmo handles all
@@ -189,7 +229,7 @@
     for (let y = 0; y < oldH; y++) {
       for (let x = 0; x < oldW; x++) {
         const nx = x + dx, ny = y + dy;
-        if (inBounds(nx, ny)) { const s = room.tiles[y][x]; grid[ny][nx] = { floor: s.floor, wall: s.wall, wallMaterial: s.wallMaterial }; }
+        if (inBounds(nx, ny)) { const s = room.tiles[y][x]; grid[ny][nx] = { floor: s.floor, wall: (s.wall && typeof s.wall === 'object') ? Object.assign({}, s.wall) : (s.wall || null) }; }
       }
     }
     room.tiles = grid;
@@ -369,9 +409,8 @@
       for (let x = 0; x < w; x++) {
         const src = input.tiles && input.tiles[y] && input.tiles[y][x];
         const floor = src && isFloor(src.floor) ? src.floor : 'deck';
-        const wall = src && isWallShape(src.wall) ? src.wall : null;
-        const wallMat = src && isMaterial(src.wallMaterial) ? src.wallMaterial : (wall ? 'hull' : null);
-        room.tiles[y][x] = { floor, wall, wallMaterial: wallMat };
+        const wall = src ? normalizeWall(src.wall, src.wallMaterial) : null;
+        room.tiles[y][x] = { floor, wall };
       }
     }
 
@@ -433,8 +472,9 @@
 
   return {
     FORMAT, FORMAT_VERSION,
-    MATERIALS, WALL_SHAPES, LAYERS, OBJECT_DEFS,
-    isMaterial, isFloor, isObjectType, isWallShape, isLayer, objectBlocks,
+    MATERIALS, WALL_SHAPES, WALL_KINDS, LAYERS, OBJECT_DEFS,
+    isMaterial, isFloor, isObjectType, isWallShape, isWallKind, isLayer, objectBlocks,
+    createWall, normalizeWall, wallBlocks,
     uid, clamp, snapAngle, ROT_STEP,
     createTile, createTransform, createRoom, resizeRoom, createObjectInstance,
     createRoomEvent, createLink, createLevel, createSaveFile,

@@ -218,6 +218,40 @@
     ctx.closePath(); ctx.fill();
   }
 
+  // R2-06: extrude an arbitrary ground polygon (screen-space points) up by H,
+  // drawing its side faces then the top. Used to render oriented wall pieces
+  // (a full block is the whole diamond; a diagonal is half of it; a rounded
+  // wall bows the cut edge inward).
+  function extrudeAt(ctx, pts, H, topCol, sideCol) {
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      // outward-ish faces get a slightly darker right side for depth
+      ctx.fillStyle = (a.x + b.x) / 2 > pts.reduce((s, p) => s + p.x, 0) / pts.length ? shade(sideCol, -18) : sideCol;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x, b.y - H); ctx.lineTo(a.x, a.y - H);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = topCol;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y - H);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y - H);
+    ctx.closePath(); ctx.fill();
+  }
+  // Ground-plane polygon for a wall piece, in screen space around centre s.
+  function wallPolygon(s, hw, hh, kind, orientation) {
+    const C = [{ x: s.x, y: s.y - hh }, { x: s.x + hw, y: s.y }, { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }]; // T,R,B,L
+    if (kind === 'block') return C;
+    const i = (Math.round(((orientation % 360) + 360) % 360 / 90)) % 4;   // 0..3
+    const tri = [C[i], C[(i + 1) % 4], C[(i + 2) % 4]];
+    if (kind === 'diagonal') return tri;
+    // rounded: bow the cut (hypotenuse from tri[0] to tri[2]) inward toward the 4th corner
+    const opp = C[(i + 3) % 4];
+    const mid = { x: (tri[0].x + tri[2].x) / 2, y: (tri[0].y + tri[2].y) / 2 };
+    const inner = { x: mid.x + (opp.x - mid.x) * 0.55, y: mid.y + (opp.y - mid.y) * 0.55 };
+    return [tri[0], tri[1], tri[2], inner];
+  }
+
   // ---- object art (flat placeholders, swapped for sprites later) ----------
   function drawObject(ctx, s, zoom, obj, selected) {
     ctx.save();
@@ -401,13 +435,15 @@
     for (const e of ents) {
       const s = worldToScreen(cam, e.wx, e.wy);
       if (e.kind === 'wall') {
-        const mat = data.MATERIALS[e.tile.wallMaterial] || data.MATERIALS.hull;
+        const wall = e.tile.wall || {};
+        const mat = data.MATERIALS[wall.material] || data.MATERIALS[e.tile.wallMaterial] || data.MATERIALS.hull;
+        const pts = wallPolygon(s, hw, hh, wall.kind || 'block', wall.orientation || 0);
         if (mat.glass) {
           ctx.save(); ctx.globalAlpha = 0.5;
-          blockAt(ctx, s, hw, hh, WALL_H * 0.82 * cam.zoom, shade(mat.color, 30), mat.color);
+          extrudeAt(ctx, pts, WALL_H * 0.82 * cam.zoom, shade(mat.color, 30), mat.color);
           ctx.restore();
         } else {
-          blockAt(ctx, s, hw, hh, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
+          extrudeAt(ctx, pts, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
         }
       } else {
         drawObject(ctx, s, cam.zoom, e.obj, e.sel);

@@ -198,10 +198,13 @@
       'mat.glass': 'Glass',
       'mat.void': 'void (empty)',
 
-      // wall shapes (by id)
+      // wall shapes (legacy) + kinds (R2-06)
       'wall.solid': 'Solid',
       'wall.diagA': 'Diag /',
       'wall.diagB': 'Diag \\',
+      'wall.block': 'Block',
+      'wall.diagonal': 'Diagonal',
+      'wall.rounded': 'Rounded',
 
       // objects (by id)
       'obj.console': 'Console',
@@ -311,6 +314,7 @@
       'status.importFailed': 'Import failed: {err}',
       'status.loaded': 'Loaded.',
       'status.brushRotated': 'Object brush angle: {deg}°.',
+      'status.wallRotated': 'Wall orientation: {deg}°.',
       'confirm.deleteRoom': 'Delete room "{name}" and everything in it? This also removes any links attached to it.',
       // shared values
       'val.none': 'none',
@@ -467,6 +471,9 @@
       'wall.solid': 'Sólida',
       'wall.diagA': 'Diag /',
       'wall.diagB': 'Diag \\',
+      'wall.block': 'Bloque',
+      'wall.diagonal': 'Diagonal',
+      'wall.rounded': 'Redondeada',
 
       'obj.console': 'Consola',
       'obj.crate': 'Caja de carga',
@@ -571,6 +578,7 @@
       'status.importFailed': 'Importación fallida: {err}',
       'status.loaded': 'Cargado.',
       'status.brushRotated': 'Ángulo del brush de objeto: {deg}°.',
+      'status.wallRotated': 'Orientación de pared: {deg}°.',
       'confirm.deleteRoom': '¿Borrar la sala "{name}" y todo lo que contiene? También elimina los enlaces asociados.',
       'val.none': 'ninguno',
       'val.interactive': 'interactivo',

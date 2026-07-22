@@ -163,6 +163,15 @@ const run = async () => {
     return { levels: app.save.levels.length, links: app.save.links.length };
   });
   ck('import: two-deck fixture loaded', imported.levels === 2 && imported.links === 1, imported);
+  // R2-06: the fixture is a v1 save (string walls) — it must migrate to v2 pieces
+  const migrated = await page.evaluate(() => {
+    const app = window.UGS.editorApp;
+    for (const lvl of app.save.levels) for (const room of lvl.rooms) for (const row of room.tiles) for (const tl of row) {
+      if (tl.wall) return { obj: typeof tl.wall === 'object', kind: tl.wall.kind, ver: app.save.formatVersion };
+    }
+    return null;
+  });
+  ck('migration: legacy string walls became v2 pieces', !!migrated && migrated.obj && !!migrated.kind, migrated);
 
   // order the pawn onto a tile in the active deck (no deck change expected)
   async function walkTo(tx, ty) {

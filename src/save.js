@@ -25,7 +25,24 @@
   // takes the raw object at version N and returns it shaped for version N+1.
   // Empty for now (we are at v1); this is the seam so v1 saves never break.
   const MIGRATIONS = {
-    // 1: (raw) => { ...transform v1 → v2...; return raw; }
+    // v1 → v2 (R2-06): walls become pieces. Convert each tile's legacy string
+    // wall ('solid'/'diagA'/'diagB') + sibling wallMaterial into a
+    // { kind, orientation, collision, material } object, and drop wallMaterial.
+    1: (raw) => {
+      for (const lvl of (raw.levels || [])) {
+        for (const room of (lvl.rooms || [])) {
+          const rows = room.tiles || [];
+          for (const row of rows) {
+            for (const tile of (row || [])) {
+              if (!tile) continue;
+              tile.wall = data.normalizeWall(tile.wall, tile.wallMaterial);
+              delete tile.wallMaterial;
+            }
+          }
+        }
+      }
+      return raw;
+    }
   };
 
   function migrate(raw) {
