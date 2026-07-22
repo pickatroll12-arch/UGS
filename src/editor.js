@@ -16,6 +16,8 @@
   const R = window.UGS.render;
   const S = window.UGS.save;
   const CORE = window.UGS.core;
+  const I = window.UGS.i18n;
+  const t = (k, p) => I.t(k, p);
   const engine = window.UGS.engine.create();
   const simClock = new CORE.FixedTimestep(30, 6);   // 30 Hz deterministic sim
   let needsRender = true;                            // render-on-demand (idle editor draws nothing)
@@ -136,7 +138,7 @@
     if (!bar) return;
     bar.style.display = app.mode === 'play' ? 'flex' : 'none';
     const pb = document.getElementById('pauseBtn');
-    if (pb) pb.textContent = app.clock.paused ? '▶ Resume' : '❚❚ Pause';
+    if (pb) pb.textContent = app.clock.paused ? t('play.resume') : t('play.pause');
     [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
   }
   function setTool(tool) {
@@ -539,52 +541,52 @@
   // ---- inspector ----------------------------------------------------------
   function updateInspector() {
     const lvl = activeLevel();
-    if (!app.selection) { inspector.innerHTML = '<span class="muted">Nothing selected. Click a tile or object.</span>'; return; }
+    if (!app.selection) { inspector.innerHTML = `<span class="muted">${esc(t('insp.empty'))}</span>`; return; }
     const room = roomById(app.selection.roomId);
     if (!room) { inspector.innerHTML = '<span class="muted">—</span>'; return; }
     const obj = app.selection.objectId ? room.objects.find(o => o.id === app.selection.objectId) : null;
     const tile = room.tiles[app.selection.ly] && room.tiles[app.selection.ly][app.selection.lx];
 
-    let h = `<div class="row"><b>Room</b><span>${esc(room.name)}</span></div>`;
-    h += `<div class="row"><b>Transform</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
-    h += `<div class="row"><b>Local tile</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
+    let h = `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
+    h += `<div class="row"><b>${esc(t('insp.transform'))}</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
+    h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
     if (tile) {
-      h += `<div class="row"><b>Floor</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
-      h += `<div class="row"><b>Wall</b><span>${tile.wall || 'none'}</span></div>`;
+      h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
+      h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall, tile.wall)) : esc(t('val.none'))}</span></div>`;
     }
     if (obj) {
       const def = D.OBJECT_DEFS[obj.type];
-      h += `<hr><div class="row"><b>Object</b><span>${esc(obj.name)}</span></div>`;
-      h += `<div class="row"><b>Type</b><span>${obj.type} · ${obj.rotation || 0}°</span></div>`;
-      h += `<div class="row"><b>Layer</b><span>${obj.layer}</span></div>`;
-      h += `<div class="row"><b>Flags</b><span>${obj.interactive ? 'interactive ' : ''}${obj.collision ? 'solid' : ''}</span></div>`;
-      if (def.openable) h += `<div class="row"><b>State</b><span>${obj.open ? 'open' : 'closed'}</span></div>`;
-      h += `<div class="row"><b>Power/Heat</b><span>${obj.power} / ${obj.heat}</span></div>`;
-      h += `<div class="mini"><button data-act="rotate">Rotate 45°</button><button data-act="dup">Duplicate</button>`;
-      if (def.openable) h += `<button data-act="toggle">${obj.open ? 'Close' : 'Open'}</button>`;
-      h += `<button class="danger" data-act="delete">Delete</button></div>`;
+      h += `<hr><div class="row"><b>${esc(t('insp.object'))}</b><span>${esc(I.label('obj.' + obj.type, obj.name))}</span></div>`;
+      h += `<div class="row"><b>${esc(t('insp.type'))}</b><span>${obj.type} · ${obj.rotation || 0}°</span></div>`;
+      h += `<div class="row"><b>${esc(t('insp.layer'))}</b><span>${esc(I.label('layer.' + obj.layer, obj.layer))}</span></div>`;
+      h += `<div class="row"><b>${esc(t('insp.flags'))}</b><span>${obj.interactive ? esc(t('val.interactive')) + ' ' : ''}${obj.collision ? esc(t('val.solid')) : ''}</span></div>`;
+      if (def.openable) h += `<div class="row"><b>${esc(t('insp.state'))}</b><span>${esc(t(obj.open ? 'val.open' : 'val.closed'))}</span></div>`;
+      h += `<div class="row"><b>${esc(t('insp.powerHeat'))}</b><span>${obj.power} / ${obj.heat}</span></div>`;
+      h += `<div class="mini"><button data-act="rotate">${esc(t('insp.rotate45'))}</button><button data-act="dup">${esc(t('insp.duplicate'))}</button>`;
+      if (def.openable) h += `<button data-act="toggle">${esc(t(obj.open ? 'insp.close' : 'insp.open'))}</button>`;
+      h += `<button class="danger" data-act="delete">${esc(t('insp.delete'))}</button></div>`;
     }
 
     // --- Room motion (Milestone 4) ---
-    h += `<hr><div class="row"><b>Movable</b><span><input type="checkbox" data-act="movable" ${room.movable ? 'checked' : ''}></span></div>`;
+    h += `<hr><div class="row"><b>${esc(t('insp.movable'))}</b><span><input type="checkbox" data-act="movable" ${room.movable ? 'checked' : ''}></span></div>`;
     if (room.events && room.events.length) {
       for (const ev of room.events) {
         const kind = ev.action ? ev.action.kind : '?';
         const extra = kind === 'orbit' ? ` ${ev.action.direction === 'ccw' ? '⟲' : '⟳'}` : (ev.loop ? ' ⟳' : '');
         h += `<div class="row" style="margin-top:4px"><b>${esc(ev.name)}</b><span>${kind}${extra} · ${ev.trigger ? ev.trigger.type : 'manual'}</span></div>`;
-        h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">Test ▶</button>`;
-        if (kind === 'orbit') h += `<button data-act="evt-orbitdir" data-id="${ev.id}">Flip ⟳⟲</button>`;
+        h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">${esc(t('insp.test'))}</button>`;
+        if (kind === 'orbit') h += `<button data-act="evt-orbitdir" data-id="${ev.id}">${esc(t('insp.flip'))}</button>`;
         h += `<button class="danger" data-act="evt-del" data-id="${ev.id}">✕</button></div>`;
       }
     } else {
-      h += `<div class="row"><span class="muted">No motion events.</span></div>`;
+      h += `<div class="row"><span class="muted">${esc(t('insp.noMotion'))}</span></div>`;
     }
-    h += `<div class="mini"><button data-act="evt-shift">+ Shift</button><button data-act="evt-rotate">+ Rotate</button></div>`;
-    h += `<div class="mini"><button data-act="evt-orbit">+ Orbit</button><button data-act="evt-carousel">+ Carousel</button></div>`;
-    h += `<div class="hint" style="margin-top:6px">On the map: drag the white ▪ to move the room, the white ● to rotate it. Coloured handles aim each motion (orbit: orange = axis, yellow = radius).</div>`;
+    h += `<div class="mini"><button data-act="evt-shift">${esc(t('insp.addShift'))}</button><button data-act="evt-rotate">${esc(t('insp.addRotate'))}</button></div>`;
+    h += `<div class="mini"><button data-act="evt-orbit">${esc(t('insp.addOrbit'))}</button><button data-act="evt-carousel">${esc(t('insp.addCarousel'))}</button></div>`;
+    h += `<div class="hint" style="margin-top:6px">${esc(t('insp.mapHint'))}</div>`;
     inspector.innerHTML = h;
   }
-  function floorLabel(id) { return id === 'void' ? 'void (empty)' : ((D.MATERIALS[id] || {}).label || id); }
+  function floorLabel(id) { return id === 'void' ? I.label('mat.void', 'void (empty)') : I.label('mat.' + id, (D.MATERIALS[id] || {}).label || id); }
   function fmt(n) { return Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(1); }
   function esc(v) { return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -672,31 +674,39 @@
   }
 
   // ---- palette wiring ------------------------------------------------------
+  // Chip labels come from i18n (translated by id) so they follow the active
+  // language. Rebuilt on language change; wraps are cleared first (idempotent).
+  function matLabel(m) { return I.label('mat.' + m.id, m.label); }
+  function objLabel(def) { return I.label('obj.' + def.type, def.label); }
+  function wallShapeLabel(id, fallback) { return I.label('wall.' + id, fallback); }
+  function layerLabel(id) { return I.label('layer.' + id, id); }
+
   function buildPalettes() {
     // floor materials
     const floors = Object.values(D.MATERIALS).filter(m => m.kind === 'floor');
-    const fWrap = document.getElementById('floorPalette');
-    for (const m of floors) fWrap.appendChild(chip(m.label, () => { app.brush.floor = m.id; markActive(fWrap, m.id); setTool('floor'); }, m.id, app.brush.floor === m.id));
-    fWrap.appendChild(chip('Void', () => { app.brush.floor = 'void'; markActive(fWrap, 'void'); setTool('floor'); }, 'void', false));
+    const fWrap = document.getElementById('floorPalette'); fWrap.innerHTML = '';
+    for (const m of floors) fWrap.appendChild(chip(matLabel(m), () => { app.brush.floor = m.id; markActive(fWrap, m.id); setTool('floor'); }, m.id, app.brush.floor === m.id));
+    fWrap.appendChild(chip(I.label('mat.void', 'Void'), () => { app.brush.floor = 'void'; markActive(fWrap, 'void'); setTool('floor'); }, 'void', app.brush.floor === 'void'));
     // objects
-    const oWrap = document.getElementById('objectPalette');
-    for (const def of Object.values(D.OBJECT_DEFS)) oWrap.appendChild(chip(def.label, () => { app.brush.object = def.type; markActive(oWrap, def.type); setTool('object'); }, def.type, app.brush.object === def.type));
+    const oWrap = document.getElementById('objectPalette'); oWrap.innerHTML = '';
+    for (const def of Object.values(D.OBJECT_DEFS)) oWrap.appendChild(chip(objLabel(def), () => { app.brush.object = def.type; markActive(oWrap, def.type); setTool('object'); }, def.type, app.brush.object === def.type));
     // wall shapes
-    const wWrap = document.getElementById('wallPalette');
+    const wWrap = document.getElementById('wallPalette'); wWrap.innerHTML = '';
     [['solid', 'Solid'], ['diagA', 'Diag /'], ['diagB', 'Diag \\']].forEach(([id, label]) =>
-      wWrap.appendChild(chip(label, () => { app.brush.wallShape = id; markActive(wWrap, id); setTool('wall'); }, id, app.brush.wallShape === id)));
+      wWrap.appendChild(chip(wallShapeLabel(id, label), () => { app.brush.wallShape = id; markActive(wWrap, id); setTool('wall'); }, id, app.brush.wallShape === id)));
     // wall materials (hull vs glass/windows)
-    const wmWrap = document.getElementById('wallMatPalette');
+    const wmWrap = document.getElementById('wallMatPalette'); wmWrap.innerHTML = '';
     Object.values(D.MATERIALS).filter(m => m.kind === 'wall').forEach(m =>
-      wmWrap.appendChild(chip(m.label, () => { app.brush.wallMat = m.id; markActive(wmWrap, m.id); setTool('wall'); }, m.id, app.brush.wallMat === m.id)));
+      wmWrap.appendChild(chip(matLabel(m), () => { app.brush.wallMat = m.id; markActive(wmWrap, m.id); setTool('wall'); }, m.id, app.brush.wallMat === m.id)));
     // layer visibility toggles
-    const lWrap = document.getElementById('layerToggles');
+    const lWrap = document.getElementById('layerToggles'); lWrap.innerHTML = '';
     D.LAYERS.forEach(name => {
-      const b = document.createElement('button'); b.textContent = name; b.dataset.key = name; b.classList.add('active');
+      const b = document.createElement('button'); b.textContent = layerLabel(name); b.dataset.key = name;
+      b.classList.toggle('active', !app.hiddenLayers.has(name));
       b.addEventListener('click', () => {
         if (app.hiddenLayers.has(name)) app.hiddenLayers.delete(name); else app.hiddenLayers.add(name);
         b.classList.toggle('active', !app.hiddenLayers.has(name));
-        setStatus(`Layer ${name} ${app.hiddenLayers.has(name) ? 'hidden' : 'shown'}.`);
+        setStatus(t(app.hiddenLayers.has(name) ? 'status.layerHidden' : 'status.layerShown', { layer: layerLabel(name) }));
       });
       lWrap.appendChild(b);
     });
@@ -704,6 +714,32 @@
   function chip(label, onClick, key, active) {
     const b = document.createElement('button'); b.textContent = label; b.dataset.key = key;
     if (active) b.classList.add('active'); b.addEventListener('click', onClick); return b;
+  }
+
+  // ---- language wiring -----------------------------------------------------
+  function setupLanguage() {
+    const sel = document.getElementById('langSelect');
+    if (sel) {
+      sel.innerHTML = '';
+      I.languages().forEach(code => {
+        const o = document.createElement('option');
+        o.value = code; o.textContent = t('lang.' + code); o.selected = code === I.getLang();
+        sel.appendChild(o);
+      });
+      sel.value = I.getLang();
+      sel.addEventListener('change', e => I.setLang(e.target.value));
+    }
+    // Anything generated in JS (palettes, inspector, status, play bar) must be
+    // re-rendered when the language flips; static [data-i18n] nodes are handled
+    // by I.apply() inside setLang.
+    I.subscribe((lang) => {
+      buildPalettes();
+      updateInspector();
+      updatePlayBar();
+      if (sel) sel.value = lang;
+      setStatus(t('status.langChanged', { lang: t('lang.' + lang) }));
+    });
+    I.apply(document);   // paint the initial language onto the static markup
   }
   function markActive(wrap, key) { wrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.key === key)); }
 
@@ -755,7 +791,7 @@
     document.getElementById('playBtn').addEventListener('click', () => setMode('play'));
     document.getElementById('undoBtn').addEventListener('click', undo);
     document.getElementById('redoBtn').addEventListener('click', redo);
-    document.getElementById('newBtn').addEventListener('click', () => loadSave(blankStation(), 'New station — one empty room. Paint floors, raise walls, place objects.'));
+    document.getElementById('newBtn').addEventListener('click', () => loadSave(blankStation(), t('status.newStation')));
     document.getElementById('exportBtn').addEventListener('click', () => {
       try { setStatus('Exported ' + S.exportToFile(app.save)); } catch (err) { setStatus('Export failed: ' + err.message); }
     });
@@ -795,15 +831,16 @@
     document.getElementById('delLevelBtn').addEventListener('click', deleteLevel);
     document.getElementById('levelName').addEventListener('change', e => renameLevel(e.target.value));
     const filterSel = document.getElementById('selectFilter');
-    filterSel.addEventListener('change', e => { app.selectFilter = e.target.value; setStatus(`Select filter: ${e.target.value}.`); });
+    filterSel.addEventListener('change', e => { app.selectFilter = e.target.value; setStatus(t('status.filter', { filter: t('filter.' + e.target.value) })); });
 
     // agent manager + deterministic movement system (Play mode)
     agents = window.UGS.agents.create(engine);
     agents.install();
     if (engine.bus) engine.bus.on('pawn:arrived', onPawnArrived);
 
+    setupLanguage();
     buildPalettes();
-    loadSave(blankStation(), 'Empty room ready. Paint floors and raise walls, or hit Play to walk the pawn.');
+    loadSave(blankStation(), t('status.emptyReady'));
     setMode('build'); setTool('select');
     requestAnimationFrame(frame);
 
