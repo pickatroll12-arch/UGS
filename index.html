@@ -164,12 +164,61 @@
   #playBar .pb-hint { font-size: 10px; color: var(--muted); margin-left: 4px; max-width: 42vw; }
   body.playing #game { cursor: pointer; }
 
+  /* ── APP SHELL: main menu + dev/game modes (R2-07) ───────── */
+  #mainMenu { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+    background: radial-gradient(circle at 50% 28%, #17171e, #0b0b0e 70%); }
+  body.mode-menu #mainMenu { display: flex; }
+  .mm-title { font-size: 30px; font-weight: 800; letter-spacing: .12em; margin: 0; }
+  .mm-sub { font-size: 12px; color: var(--muted); margin: 6px 0 22px; }
+  .mm-btns { display: flex; flex-direction: column; gap: 8px; width: 264px; }
+  .mm-btns button { padding: 11px 14px; font-size: 14px; text-align: left; }
+  .mm-btns button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
+  .mm-btns button:disabled { opacity: .4; cursor: default; }
+  .mm-lang { margin-top: 18px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  .mm-lang select { padding: 5px 8px; font-size: 12px; }
+
+  /* menu mode hides the whole workspace */
+  body.mode-menu #topbar, body.mode-menu #toolrail, body.mode-menu #sidepanel,
+  body.mode-menu #bottombar, body.mode-menu #playBar, body.mode-menu #hud,
+  body.mode-menu #status, body.mode-menu #gameBar { display: none !important; }
+
+  /* game mode hides the dev toolbox + dev play bar */
+  body.mode-game #toolrail, body.mode-game #sidepanel, body.mode-game #bottombar,
+  body.mode-game #playBar { display: none !important; }
+  body.mode-game #topbar .tb-group, body.mode-game .modeswitch { display: none; }
+  #gameBar { position: fixed; z-index: 5; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 44px rgba(0,0,0,.4); }
+  body.mode-game #gameBar { display: flex; }
+  #gameBar strong { font-size: 11px; letter-spacing: .12em; color: #d8d8dd; }
+  #gameBar button { padding: 6px 10px; }
+  .tb-menu { padding: 5px 10px; }
+  .modechip { font-size: 10px; font-weight: 800; letter-spacing: .12em; padding: 3px 8px;
+    border-radius: 5px; background: #26262c; border: 1px solid var(--line); color: var(--muted); }
+
   /* keep it usable on shorter/narrower screens */
   @media (max-width: 1180px) { :root { --side-w: 240px; --rail-w: 66px; } }
 </style>
 </head>
-<body>
+<body class="mode-menu">
 <canvas id="game"></canvas>
+
+<!-- ── MAIN MENU (R2-07) ─────────────────────────────────────── -->
+<div id="mainMenu">
+  <h1 class="mm-title" data-i18n="app.brand">UGS · STATION BUILDER</h1>
+  <p class="mm-sub" data-i18n="menu.subtitle">Space-station builder</p>
+  <div class="mm-btns">
+    <button id="mmContinue" data-i18n="menu.continue">Continue</button>
+    <button id="mmNew" class="primary" data-i18n="menu.new">New station</button>
+    <button id="mmLoad" data-i18n="menu.load">Load station…</button>
+    <button id="mmDev" data-i18n="menu.dev">Dev mode</button>
+    <button id="mmPlay" data-i18n="menu.play">Play</button>
+    <button id="mmOptions" disabled data-i18n="menu.options">Options</button>
+  </div>
+  <label class="mm-lang"><span class="ic">🌐</span><span data-i18n="lang.label">Language</span>
+    <select id="mmLangSelect" aria-label="Language"></select></label>
+</div>
 
 <!-- ── TOP BAR ───────────────────────────────────────────────── -->
 <header id="topbar">
@@ -177,6 +226,8 @@
     <span class="tb-logo" data-i18n="app.brand">UGS · STATION BUILDER</span>
     <span class="tb-sub" data-i18n="app.subtitle">Stage 1 · revised</span>
   </div>
+  <button id="menuBtn" class="tb-menu" data-i18n="topbar.menu">☰ Menu</button>
+  <span id="modeChip" class="modechip"></span>
   <div class="tb-group">
     <span class="tb-cap" data-i18n="topbar.deck">Deck</span>
     <select id="levelSelect"></select>
@@ -325,6 +376,14 @@
       <button id="helpClose" data-i18n="help.gotit">Got it</button>
     </div>
   </div>
+</div>
+
+<!-- ── GAME BAR (player runtime, R2-07) ──────────────────────── -->
+<div id="gameBar">
+  <strong data-i18n="mode.game">GAME</strong>
+  <button id="gPause">❚❚</button>
+  <button id="gExpand" data-i18n="game.expand">Expand station</button>
+  <button id="gMenu" data-i18n="game.menu">Menu</button>
 </div>
 
 <div id="hud"></div>

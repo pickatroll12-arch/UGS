@@ -43,6 +43,25 @@
 
       // top bar
       'topbar.deck': 'Deck',
+      'topbar.menu': '☰ Menu',
+
+      // main menu (R2-07)
+      'menu.subtitle': 'Space-station builder',
+      'menu.continue': 'Continue',
+      'menu.new': 'New station',
+      'menu.load': 'Load station…',
+      'menu.dev': 'Dev mode',
+      'menu.play': 'Play',
+      'menu.options': 'Options',
+
+      // app modes
+      'mode.dev': 'Dev',
+      'mode.game': 'Game',
+      'game.expand': 'Expand station',
+      'game.menu': 'Menu',
+      'game.expandSoon': 'Game Build (paid construction) arrives with the credits system.',
+      'status.enterDev': 'Dev mode — full toolbox. Build, then Play to test.',
+      'status.enterGame': 'Game mode — you are aboard the station.',
 
       // modes
       'mode.build': 'Build',
@@ -333,6 +352,23 @@
       'app.subtitle': 'Etapa 1 · revisada — constructor usable',
 
       'topbar.deck': 'Deck',
+      'topbar.menu': '☰ Menú',
+
+      'menu.subtitle': 'Constructor de estación espacial',
+      'menu.continue': 'Continuar',
+      'menu.new': 'Nueva estación',
+      'menu.load': 'Cargar estación…',
+      'menu.dev': 'Modo Dev',
+      'menu.play': 'Jugar',
+      'menu.options': 'Opciones',
+
+      'mode.dev': 'Dev',
+      'mode.game': 'Juego',
+      'game.expand': 'Expandir estación',
+      'game.menu': 'Menú',
+      'game.expandSoon': 'La construcción de jugador (con créditos) llega con el sistema de economía.',
+      'status.enterDev': 'Modo Dev — caja de herramientas completa. Construye y pulsa Jugar para probar.',
+      'status.enterGame': 'Modo Juego — estás a bordo de la estación.',
 
       'mode.build': 'Construir',
       'mode.play': 'Jugar',

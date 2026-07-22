@@ -49,20 +49,28 @@ const run = async () => {
   await page.waitForFunction(() => !!(window.UGS && window.UGS.editorApp), { timeout: 10000 });
   await page.waitForTimeout(300);
 
-  // ── 1. boot: default station + first-run help overlay ────────────────────
+  // ── 1. boot: main menu, default station in memory (R2-07) ────────────────
   const boot = await page.evaluate(() => {
     const app = window.UGS.editorApp;
     const lvl = app.save.levels[0];
     return {
+      appMode: app.appMode, menuShown: document.body.classList.contains('mode-menu'),
       levels: app.save.levels.length, rooms: lvl.rooms.length,
       objects: lvl.rooms.reduce((n, r) => n + r.objects.length, 0),
-      help: document.getElementById('helpOverlay').classList.contains('on'),
     };
   });
-  ck('boot: one deck, one empty room', boot.levels === 1 && boot.rooms === 1 && boot.objects === 0, boot);
-  ck('boot: first-run help overlay shows', boot.help === true);
+  ck('boot: opens on the main menu', boot.appMode === 'menu' && boot.menuShown === true, boot);
+  ck('boot: default station is one empty room', boot.levels === 1 && boot.rooms === 1 && boot.objects === 0, boot);
 
-  // dismiss help for the rest of the run
+  // enter Dev mode via "New station"; first-run help overlay then shows
+  await page.click('#mmNew');
+  await page.waitForTimeout(150);
+  const dev = await page.evaluate(() => ({
+    dev: window.UGS.editorApp.appMode === 'dev',
+    help: document.getElementById('helpOverlay').classList.contains('on'),
+  }));
+  ck('menu: New station enters Dev mode', dev.dev === true);
+  ck('dev: first-run help overlay shows on first entry', dev.help === true);
   await page.click('#helpClose');
 
   // ── 2. language change translates a dynamic status ───────────────────────
@@ -265,6 +273,21 @@ const run = async () => {
   await page.waitForTimeout(300);
   ck('BUG-01: return trip keeps active motion (activeCount>0)', (await activeCount()) > 0);
   ck('BUG-01: deck 1 orbit animates again after return', (await motionChanges()).changed);
+
+  // ── 7b. app shell (R2-07): menu ⇄ dev ⇄ game routing ─────────────────────
+  await page.click('#menuBtn'); await page.waitForTimeout(120);
+  ck('shell: top-bar Menu returns to the main menu', await page.evaluate(() => window.UGS.editorApp.appMode === 'menu' && document.body.classList.contains('mode-menu')));
+  await page.click('#mmPlay'); await page.waitForTimeout(200);
+  const game = await page.evaluate(() => ({
+    mode: window.UGS.editorApp.appMode,
+    railHidden: getComputedStyle(document.getElementById('toolrail')).display === 'none',
+    sideHidden: getComputedStyle(document.getElementById('sidepanel')).display === 'none',
+    gameBar: getComputedStyle(document.getElementById('gameBar')).display !== 'none',
+    running: window.UGS._engine.isRunning(),
+  }));
+  ck('shell: Play enters Game mode (dev toolbox hidden, game bar shown, sim running)', game.mode === 'game' && game.railHidden && game.sideHidden && game.gameBar && game.running, game);
+  await page.click('#gMenu'); await page.waitForTimeout(120);
+  ck('shell: Game "Menu" returns to the main menu', await page.evaluate(() => window.UGS.editorApp.appMode === 'menu'));
 
   // ── 8. no console errors across the whole run ────────────────────────────
   ck('no console/page errors during smoke run', errors.length === 0, errors);

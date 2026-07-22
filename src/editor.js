@@ -27,7 +27,8 @@
   const app = {
     save: null,
     activeLevelId: null,
-    mode: 'build',
+    appMode: 'menu',               // menu | dev | game  (R2-07 app shell)
+    mode: 'build',                 // within Dev: build (Dev Edit) | play (Dev Test)
     tool: 'select',                // select | floor | wall | object | entry | erase | fill
     brush: { floor: 'deck', wallKind: 'block', wallOrient: 0, wallMat: 'hull', object: 'console', objectRotation: 0 },
     camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4, projection: 'isoTilted' },
@@ -114,7 +115,7 @@
     app.save = save; app.activeLevelId = save.startLevelId || save.levels[0].id;
     app.selection = null; undoStack.length = 0; redoStack.length = 0;
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); setStatus(msg || t('status.loaded'));
+    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); persistSave(); setStatus(msg || t('status.loaded'));
   }
   function setMode(mode) {
     if (mode === app.mode) return;
@@ -149,6 +150,7 @@
     const pb = document.getElementById('pauseBtn');
     if (pb) pb.textContent = app.clock.paused ? t('play.resume') : t('play.pause');
     [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
+    updateGameBar();
   }
   // which contextual palette group the bottom bar shows for each tool
   const TOOL_GROUP = { select: 'select', floor: 'floor', fill: 'floor', wall: 'wall', object: 'object' };
@@ -1128,14 +1130,68 @@
     if (btn) btn.addEventListener('click', () => showHelp(true));
     if (close) close.addEventListener('click', () => { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {} });
     if (ov) ov.addEventListener('click', e => { if (e.target === ov) { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e2) {} } });
+    // (first-run help is shown on first entry into Dev, not over the main menu)
+  }
+  function maybeShowFirstRunHelp() {
     let seen = false; try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
     if (!seen) showHelp(true);
   }
 
+  // ---- app shell: main menu + dev/game modes (R2-07) ----------------------
+  const AUTOSAVE_KEY = 'ugs.save';
+  function persistSave() {
+    try { if (app.save) localStorage.setItem(AUTOSAVE_KEY, S.serialize(app.save)); } catch (e) { /* storage off */ }
+  }
+  function hasAutosave() { try { return !!localStorage.getItem(AUTOSAVE_KEY); } catch (e) { return false; } }
+  function refreshContinue() {
+    const btn = document.getElementById('mmContinue'); if (btn) btn.disabled = !hasAutosave();
+  }
+  // menu | dev | game — toggles which chrome is visible and drives the sim.
+  function enterAppMode(mode) {
+    app.appMode = mode;
+    document.body.classList.toggle('mode-menu', mode === 'menu');
+    document.body.classList.toggle('mode-dev', mode === 'dev');
+    document.body.classList.toggle('mode-game', mode === 'game');
+    const chip = document.getElementById('modeChip');
+    if (chip) chip.textContent = mode === 'game' ? t('mode.game') : (mode === 'dev' ? t('mode.dev') : '');
+    if (mode === 'menu') {
+      if (app.mode === 'play') setMode('build');
+      persistSave(); refreshContinue();
+    } else if (mode === 'dev') {
+      setMode('build'); setStatus(t('status.enterDev')); maybeShowFirstRunHelp();
+    } else if (mode === 'game') {
+      // player runtime: the sim runs and the pawn is controllable, but no dev toolbox
+      setMode('play'); setStatus(t('status.enterGame'));
+    }
+    invalidate();
+  }
+  function setupShell() {
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    on('mmNew', () => { loadSave(blankStation(), t('status.newStation')); enterAppMode('dev'); });
+    on('mmDev', () => enterAppMode('dev'));
+    on('mmPlay', () => enterAppMode('game'));
+    on('mmContinue', () => {
+      try {
+        const raw = localStorage.getItem(AUTOSAVE_KEY); if (!raw) return;
+        const { save } = S.deserialize(raw); loadSave(save, t('status.loaded')); enterAppMode('dev');
+      } catch (e) { setStatus(t('status.importFailed', { err: e.message })); }
+    });
+    on('mmLoad', () => document.getElementById('fileInput').click());   // import, then stay in menu until loaded
+    on('menuBtn', () => enterAppMode('menu'));
+    on('gMenu', () => enterAppMode('menu'));
+    on('gPause', () => { app.clock.paused = !app.clock.paused; updatePlayBar(); updateGameBar(); });
+    on('gExpand', () => setStatus(t('game.expandSoon')));   // Game Build lands with credits (R2-08)
+    refreshContinue();
+  }
+  function updateGameBar() {
+    const pb = document.getElementById('gPause');
+    if (pb) pb.textContent = app.clock.paused ? '▶' : '❚❚';
+  }
+
   // ---- language wiring -----------------------------------------------------
   function setupLanguage() {
-    const sel = document.getElementById('langSelect');
-    if (sel) {
+    const sels = ['langSelect', 'mmLangSelect'].map(id => document.getElementById(id)).filter(Boolean);
+    for (const sel of sels) {
       sel.innerHTML = '';
       I.languages().forEach(code => {
         const o = document.createElement('option');
@@ -1155,7 +1211,9 @@
       refreshLinkList();
       updatePlayBar();
       syncToolContext(app.tool);
-      if (sel) sel.value = lang;
+      for (const s of sels) s.value = lang;
+      const chip = document.getElementById('modeChip');
+      if (chip && app.appMode !== 'menu') chip.textContent = app.appMode === 'game' ? t('mode.game') : t('mode.dev');
       setStatus(t('status.langChanged', { lang: t('lang.' + lang) }));
     });
     I.apply(document);   // paint the initial language onto the static markup
@@ -1235,6 +1293,7 @@
         const { save, warnings } = await S.importFromFile(file);
         loadSave(save, warnings.length ? t('status.importedWarnings', { name: save.name, n: warnings.length }) : t('status.imported', { name: save.name }));
         if (warnings.length) console.warn(warnings);
+        if (app.appMode === 'menu') enterAppMode('dev');   // R2-07: loading from the menu enters Dev
       }
       catch (err) { setStatus(t('status.importFailed', { err: err.message })); } finally { fileInput.value = ''; }
     });
@@ -1282,9 +1341,11 @@
 
     setupLanguage();
     setupHelp();
+    setupShell();
     buildPalettes();
     loadSave(blankStation(), t('status.emptyReady'));
-    setMode('build'); setTool('select');
+    setTool('select');
+    enterAppMode('menu');   // R2-07: start at the main menu, not straight into the editor
     requestAnimationFrame(frame);
 
     // debug/test hook (harmless): lets headless tests inspect live state
