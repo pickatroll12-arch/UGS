@@ -95,10 +95,14 @@
     return { floor: isFloor(floor) ? floor : 'deck', wall: null, wallMaterial: null };
   }
 
+  // Authoring rotation step (degrees). Objects, rooms, and gizmo handles all
+  // snap to this; it divides 360 evenly and keeps legacy 0/90/180/270 valid.
+  const ROT_STEP = 45;
+  function snapAngle(deg) { return ((Math.round(num(deg) / ROT_STEP) * ROT_STEP) % 360 + 360) % 360; }
+
   function createTransform(x = 0, y = 0, rotation = 0) {
-    // rotation is stored in degrees, normalised to 0/90/180/270.
-    const rot = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
-    return { x: num(x), y: num(y), rotation: rot, pivot: { x: 0, y: 0 } };
+    // rotation is stored in degrees, snapped to the 45° authoring step.
+    return { x: num(x), y: num(y), rotation: snapAngle(rotation), pivot: { x: 0, y: 0 } };
   }
 
   function createRoom(name = 'Room', w = 8, h = 8) {
@@ -369,7 +373,7 @@
       const def = OBJECT_DEFS[o.type];
       inst.id = str(o.id, inst.id);
       inst.name = str(o.name, inst.name);
-      inst.rotation = num(o.rotation) % 360;
+      inst.rotation = snapAngle(o.rotation);
       inst.layer = isLayer(o.layer) ? o.layer : def.layer;
       if (o.interactive != null) inst.interactive = bool(o.interactive);
       if (o.collision != null) inst.collision = bool(o.collision);
@@ -422,7 +426,7 @@
     FORMAT, FORMAT_VERSION,
     MATERIALS, WALL_SHAPES, LAYERS, OBJECT_DEFS,
     isMaterial, isFloor, isObjectType, isWallShape, isLayer, objectBlocks,
-    uid, clamp,
+    uid, clamp, snapAngle, ROT_STEP,
     createTile, createTransform, createRoom, resizeRoom, createObjectInstance,
     createRoomEvent, createLink, createLevel, createSaveFile,
     normalizeSave, normalizeLevel, normalizeRoom, normalizeRoomEvent, normalizeLink

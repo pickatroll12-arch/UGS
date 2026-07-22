@@ -69,7 +69,7 @@
       // tool hints (bottom line / tooltips)
       'tool.select.hint': 'Click a tile, object, wall, or room to inspect and edit it.',
       'tool.floor.hint': 'Paint floor tiles with the selected material.',
-      'tool.wall.hint': 'Raise walls on tile edges with the selected shape and material.',
+      'tool.wall.hint': 'Raise walls with the selected shape and material. Diagonal shapes are visual — they still block the whole tile.',
       'tool.object.hint': 'Place the selected object. Some are interactive in Play.',
       'tool.entry.hint': 'Set the deck spawn point where the pawn appears in Play.',
       'tool.erase.hint': 'Remove the topmost thing under the cursor (object, then wall, then floor).',
@@ -213,7 +213,7 @@
       'insp.powerHeat': 'Power/Heat',
       'insp.movable': 'Movable',
       'insp.noMotion': 'No motion events.',
-      'insp.mapHint': 'On the map: drag the white ▪ to move the room, the white ● to rotate it. Coloured handles aim each motion (orbit: orange = axis, yellow = radius).',
+      'insp.mapHint': 'On the map: drag the white ▪ to move the room, the white ● to rotate it (45° steps). Coloured handles aim each motion (orbit: orange = axis, yellow = radius).',
       // inspector — action buttons
       'insp.rotate45': 'Rotate 45°',
       'insp.duplicate': 'Duplicate',
@@ -278,7 +278,7 @@
 
       'tool.select.hint': 'Haz clic en un tile, objeto, pared o sala para inspeccionar y editar.',
       'tool.floor.hint': 'Pinta tiles de piso con el material seleccionado.',
-      'tool.wall.hint': 'Levanta paredes en los bordes con la forma y material elegidos.',
+      'tool.wall.hint': 'Levanta paredes con la forma y material elegidos. Las formas diagonales son visuales — igual bloquean todo el tile.',
       'tool.object.hint': 'Coloca el objeto seleccionado. Algunos son interactivos al Jugar.',
       'tool.entry.hint': 'Fija el punto de aparición del pawn en el deck al Jugar.',
       'tool.erase.hint': 'Quita lo que esté encima del cursor (objeto, luego pared, luego piso).',
@@ -406,7 +406,7 @@
       'insp.powerHeat': 'Energía/Calor',
       'insp.movable': 'Movible',
       'insp.noMotion': 'Sin eventos de movimiento.',
-      'insp.mapHint': 'En el mapa: arrastra el ▪ blanco para mover la sala, el ● blanco para rotarla. Los tiradores de color orientan cada movimiento (órbita: naranja = eje, amarillo = radio).',
+      'insp.mapHint': 'En el mapa: arrastra el ▪ blanco para mover la sala, el ● blanco para rotarla (pasos de 45°). Los tiradores de color orientan cada movimiento (órbita: naranja = eje, amarillo = radio).',
       'insp.rotate45': 'Rotar 45°',
       'insp.duplicate': 'Duplicar',
       'insp.delete': 'Borrar',

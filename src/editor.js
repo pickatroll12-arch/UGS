@@ -527,7 +527,7 @@
           t.x = Math.round(t.x + (P.x - rc.x)); t.y = Math.round(t.y + (P.y - rc.y)); strokeChanged = true;
         } else if (dragHandle.kind === 'room-rotate') {
           const ang = Math.atan2(P.y - rc.y, P.x - rc.x) * 180 / Math.PI;
-          const rot = ((Math.round((ang + 90) / 90) * 90) % 360 + 360) % 360;   // grip points "up" at rot 0
+          const rot = D.snapAngle(ang + 90);   // grip points "up" at rot 0; snaps to the 45° step
           const before = R.roomCenterWorld(room);
           t.rotation = rot;
           const after = R.roomCenterWorld(room);

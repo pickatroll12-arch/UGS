@@ -728,6 +728,15 @@ The next objective is therefore not “more features.” It is:
   flag, reopenable with a top-bar "?" button, closable via Got it / backdrop /
   Escape, fully localized. Headless-verified first-run show, persist, reopen,
   Escape, es localization, and no-show on the second run.
-- **Next: S1-R7 — Geometry & rotation consistency** (owner delegated the step
-  "as proposed" → unify authoring on a single segmented step; document that
-  diagonal walls still block the whole tile).
+- **S1-R7 — Geometry & rotation consistency — ✅ done.** Unified the authoring
+  rotation step on **45°** (owner delegated the choice). `data.snapAngle` +
+  `ROT_STEP` are the single source: objects rotate 45°, the room rotate gizmo
+  snaps via `snapAngle`, and `createTransform` / object normalization snap on
+  load — so a 45°/135° pose now survives a save round-trip (previously rooms
+  snapped to 0/90/180/270). 45° divides 360 evenly and keeps legacy cardinal
+  rooms valid. Documented in the UI: the wall-tool hint states diagonal shapes
+  still block the whole tile; the room map hint notes 45° steps. Tests: +5 in
+  `data.test.js` (snapAngle rounding/wrap/cardinals, createTransform snap);
+  engine/orbit suites unaffected (rotate-by-90 motion still valid).
+- **Next: S1-R8 — Link & deck workflow polish** (list existing links, select +
+  highlight endpoints, delete without hunting the tile, clarify preload/stream).

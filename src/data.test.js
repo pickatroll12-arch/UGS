@@ -91,7 +91,7 @@ check('bad floor material coerced to deck', s3.levels[0].rooms[0].tiles[0][0].fl
 check('bad wall shape coerced to null', s3.levels[0].rooms[0].tiles[0][0].wall === null);
 check('unknown object type dropped, valid kept', s3.levels[0].rooms[0].objects.length === 1 && s3.levels[0].rooms[0].objects[0].type === 'crate');
 check('out-of-bounds object clamped into room', (() => { const o = s3.levels[0].rooms[0].objects[0]; return o.x <= 2 && o.y <= 1; })());
-check('odd rotation snapped to a right angle', [0, 90, 180, 270].includes(s3.levels[0].rooms[0].transform.rotation));
+check('odd rotation snapped to the 45° step', [0, 45, 90, 135, 180, 225, 270, 315].includes(s3.levels[0].rooms[0].transform.rotation) && s3.levels[0].rooms[0].transform.rotation === 45);
 check('dangling link dropped with a warning', s3.links.length === 0 && w3.some(w => /link/i.test(w)));
 check('invalid startLevelId repaired', s3.levels.some(l => l.id === s3.startLevelId));
 
@@ -155,6 +155,13 @@ function mkRoom(w, h) {
   data.resizeRoom(r, 999, 0, { force: true });
   check('resize clamps size to 1..64', r.size.w === 64 && r.size.h === 1);
 }
+
+// 7. rotation authoring step (45°)
+check('ROT_STEP is 45', data.ROT_STEP === 45);
+check('snapAngle rounds to nearest 45', data.snapAngle(47) === 45 && data.snapAngle(30) === 45 && data.snapAngle(20) === 0);
+check('snapAngle keeps cardinals', data.snapAngle(90) === 90 && data.snapAngle(270) === 270);
+check('snapAngle wraps negatives and >=360', data.snapAngle(-45) === 315 && data.snapAngle(360) === 0);
+check('createTransform snaps rotation to 45', data.createTransform(0, 0, 100).rotation === 90 && data.createTransform(0, 0, 115).rotation === 135);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
