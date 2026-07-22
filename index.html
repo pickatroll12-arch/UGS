@@ -58,6 +58,23 @@
     background: rgba(255,210,74,0.08); animation: simpulse 1.6s ease-in-out infinite; }
   body.playing #simChip { display: inline-block; }
   @keyframes simpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  .iconbtn { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; }
+
+  /* ── HELP OVERLAY ────────────────────────────────────────── */
+  #helpOverlay { position: fixed; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(6,6,8,0.68); backdrop-filter: blur(3px); }
+  #helpOverlay.on { display: flex; }
+  .help-card { width: min(560px, 100%); max-height: 86vh; overflow-y: auto;
+    background: var(--panel-solid); border: 1px solid var(--line-bright); border-radius: 14px;
+    padding: 22px 24px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); }
+  .help-card h2 { margin: 0 0 6px; font-size: 18px; letter-spacing: .02em; }
+  .help-card .help-intro { margin: 0 0 14px; font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .help-card h3 { margin: 14px 0 3px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #cfcfd6; }
+  .help-card p { margin: 0; font-size: 12.5px; color: var(--text); line-height: 1.55; }
+  .help-actions { margin-top: 20px; display: flex; justify-content: flex-end; }
+  .help-actions button { padding: 8px 18px; background: var(--accent); color: #111; font-weight: 700; border-color: var(--accent); }
   /* editing controls are inert while simulating */
   body.playing #toolrail,
   body.playing .editing-only { opacity: .4; pointer-events: none; filter: grayscale(1); }
@@ -150,6 +167,7 @@
   </div>
   <div class="tb-spacer"></div>
   <span id="simChip" data-i18n="play.simRunning">● Simulating</span>
+  <button id="helpBtn" class="iconbtn" data-i18n-attr="title:help.open;aria-label:help.open">?</button>
   <label class="langpick">
     <span class="ic">🌐</span>
     <select id="langSelect" aria-label="Language"></select>
@@ -271,6 +289,25 @@
   <button id="speed2">2×</button>
   <button id="speed3">3×</button>
   <span class="pb-hint" data-i18n="play.hint">Click a floor tile to walk the pawn · a door to open it · an elevator to change deck · Space pause · 1/2/3 speed</span>
+</div>
+
+<!-- ── HELP OVERLAY (first-run, reopen via ?) ────────────────── -->
+<div id="helpOverlay" role="dialog" aria-modal="true">
+  <div class="help-card">
+    <h2 data-i18n="help.title">Welcome to the Station Builder</h2>
+    <p class="help-intro" data-i18n="help.intro">Design a space station deck by deck…</p>
+    <h3 data-i18n="help.modesTitle">Build &amp; Play</h3>
+    <p data-i18n="help.modes">Use the top-right switch…</p>
+    <h3 data-i18n="help.toolsTitle">Tools</h3>
+    <p data-i18n="help.tools">Pick a tool on the left rail…</p>
+    <h3 data-i18n="help.roomsTitle">Rooms &amp; decks</h3>
+    <p data-i18n="help.rooms">A deck holds one or more rooms…</p>
+    <h3 data-i18n="help.saveTitle">Saving</h3>
+    <p data-i18n="help.save">Export packages the whole station…</p>
+    <div class="help-actions">
+      <button id="helpClose" data-i18n="help.gotit">Got it</button>
+    </div>
+  </div>
 </div>
 
 <div id="hud"></div>

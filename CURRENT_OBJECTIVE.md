@@ -720,5 +720,14 @@ The next objective is therefore not “more features.” It is:
   non-destructive). Headless-verified: chip shown, rail inert, room animates in
   Play then snaps back to its authored transform in Build, edits blocked,
   camera identical across modes.
-- **Next: S1-R6 — Tool clarity & onboarding** (per-tool bottom hint already
-  live; add empty-state explanations and a dismissible first-run help).
+- **S1-R6 — Tool clarity & onboarding — ✅ done.** Every tool already has a
+  tooltip (data-i18n-attr title) and a live one-line hint in the bottom bar;
+  empty states are covered (Inspector "nothing selected", Rooms "no rooms",
+  "no motion events"). Added a dismissible first-run help overlay (Welcome +
+  Build/Play, Tools, Rooms/decks, Saving) shown once via a `localStorage`
+  flag, reopenable with a top-bar "?" button, closable via Got it / backdrop /
+  Escape, fully localized. Headless-verified first-run show, persist, reopen,
+  Escape, es localization, and no-show on the second run.
+- **Next: S1-R7 — Geometry & rotation consistency** (owner delegated the step
+  "as proposed" → unify authoring on a single segmented step; document that
+  diagonal walls still block the whole tile).

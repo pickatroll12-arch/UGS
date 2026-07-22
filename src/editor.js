@@ -871,6 +871,23 @@
     if (active) b.classList.add('active'); b.addEventListener('click', onClick); return b;
   }
 
+  // ---- help overlay (first-run onboarding) --------------------------------
+  const HELP_SEEN_KEY = 'ugs.helpSeen';
+  function showHelp(on) {
+    const ov = document.getElementById('helpOverlay'); if (!ov) return;
+    ov.classList.toggle('on', on !== false);
+  }
+  function setupHelp() {
+    const ov = document.getElementById('helpOverlay');
+    const btn = document.getElementById('helpBtn');
+    const close = document.getElementById('helpClose');
+    if (btn) btn.addEventListener('click', () => showHelp(true));
+    if (close) close.addEventListener('click', () => { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {} });
+    if (ov) ov.addEventListener('click', e => { if (e.target === ov) { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e2) {} } });
+    let seen = false; try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
+    if (!seen) showHelp(true);
+  }
+
   // ---- language wiring -----------------------------------------------------
   function setupLanguage() {
     const sel = document.getElementById('langSelect');
@@ -925,7 +942,11 @@
       if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }
       if (k === 'delete' || k === 'backspace') { if (app.mode === 'build') deleteSelectedObject(); return; }
-      if (k === 'escape') { app.selection = null; updateInspector(); return; }
+      if (k === 'escape') {
+        const ov = document.getElementById('helpOverlay');
+        if (ov && ov.classList.contains('on')) { showHelp(false); return; }
+        app.selection = null; updateInspector(); return;
+      }
       if (app.mode === 'play') {
         if (k === ' ') { e.preventDefault(); app.clock.paused = !app.clock.paused; updatePlayBar(); return; }
         if (k === '1' || k === '2' || k === '3') { app.clock.speed = +k; app.clock.paused = false; updatePlayBar(); return; }
@@ -994,6 +1015,7 @@
     if (engine.bus) engine.bus.on('pawn:arrived', onPawnArrived);
 
     setupLanguage();
+    setupHelp();
     buildPalettes();
     loadSave(blankStation(), t('status.emptyReady'));
     setMode('build'); setTool('select');

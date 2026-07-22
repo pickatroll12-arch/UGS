@@ -130,6 +130,20 @@
       'play.resume': '▶ Resume',
       'play.hint': 'Click a floor tile to walk the pawn · a door to open it · an elevator to change deck · Space pause · 1/2/3 speed',
 
+      // help overlay
+      'help.open': 'Help',
+      'help.title': 'Welcome to the Station Builder',
+      'help.intro': 'Design a space station deck by deck, then press Play to walk it. Nothing is saved to a server — export a file to keep your work.',
+      'help.modesTitle': 'Build & Play',
+      'help.modes': 'Use the top-right switch. Build edits the station; Play runs the live simulation (the pawn walks, doors open, rooms move). Editing is locked while simulating.',
+      'help.toolsTitle': 'Tools',
+      'help.tools': 'Pick a tool on the left rail. The bottom bar shows that tool\'s palette (floor material, wall shape, objects) and a one-line hint.',
+      'help.roomsTitle': 'Rooms & decks',
+      'help.rooms': 'A deck holds one or more rooms. Select a room to rename, resize, move, rotate, or give it motion. Link decks with the Link tool to travel between them in Play.',
+      'help.saveTitle': 'Saving',
+      'help.save': 'Export packages the whole station to a JSON file; Import loads one back. New starts an empty room.',
+      'help.gotit': 'Got it',
+
       // language selector
       'lang.label': 'Language',
       'lang.en': 'English',
@@ -316,6 +330,19 @@
       'play.pause': '❚❚ Pausa',
       'play.resume': '▶ Reanudar',
       'play.hint': 'Clic en un tile de piso para caminar · en una puerta para abrir · en un ascensor para cambiar de deck · Espacio pausa · 1/2/3 velocidad',
+
+      'help.open': 'Ayuda',
+      'help.title': 'Bienvenido al Constructor de Estación',
+      'help.intro': 'Diseña una estación deck por deck y pulsa Jugar para recorrerla. Nada se guarda en un servidor — exporta un archivo para conservar tu trabajo.',
+      'help.modesTitle': 'Construir y Jugar',
+      'help.modes': 'Usa el interruptor arriba a la derecha. Construir edita la estación; Jugar corre la simulación en vivo (el pawn camina, las puertas abren, las salas se mueven). La edición se bloquea al simular.',
+      'help.toolsTitle': 'Herramientas',
+      'help.tools': 'Elige una herramienta en la barra izquierda. La barra inferior muestra su paleta (material de piso, forma de pared, objetos) y una pista de una línea.',
+      'help.roomsTitle': 'Salas y decks',
+      'help.rooms': 'Un deck contiene una o más salas. Selecciona una sala para renombrar, redimensionar, mover, rotar o darle movimiento. Conecta decks con la herramienta Enlace para viajar entre ellos al Jugar.',
+      'help.saveTitle': 'Guardar',
+      'help.save': 'Exportar empaqueta toda la estación en un archivo JSON; Importar la carga de vuelta. Nuevo inicia una sala vacía.',
+      'help.gotit': 'Entendido',
 
       'lang.label': 'Idioma',
       'lang.en': 'English',
