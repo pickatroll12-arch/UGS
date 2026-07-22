@@ -680,5 +680,15 @@ The next objective is therefore not “more features.” It is:
   so the save format stays language-neutral. `src/i18n.test.js` (19 tests,
   incl. en/es key parity). Rotation-step decision (owner: segmented/360°)
   deferred to S1-R7.
-- **Next: S1-R2 — Editor layout redesign** (top bar · tool rail · right
-  inspector · bottom bar; usable at ~1280×720).
+- **S1-R2 — Editor layout redesign — ✅ done.** Replaced the single cramped
+  250 px panel with four regions: a top bar (brand · deck switcher · language ·
+  Build/Play toggle), a vertical left tool rail (8 tools + undo/redo, icon +
+  label), a right side panel (Inspector always on top; collapsible Decks /
+  Layers / Room motion / Package sections), and a contextual bottom bar that
+  shows only the active tool's palette (select-filter / floor / wall / object)
+  plus a live tool hint. Play mode hides the bottom bar and shows the play bar.
+  Verified headless at 1280×720: all regions present, no overflow, palettes
+  switch per tool, EN/ES live — no clipping (the old Spanish clipping is gone).
+- **Next: S1-R3 — Room resizing** (pure data-layer resize + inspector controls
+  + dependent-data repair + undo + tests; owner rule: shrinking never deletes
+  objects silently).

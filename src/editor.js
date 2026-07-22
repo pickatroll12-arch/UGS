@@ -130,7 +130,7 @@
     document.body.classList.toggle('playing', mode === 'play');
     updatePlayBar();
     updateInspector();
-    setStatus(mode === 'play' ? 'Play mode — sim running. Space to pause, 1/2/3 speed.' : 'Build mode.');
+    setStatus(t(mode === 'play' ? 'status.playMode' : 'status.buildMode'));
   }
 
   function updatePlayBar() {
@@ -141,13 +141,22 @@
     if (pb) pb.textContent = app.clock.paused ? t('play.resume') : t('play.pause');
     [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
   }
+  // which contextual palette group the bottom bar shows for each tool
+  const TOOL_GROUP = { select: 'select', floor: 'floor', fill: 'floor', wall: 'wall', object: 'object' };
+  function syncToolContext(tool) {
+    document.querySelectorAll('#bb-palettes .bb-grp').forEach(g =>
+      g.classList.toggle('on', g.dataset.grp === TOOL_GROUP[tool]));
+    const hintEl = document.getElementById('toolHint');
+    if (hintEl) hintEl.textContent = t('tool.' + tool + '.hint');
+  }
   function setTool(tool) {
     if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
     canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+    syncToolContext(tool);
     if (tool === 'link') linkStartTool();
-    else setStatus(tool[0].toUpperCase() + tool.slice(1) + ' tool.');
+    else setStatus(t('status.tool', { tool: t('tool.' + tool) }));
   }
 
   // ---- tool mutations (each returns whether it changed anything) ----------
@@ -736,6 +745,7 @@
       buildPalettes();
       updateInspector();
       updatePlayBar();
+      syncToolContext(app.tool);
       if (sel) sel.value = lang;
       setStatus(t('status.langChanged', { lang: t('lang.' + lang) }));
     });
@@ -781,12 +791,6 @@
 
     document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 
-    // tab switching
-    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
-      const name = btn.dataset.tab;
-      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
-      document.querySelectorAll('[data-tabpanel]').forEach(p => { p.hidden = p.dataset.tabpanel !== name; });
-    }));
     document.getElementById('buildBtn').addEventListener('click', () => setMode('build'));
     document.getElementById('playBtn').addEventListener('click', () => setMode('play'));
     document.getElementById('undoBtn').addEventListener('click', undo);

@@ -41,6 +41,9 @@
       'app.brand': 'UGS · STATION BUILDER',
       'app.subtitle': 'Stage 1 · revised — usable builder pass',
 
+      // top bar
+      'topbar.deck': 'Deck',
+
       // modes
       'mode.build': 'Build',
       'mode.play': 'Play',
@@ -131,6 +134,9 @@
       'status.layerShown': 'Layer {layer} shown.',
       'status.filter': 'Select filter: {filter}.',
       'status.langChanged': 'Language: {lang}.',
+      'status.tool': '{tool} tool.',
+      'status.buildMode': 'Build mode.',
+      'status.playMode': 'Play mode — sim running. Space to pause, 1/2/3 speed.',
 
       // floor materials (by id)
       'mat.deck': 'Deck',
@@ -209,6 +215,8 @@
       'app.brand': 'UGS · CONSTRUCTOR',
       'app.subtitle': 'Etapa 1 · revisada — constructor usable',
 
+      'topbar.deck': 'Deck',
+
       'mode.build': 'Construir',
       'mode.play': 'Jugar',
 
@@ -285,6 +293,9 @@
       'status.layerShown': 'Capa {layer} visible.',
       'status.filter': 'Filtro de selección: {filter}.',
       'status.langChanged': 'Idioma: {lang}.',
+      'status.tool': 'Herramienta {tool}.',
+      'status.buildMode': 'Modo construir.',
+      'status.playMode': 'Modo jugar — simulación activa. Espacio para pausar, 1/2/3 velocidad.',
 
       'mat.deck': 'Cubierta',
       'mat.dark': 'Oscuro',
