@@ -110,7 +110,7 @@
     app.save = save; app.activeLevelId = save.startLevelId || save.levels[0].id;
     app.selection = null; undoStack.length = 0; redoStack.length = 0;
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    refreshLevelSelect(); updateInspector(); setStatus(msg || 'Loaded.');
+    refreshLevelSelect(); updateInspector(); refreshRoomList(); setStatus(msg || 'Loaded.');
   }
   function setMode(mode) {
     if (mode === app.mode) return;
@@ -236,7 +236,7 @@
     app.activeLevelId = id; app.selection = null;
     if (app.mode === 'play') engine.start(activeLevel());
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    updateInspector();
+    updateInspector(); refreshRoomList();
   }
 
   // ---- links (level graph) ------------------------------------------------
@@ -386,7 +386,80 @@
     copy.events.forEach(e => { e.id = D.uid('evt'); });
     copy.transform = D.createTransform(src.transform.x + src.size.w + 2, src.transform.y, src.transform.rotation);
     activeLevel().rooms.push(copy);
+    selectRoom(copy);
     setStatus(`Room "${src.name}" duplicated.`);
+  }
+
+  // ---- room list & room-level actions (S1-R4) -----------------------------
+  // free world-x just right of the current rightmost room, so a new/added room
+  // does not overlap existing ones.
+  function nextRoomX(level) {
+    let maxR = 0;
+    for (const r of level.rooms) maxR = Math.max(maxR, num(r.transform && r.transform.x) + r.size.w);
+    return maxR + 2;
+  }
+  function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+
+  function selectRoom(room) {
+    if (!room) return;
+    app.selection = { roomId: room.id, lx: Math.floor(room.size.w / 2), ly: Math.floor(room.size.h / 2), objectId: null };
+    updateInspector(); invalidate();   // updateInspector refreshes the room list
+  }
+
+  function refreshRoomList() {
+    const wrap = document.getElementById('roomList'); if (!wrap) return;
+    const lvl = activeLevel(); wrap.innerHTML = '';
+    if (!lvl.rooms.length) { wrap.innerHTML = `<span class="muted" style="font-size:11px">${t('rooms.empty')}</span>`; }
+    for (const room of lvl.rooms) {
+      const b = document.createElement('button');
+      const sel = app.selection && app.selection.roomId === room.id;
+      b.classList.toggle('active', !!sel);
+      b.innerHTML = `<span>${esc(room.name)}</span><span class="rl-meta">${room.size.w}×${room.size.h}${room.objects.length ? ' · ' + room.objects.length : ''}</span>`;
+      b.addEventListener('click', () => selectRoom(room));
+      wrap.appendChild(b);
+    }
+    const nameEl = document.getElementById('roomName');
+    if (nameEl) { const r = selectedRoom(); nameEl.value = r ? r.name : ''; nameEl.disabled = !r; }
+  }
+
+  function addRoom() {
+    const lvl = activeLevel();
+    pushHistory();
+    const room = D.createRoom('Room ' + (lvl.rooms.length + 1), 8, 8);
+    room.tiles = grid(8, 8, 'deck'); ringWalls(room);
+    room.transform = D.createTransform(nextRoomX(lvl), 0, 0);
+    room.transform.pivot = { x: 4, y: 4 };
+    lvl.rooms.push(room);
+    selectRoom(room);
+    setStatus(t('status.roomAdded', { name: room.name }));
+  }
+
+  function deleteSelectedRoom() {
+    const lvl = activeLevel();
+    const room = selectedRoom(); if (!room) return;
+    if (lvl.rooms.length <= 1) { setStatus(t('status.cantDeleteLastRoom')); return; }
+    if (!window.confirm(t('confirm.deleteRoom', { name: room.name }))) return;
+    pushHistory();
+    const name = room.name;
+    lvl.rooms = lvl.rooms.filter(r => r !== room);
+    // drop links whose endpoints reference this room
+    if (app.save.links) app.save.links = app.save.links.filter(k =>
+      !(k.from && k.from.roomId === room.id) && !(k.to && k.to.roomId === room.id));
+    // repoint the deck entry if it lived in the deleted room
+    if (lvl.entry && lvl.entry.roomId === room.id) {
+      const first = lvl.rooms[0];
+      lvl.entry = { roomId: first.id, x: Math.min(2, first.size.w - 1), y: Math.min(2, first.size.h - 1) };
+    }
+    selectRoom(lvl.rooms[0]);
+    setStatus(t('status.roomDeleted', { name }));
+  }
+
+  function renameSelectedRoom(name) {
+    const room = selectedRoom(); if (!room) return;
+    const clean = (name || '').trim(); if (!clean || clean === room.name) return;
+    pushHistory(); room.name = clean;
+    refreshRoomList(); updateInspector();
+    setStatus(t('status.roomRenamed', { name: clean }));
   }
 
   function toggleSelectedDoor() {
@@ -550,6 +623,7 @@
   // ---- inspector ----------------------------------------------------------
   function updateInspector() {
     const lvl = activeLevel();
+    refreshRoomList();
     if (!app.selection) { inspector.innerHTML = `<span class="muted">${esc(t('insp.empty'))}</span>`; return; }
     const room = roomById(app.selection.roomId);
     if (!room) { inspector.innerHTML = '<span class="muted">—</span>'; return; }
@@ -807,6 +881,7 @@
     I.subscribe((lang) => {
       buildPalettes();
       updateInspector();
+      refreshRoomList();
       updatePlayBar();
       syncToolContext(app.tool);
       if (sel) sel.value = lang;
@@ -895,6 +970,9 @@
     });
 
     document.getElementById('dupRoomBtn').addEventListener('click', duplicateActiveRoom);
+    document.getElementById('addRoomBtn').addEventListener('click', addRoom);
+    document.getElementById('delRoomBtn').addEventListener('click', deleteSelectedRoom);
+    document.getElementById('roomName').addEventListener('change', e => renameSelectedRoom(e.target.value));
     document.getElementById('addLevelBtn').addEventListener('click', addLevel);
     document.getElementById('delLevelBtn').addEventListener('click', deleteLevel);
     document.getElementById('levelName').addEventListener('change', e => renameLevel(e.target.value));

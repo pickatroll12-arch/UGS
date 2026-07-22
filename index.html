@@ -88,6 +88,11 @@
   #inspector .resize .rz-x { color: var(--muted); font-size: 11px; }
   #inspector .resize select { flex: 1; min-width: 0; padding: 4px 5px; font-size: 11px; }
   #inspector .resize button { padding: 5px 8px; font-size: 11px; white-space: nowrap; }
+  .roomlist { display: flex; flex-direction: column; gap: 4px; }
+  .roomlist button { text-align: left; padding: 6px 9px; font-size: 12px; display: flex;
+    justify-content: space-between; align-items: center; gap: 8px; }
+  .roomlist button .rl-meta { font-size: 10px; color: var(--muted); }
+  .roomlist button.active .rl-meta { color: #333; }
 
   /* ── BOTTOM BAR (build mode) ─────────────────────────────── */
   #bottombar { position: fixed; z-index: 4; left: var(--rail-w); right: var(--side-w); bottom: 0;
@@ -181,10 +186,20 @@
       (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
   </details>
 
+  <details class="sp-sect" open>
+    <summary data-i18n="rooms.title">Rooms</summary>
+    <div id="roomList" class="roomlist"></div>
+    <input id="roomName" type="text" style="width:100%;margin:7px 0 6px;" placeholder="Room name" data-i18n-attr="placeholder:rooms.namePlaceholder">
+    <div class="grid3">
+      <button id="addRoomBtn" data-i18n="rooms.add">+ Room</button>
+      <button id="dupRoomBtn" data-i18n="rooms.duplicate">Duplicate</button>
+      <button id="delRoomBtn" class="danger" data-i18n="rooms.delete">Delete</button>
+    </div>
+  </details>
+
   <details class="sp-sect">
     <summary data-i18n="layers.title">Layers</summary>
     <div id="layerToggles" class="chips"></div>
-    <button id="dupRoomBtn" style="margin-top:8px;width:100%;" data-i18n="room.duplicate">Duplicate room</button>
   </details>
 
   <details class="sp-sect">

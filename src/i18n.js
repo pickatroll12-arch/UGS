@@ -96,6 +96,14 @@
       'decks.delete': 'Delete deck',
       'decks.linkHint': 'Use the Link tool to connect decks: click a source tile (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.',
 
+      // rooms
+      'rooms.title': 'Rooms',
+      'rooms.namePlaceholder': 'Room name',
+      'rooms.add': '+ Room',
+      'rooms.duplicate': 'Duplicate',
+      'rooms.delete': 'Delete',
+      'rooms.empty': 'No rooms.',
+
       // layers / room
       'layers.title': 'Layers',
       'room.duplicate': 'Duplicate room',
@@ -214,6 +222,11 @@
       'status.droppedN': '{n} object(s) removed.',
       'status.resizeCancelled': 'Resize cancelled.',
       'status.sizeUnchanged': 'Size unchanged.',
+      'status.roomAdded': 'Room "{name}" added.',
+      'status.roomDeleted': 'Room "{name}" deleted.',
+      'status.roomRenamed': 'Room renamed to "{name}".',
+      'status.cantDeleteLastRoom': 'A deck needs at least one room.',
+      'confirm.deleteRoom': 'Delete room "{name}" and everything in it? This also removes any links attached to it.',
       // shared values
       'val.none': 'none',
       'val.interactive': 'interactive',
@@ -272,6 +285,13 @@
       'decks.add': '+ Añadir deck',
       'decks.delete': 'Borrar deck',
       'decks.linkHint': 'Usa la herramienta Enlace para conectar decks: clic en un tile origen (p. ej. un ascensor), cambia de deck, clic en el destino. Al Jugar, haz clic en el enlace para viajar.',
+
+      'rooms.title': 'Salas',
+      'rooms.namePlaceholder': 'Nombre de sala',
+      'rooms.add': '+ Sala',
+      'rooms.duplicate': 'Duplicar',
+      'rooms.delete': 'Borrar',
+      'rooms.empty': 'Sin salas.',
 
       'layers.title': 'Capas',
       'room.duplicate': 'Duplicar sala',
@@ -378,6 +398,11 @@
       'status.droppedN': '{n} objeto(s) eliminados.',
       'status.resizeCancelled': 'Redimensión cancelada.',
       'status.sizeUnchanged': 'Tamaño sin cambios.',
+      'status.roomAdded': 'Sala "{name}" añadida.',
+      'status.roomDeleted': 'Sala "{name}" borrada.',
+      'status.roomRenamed': 'Sala renombrada a "{name}".',
+      'status.cantDeleteLastRoom': 'Un deck necesita al menos una sala.',
+      'confirm.deleteRoom': '¿Borrar la sala "{name}" y todo lo que contiene? También elimina los enlaces asociados.',
       'val.none': 'ninguno',
       'val.interactive': 'interactivo',
       'val.solid': 'sólido',

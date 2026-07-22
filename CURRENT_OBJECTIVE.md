@@ -699,5 +699,15 @@ The next objective is therefore not “more features.” It is:
   selection by the applied offset, all under one undo step. Tests: +12 in
   `data.test.js` (enlarge/center/blocked-shrink/forced-shrink/pivot/clamp);
   headless-verified the full UI flow incl. confirm accept/dismiss and undo.
-- **Next: S1-R4 — Room selection & manipulation UX** (rooms as first-class
-  selectable entities: clear outlines, a room list, room-level actions).
+- **S1-R4 — Room selection & manipulation UX — ✅ done.** New "Rooms" side-panel
+  section lists the active deck's rooms (name + size + object count); clicking a
+  row selects the whole room and highlights it (the renderer already draws a
+  bright outline for the active room). Consolidated room-level actions: Add
+  (empty floor+walls room, auto-placed clear of others), Duplicate, Delete, and
+  inline Rename. Delete guards the last room, confirms first, drops attached
+  links, and repoints the deck entry to a surviving room. Room list stays in
+  sync on selection, deck switch, and language change. Headless-verified
+  add/duplicate/rename/select/delete + last-room guard + entry repair.
+- **Next: S1-R5 — Build/Play workspace model** (clearer, safer mode transition;
+  no accidental edits while simulating; camera/deck preserved; authored poses
+  restored on return to Build).
