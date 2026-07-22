@@ -37,6 +37,7 @@
     hiddenLayers: new Set(),       // layer names toggled off
     clock: { paused: false, speed: 1 },   // Play-mode simulation clock
     pendingLink: null,             // { levelId, roomId, lx, ly } source awaiting a target
+    selectedLinkId: null,          // id of the link highlighted in the Links list
     resident: new Set(),           // level ids currently "loaded" (preload/stream model)
   };
   const undoStack = [];
@@ -112,7 +113,7 @@
     app.save = save; app.activeLevelId = save.startLevelId || save.levels[0].id;
     app.selection = null; undoStack.length = 0; redoStack.length = 0;
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    refreshLevelSelect(); updateInspector(); refreshRoomList(); setStatus(msg || 'Loaded.');
+    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); setStatus(msg || 'Loaded.');
   }
   function setMode(mode) {
     if (mode === app.mode) return;
@@ -240,7 +241,7 @@
     app.activeLevelId = id; app.selection = null;
     if (app.mode === 'play') engine.start(activeLevel());
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    updateInspector(); refreshRoomList();
+    updateInspector(); refreshRoomList(); refreshLinkList();
   }
 
   // ---- links (level graph) ------------------------------------------------
@@ -272,14 +273,16 @@
     app.save.links.push(link);
     const msg = `Linked ${levelName(link.from.levelId)} → ${levelName(link.to.levelId)} (${link.mode}).`;
     app.pendingLink = null;
+    refreshLinkList();
     setStatus(msg);
   }
   // marker list for the active level (both endpoints that live here + pending)
   function linkMarkers() {
     const id = app.activeLevelId, out = [];
     for (const k of app.save.links) {
-      if (k.from.levelId === id) out.push({ roomId: k.from.roomId, x: k.from.x, y: k.from.y, kind: 'source', label: '↑ ' + levelName(k.to.levelId) });
-      if (k.to.levelId === id) out.push({ roomId: k.to.roomId, x: k.to.x, y: k.to.y, kind: 'spawn', label: levelName(k.from.levelId) });
+      const sel = k.id === app.selectedLinkId;
+      if (k.from.levelId === id) out.push({ roomId: k.from.roomId, x: k.from.x, y: k.from.y, kind: 'source', sel, label: '↑ ' + levelName(k.to.levelId) });
+      if (k.to.levelId === id) out.push({ roomId: k.to.roomId, x: k.to.x, y: k.to.y, kind: 'spawn', sel, label: levelName(k.from.levelId) });
     }
     if (app.pendingLink && app.pendingLink.levelId === id) out.push({ roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly, kind: 'pending', label: 'source' });
     return out;
@@ -459,6 +462,69 @@
     }
     selectRoom(lvl.rooms[0]);
     setStatus(t('status.roomDeleted', { name }));
+  }
+
+  // ---- link list & link-level actions (S1-R8) -----------------------------
+  const LINK_KINDS = ['elevator', 'door', 'hatch', 'custom'];
+  // is a link endpoint still valid (its level + room exist)?
+  function endpointOk(ep) {
+    const lvl = app.save.levels.find(l => l.id === ep.levelId); if (!lvl) return false;
+    return ep.roomId == null || lvl.rooms.some(r => r.id === ep.roomId);
+  }
+  function linkBroken(k) { return !endpointOk(k.from) || !endpointOk(k.to); }
+
+  function refreshLinkList() {
+    const wrap = document.getElementById('linkList'); if (!wrap) return;
+    wrap.innerHTML = '';
+    const links = app.save.links || [];
+    if (!links.length) { wrap.innerHTML = `<span class="muted" style="font-size:11px">${t('links.empty')}</span>`; return; }
+    for (const k of links) {
+      const row = document.createElement('div'); row.className = 'linkrow';
+      if (k.id === app.selectedLinkId) row.classList.add('active');
+      const broken = linkBroken(k);
+      const name = document.createElement('button'); name.className = 'lk-name';
+      name.innerHTML = `${broken ? '⚠ ' : ''}${esc(levelName(k.from.levelId))} → ${esc(levelName(k.to.levelId))}`;
+      name.title = broken ? t('warn.brokenLink') : '';
+      name.addEventListener('click', () => selectLink(k.id));
+      const kindSel = document.createElement('select'); kindSel.className = 'lk-kind';
+      for (const kk of LINK_KINDS) { const o = document.createElement('option'); o.value = kk; o.textContent = t('linkKind.' + kk); o.selected = k.kind === kk; kindSel.appendChild(o); }
+      kindSel.addEventListener('change', e => setLinkKind(k.id, e.target.value));
+      const modeBtn = document.createElement('button'); modeBtn.className = 'lk-mode';
+      modeBtn.textContent = t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream'));
+      modeBtn.title = t('mode.hint'); modeBtn.addEventListener('click', () => toggleLinkMode(k.id));
+      const del = document.createElement('button'); del.className = 'danger lk-del'; del.textContent = '✕';
+      del.title = t('links.delete'); del.addEventListener('click', () => deleteLink(k.id));
+      row.append(name, kindSel, modeBtn, del);
+      wrap.appendChild(row);
+    }
+  }
+  function selectLink(id) {
+    const k = (app.save.links || []).find(x => x.id === id); if (!k) return;
+    app.selectedLinkId = id;
+    // jump to the source deck so at least one highlighted endpoint is on screen
+    if (k.from.levelId !== app.activeLevelId) switchLevel(k.from.levelId);
+    refreshLinkList(); invalidate();
+    setStatus(`${t('linkKind.' + (k.kind || 'custom'))}: ${levelName(k.from.levelId)} → ${levelName(k.to.levelId)} · ${t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream'))}`);
+  }
+  function deleteLink(id) {
+    if (!requireBuild()) return;
+    if (!(app.save.links || []).some(k => k.id === id)) return;
+    pushHistory();
+    app.save.links = app.save.links.filter(k => k.id !== id);
+    if (app.selectedLinkId === id) app.selectedLinkId = null;
+    refreshLinkList(); invalidate(); setStatus(t('status.linkDeleted'));
+  }
+  function setLinkKind(id, kind) {
+    if (!requireBuild()) return;
+    const k = (app.save.links || []).find(x => x.id === id); if (!k) return;
+    pushHistory(); k.kind = LINK_KINDS.includes(kind) ? kind : 'custom';
+    refreshLinkList();
+  }
+  function toggleLinkMode(id) {
+    if (!requireBuild()) return;
+    const k = (app.save.links || []).find(x => x.id === id); if (!k) return;
+    pushHistory(); k.mode = k.mode === 'preload' ? 'stream' : 'preload';
+    refreshLinkList(); setStatus(t('status.linkModeChanged', { mode: t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream')) }));
   }
 
   function renameSelectedRoom(name) {
@@ -908,6 +974,7 @@
       buildPalettes();
       updateInspector();
       refreshRoomList();
+      refreshLinkList();
       updatePlayBar();
       syncToolContext(app.tool);
       if (sel) sel.value = lang;

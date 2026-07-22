@@ -118,6 +118,14 @@
     justify-content: space-between; align-items: center; gap: 8px; }
   .roomlist button .rl-meta { font-size: 10px; color: var(--muted); }
   .roomlist button.active .rl-meta { color: #333; }
+  .linklist { display: flex; flex-direction: column; gap: 5px; }
+  .linkrow { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 7px; }
+  .linkrow.active { background: rgba(255,255,255,0.09); outline: 1px solid var(--line-bright); }
+  .linkrow .lk-name { flex: 1; min-width: 0; text-align: left; padding: 5px 7px; font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .linkrow .lk-kind { width: 74px; padding: 4px 4px; font-size: 10px; }
+  .linkrow .lk-mode { padding: 4px 6px; font-size: 10px; }
+  .linkrow .lk-del { padding: 4px 7px; font-size: 11px; }
 
   /* ── BOTTOM BAR (build mode) ─────────────────────────────── */
   #bottombar { position: fixed; z-index: 4; left: var(--rail-w); right: var(--side-w); bottom: 0;
@@ -211,6 +219,8 @@
     </div>
     <p class="hint" data-i18n="decks.linkHint">Use the Link tool to connect decks: click a source tile
       (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
+    <p class="lbl" style="margin-top:12px;" data-i18n="links.title">Links</p>
+    <div id="linkList" class="linklist"></div>
   </details>
 
   <details class="sp-sect editing-only" open>

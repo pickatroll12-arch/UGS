@@ -738,5 +738,13 @@ The next objective is therefore not “more features.” It is:
   still block the whole tile; the room map hint notes 45° steps. Tests: +5 in
   `data.test.js` (snapAngle rounding/wrap/cardinals, createTransform snap);
   engine/orbit suites unaffected (rotate-by-90 motion still valid).
-- **Next: S1-R8 — Link & deck workflow polish** (list existing links, select +
-  highlight endpoints, delete without hunting the tile, clarify preload/stream).
+- **S1-R8 — Link & deck workflow polish — ✅ done.** New Links list in the Decks
+  panel shows every link as "Deck A → Deck B" with an inline kind selector
+  (elevator/door/hatch/custom), a preload/stream toggle (with a tooltip
+  clarifying what each means), and a delete button — no more hunting for the
+  tile. Selecting a link jumps to its source deck and draws a bright halo on
+  both endpoints (renderer `m.sel`). Broken links (endpoint room/deck gone) show
+  a ⚠ marker + warning tooltip. All link edits are Build-only + undoable.
+  Headless-verified list/mode-toggle/kind-change/select/broken-warning/delete.
+- **Next: S1-R9 — Motion/event editor polish** (clearer authoring: enable/disable
+  events, validation for incomplete orbit/carousel, clearer labels).

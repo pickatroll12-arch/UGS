@@ -430,6 +430,10 @@
       const s = worldToScreen(cam, c.x, c.y);
       const col = m.kind === 'spawn' ? '#8fe0a0' : (m.kind === 'pending' ? '#ffd060' : '#8fd0ff');
       ctx.save();
+      if (m.sel) {   // selected link: bright halo around both endpoints
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3.5;
+        ctx.beginPath(); ctx.ellipse(s.x, s.y, 18 * cam.zoom, 9 * cam.zoom, 0, 0, Math.PI * 2); ctx.stroke();
+      }
       ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
       ctx.setLineDash(m.kind === 'pending' ? [4, 3] : []);
       ctx.beginPath(); ctx.ellipse(s.x, s.y, 14 * cam.zoom, 7 * cam.zoom, 0, 0, Math.PI * 2); ctx.stroke();
