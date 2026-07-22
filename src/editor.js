@@ -601,6 +601,29 @@
     refreshLinkList(); setStatus(t('status.linkModeChanged', { mode: t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream')) }));
   }
 
+  // R2-05: stamp a free-form shape onto the selected room. Cells outside the
+  // shape become 'void' (not part of the room); objects on those cells are
+  // dropped after confirmation. Non-destructive to storage — the bounding-box
+  // grid is unchanged in size.
+  function applyRoomShape(shape) {
+    if (!requireBuild()) return;
+    const room = selectedRoom(); if (!room) return;
+    const mask = D.shapeMask(room.size.w, room.size.h, shape);
+    const lost = room.objects.filter(o => !(mask[o.y] && mask[o.y][o.x]));
+    if (lost.length && !window.confirm(t('confirm.shapeDrop', { n: lost.length }))) { setStatus(t('status.resizeCancelled')); return; }
+    pushHistory();
+    for (let y = 0; y < room.size.h; y++) {
+      for (let x = 0; x < room.size.w; x++) {
+        const tile = room.tiles[y][x];
+        if (mask[y][x]) { if (tile.floor === 'void') tile.floor = 'deck'; }
+        else { tile.floor = 'void'; tile.wall = null; }
+      }
+    }
+    if (lost.length) room.objects = room.objects.filter(o => mask[o.y] && mask[o.y][o.x]);
+    updateInspector(); invalidate();
+    setStatus(t('status.shapeApplied', { shape: I.label('shape.' + shape, shape) }) + (lost.length ? ' ' + t('status.droppedN', { n: lost.length }) : ''));
+  }
+
   function renameSelectedRoom(name) {
     if (!requireBuild()) return;
     const room = selectedRoom(); if (!room) return;
@@ -1099,6 +1122,9 @@
     const wmWrap = document.getElementById('wallMatPalette'); wmWrap.innerHTML = '';
     Object.values(D.MATERIALS).filter(m => m.kind === 'wall').forEach(m =>
       wmWrap.appendChild(chip(matLabel(m), () => { app.brush.wallMat = m.id; markActive(wmWrap, m.id); setTool('wall'); }, m.id, app.brush.wallMat === m.id)));
+    // room shape presets (R2-05)
+    const shWrap = document.getElementById('shapePalette');
+    if (shWrap) { shWrap.innerHTML = ''; D.ROOM_SHAPES.forEach(s => shWrap.appendChild(chip(I.label('shape.' + s, s), () => applyRoomShape(s), s, false))); }
     // layer visibility toggles
     const lWrap = document.getElementById('layerToggles'); lWrap.innerHTML = '';
     D.LAYERS.forEach(name => {

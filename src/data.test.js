@@ -184,6 +184,19 @@ function mkRoom(w, h) {
   check('corner anchor offsets each axis independently', res2.offset.dx === 0 && res2.offset.dy === 2);
 }
 
+// 6d. free-form room shape masks (R2-05)
+{
+  const rect = data.shapeMask(4, 4, 'rect');
+  check('rect mask is fully inside', rect.every(row => row.every(Boolean)));
+  const L = data.shapeMask(4, 4, 'L');
+  check('L mask drops the top-right block', L[0][3] === false && L[3][0] === true && L[3][3] === true);
+  const corridor = data.shapeMask(5, 5, 'corridor');
+  check('corridor keeps a central band, voids the rest', corridor[2][0] === true && corridor[0][0] === false);
+  const U = data.shapeMask(5, 5, 'U');
+  check('U keeps arms + bottom bar, hollow middle-top', U[0][0] === true && U[0][2] === false && U[4][2] === true);
+  check('shapeMask clamps degenerate sizes', data.shapeMask(0, 0, 'rect').length === 1);
+}
+
 // 7. rotation authoring step (45°)
 check('ROT_STEP is 45', data.ROT_STEP === 45);
 check('snapAngle rounds to nearest 45', data.snapAngle(47) === 45 && data.snapAngle(30) === 45 && data.snapAngle(20) === 0);

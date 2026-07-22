@@ -161,6 +161,30 @@
     };
   }
 
+  // R2-05: free-form room shapes. A cell is "outside" the room when its floor is
+  // 'void'; presets stamp such cut-outs into the bounding-box grid so a room can
+  // be a corridor, L, T or U without changing the storage model (the cell-set
+  // storage refactor is a later refinement). shapeMask(w,h,shape) returns a
+  // boolean grid [y][x] — true = inside the shape. Pure and testable.
+  const ROOM_SHAPES = ['rect', 'corridor', 'L', 'T', 'U'];
+  function shapeMask(w, h, shape) {
+    w = clamp(Math.round(num(w, 1)), 1, 64); h = clamp(Math.round(num(h, 1)), 1, 64);
+    const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+    const armW = Math.max(1, Math.ceil(w / 3)), barH = Math.max(1, Math.ceil(h / 3));
+    const inside = (x, y) => {
+      switch (shape) {
+        case 'corridor': return y === cy || (h > 1 && y === cy - 1);         // 2-tall horizontal band
+        case 'L': return !(x > cx && y < cy);                                // drop the top-right block
+        case 'T': return y < barH || x === cx || (w > 1 && x === cx - 1);    // top bar + centre stem
+        case 'U': return x < armW || x >= w - armW || y >= h - barH;         // two arms + bottom bar
+        case 'rect': default: return true;
+      }
+    };
+    const m = [];
+    for (let y = 0; y < h; y++) { const row = []; for (let x = 0; x < w; x++) row.push(inside(x, y)); m.push(row); }
+    return m;
+  }
+
   // Resize a room's tile grid, preserving overlapping content.
   //
   //   resizeRoom(room, newW, newH, opts) -> result
@@ -472,7 +496,7 @@
 
   return {
     FORMAT, FORMAT_VERSION,
-    MATERIALS, WALL_SHAPES, WALL_KINDS, LAYERS, OBJECT_DEFS,
+    MATERIALS, WALL_SHAPES, WALL_KINDS, LAYERS, OBJECT_DEFS, ROOM_SHAPES, shapeMask,
     isMaterial, isFloor, isObjectType, isWallShape, isWallKind, isLayer, objectBlocks,
     createWall, normalizeWall, wallBlocks,
     uid, clamp, snapAngle, ROT_STEP,

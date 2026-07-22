@@ -178,6 +178,27 @@ const run = async () => {
   ck('resize handle: dragging the east handle grows width', w1 > rz.w0, { w0: rz.w0, w1 });
   await page.evaluate(() => { window.UGS.editorApp.selection = null; });
 
+  // ── 3f. free-form room shapes (R2-05): apply an L, cells go void + nav ────
+  await page.evaluate(() => {
+    const app = window.UGS.editorApp, r = app.save.levels[0].rooms[0];
+    app.selection = { kind: 'room', roomId: r.id, lx: Math.floor(r.size.w / 2), ly: Math.floor(r.size.h / 2), objectId: null };
+    window.UGS.i18n.setLang('en', { force: true });
+  });
+  await page.waitForTimeout(60);
+  await page.click('#shapePalette button:nth-child(3)');   // "L"
+  await page.waitForTimeout(80);
+  const shape = await page.evaluate(() => {
+    const app = window.UGS.editorApp, N = window.UGS.data, r = app.save.levels[0].rooms[0];
+    let voids = 0; for (const row of r.tiles) for (const t of row) if (t.floor === 'void') voids++;
+    const g = window.UGS.nav.buildWalkGrid(r, N.objectBlocks);
+    let voidBlocked = true;
+    for (let y = 0; y < r.size.h; y++) for (let x = 0; x < r.size.w; x++) if (r.tiles[y][x].floor === 'void' && g.get(x, y) !== 0) voidBlocked = false;
+    return { voids, voidBlocked };
+  });
+  ck('shape L: cut-out cells become void and unwalkable', shape.voids > 0 && shape.voidBlocked, shape);
+  await page.click('#shapePalette button:nth-child(1)');   // restore Rectangle
+  await page.evaluate(() => { window.UGS.editorApp.selection = null; });
+
   // ── 3e. partial-wall nav (R2-06 ph2): open side passable, closed side not ─
   const pw = await page.evaluate(() => {
     const D = window.UGS.data, N = window.UGS.nav;

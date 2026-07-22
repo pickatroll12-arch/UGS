@@ -398,7 +398,9 @@
     if (opts.showRoomOutlines) {
       for (const room of level.rooms) {
         const active = room.id === opts.activeRoomId;
-        outlineRoom(ctx, cam, room, active ? '#e6e6ea' : 'rgba(150,150,160,0.5)', active ? 2 : 1);
+        const stroke = active ? '#e6e6ea' : 'rgba(150,150,160,0.5)', width = active ? 2 : 1;
+        if (roomIsRect(room)) outlineRoom(ctx, cam, room, stroke, width);
+        else outlineRoomCells(ctx, cam, room, stroke, width);   // free-form silhouette
       }
     }
 
@@ -661,6 +663,39 @@
       ctx.beginPath(); ctx.rect(h.sx - r, h.sy - r, r * 2, r * 2); ctx.fill(); ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // R2-05: trace the silhouette of a free-form room by drawing the outer edges
+  // of its occupied cells (floor !== 'void'), so L/T/U/corridor rooms outline
+  // correctly instead of showing their bounding box. Falls back to the bbox
+  // outline when the room is a full rectangle (cheaper, identical result).
+  function roomIsRect(room) {
+    for (let y = 0; y < room.size.h; y++) for (let x = 0; x < room.size.w; x++) {
+      const t = room.tiles[y] && room.tiles[y][x];
+      if (!t || t.floor === 'void') return false;
+    }
+    return true;
+  }
+  function outlineRoomCells(ctx, cam, room, stroke, width) {
+    const occ = (x, y) => { const t = room.tiles[y] && room.tiles[y][x]; return !!t && t.floor !== 'void'; };
+    ctx.save();
+    ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    const seg = (ax, ay, bx, by) => {
+      const a = worldToScreen(cam, localToWorld(room, ax, ay).x, localToWorld(room, ax, ay).y);
+      const b = worldToScreen(cam, localToWorld(room, bx, by).x, localToWorld(room, bx, by).y);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    };
+    for (let y = 0; y < room.size.h; y++) {
+      for (let x = 0; x < room.size.w; x++) {
+        if (!occ(x, y)) continue;
+        if (!occ(x, y - 1)) seg(x, y, x + 1, y);           // top edge
+        if (!occ(x + 1, y)) seg(x + 1, y, x + 1, y + 1);   // right edge
+        if (!occ(x, y + 1)) seg(x + 1, y + 1, x, y + 1);   // bottom edge
+        if (!occ(x - 1, y)) seg(x, y + 1, x, y);           // left edge
+      }
+    }
+    ctx.stroke(); ctx.restore();
   }
 
   function outlineRoom(ctx, cam, room, stroke, width) {
