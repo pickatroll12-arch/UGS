@@ -6,10 +6,14 @@
   "type": "commonjs",
   "scripts": {
     "test": "node scripts/run-tests.js",
+    "smoke": "node tests/smoke/smoke.mjs",
     "start": "node -e \"console.log('Open index.html directly in a browser (file://). No build step required.')\""
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
   },
   "license": "UNLICENSED"
 }

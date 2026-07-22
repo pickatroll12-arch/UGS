@@ -1138,6 +1138,7 @@
     // debug/test hook (harmless): lets headless tests inspect live state
     window.UGS.editorApp = app;
     window.UGS._agents = agents;
+    window.UGS._engine = engine;   // debug/test hook: lets smoke tests read activeCount()
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
