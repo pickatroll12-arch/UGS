@@ -335,6 +335,12 @@
   }
 
   // The SaveFile is the whole package: a graph of levels plus global data.
+  // R2-08: suggested player-build costs (credits). Dev mode never charges.
+  const DEFAULT_BUILD_COSTS = {
+    floorPaint: 1, floorMaterial: 1, wall: 2, object: 5, doorElevator: 10,
+    roomTile: 1, roomSmall: 20, deck: 100
+  };
+
   function createSaveFile(name = 'Untitled Station') {
     const level = createLevel('Deck 1');
     return {
@@ -350,9 +356,12 @@
       seed: (Math.random() * 0xffffffff) >>> 0,
       levels: [level],
       links: [],
-      // reserved for later stages (crew roster, resources, flags). Kept out of
-      // the way now but declared so the format doesn't churn later.
-      reserved: { crew: [], resources: {}, flags: {} },
+      // R2-08: player-build economy. Dev mode ignores it; Game Build charges it.
+      resources: { credits: 500 },
+      buildCosts: Object.assign({}, DEFAULT_BUILD_COSTS),
+      // reserved for later stages (crew roster, flags). Kept out of the way now
+      // but declared so the format doesn't churn later.
+      reserved: { crew: [], flags: {} },
       metadata: { createdBy: 'ugs-core', engine: FORMAT_VERSION }
     };
   }
@@ -373,6 +382,9 @@
     out.updatedAt = new Date().toISOString();
     if (isObj(input.reserved)) out.reserved = { ...out.reserved, ...input.reserved };
     if (isObj(input.metadata)) out.metadata = { ...out.metadata, ...input.metadata };
+    // R2-08 economy — default when missing, coerce credits to a finite number
+    if (isObj(input.resources) && Number.isFinite(Number(input.resources.credits))) out.resources = { credits: Math.max(0, Math.round(Number(input.resources.credits))) };
+    if (isObj(input.buildCosts)) out.buildCosts = { ...DEFAULT_BUILD_COSTS, ...input.buildCosts };
 
     const levels = Array.isArray(input.levels) ? input.levels : [];
     if (!levels.length) {

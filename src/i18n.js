@@ -57,11 +57,14 @@
       // app modes
       'mode.dev': 'Dev',
       'mode.game': 'Game',
+      'mode.gamebuild': 'Build',
       'game.expand': 'Expand station',
       'game.menu': 'Menu',
-      'game.expandSoon': 'Game Build (paid construction) arrives with the credits system.',
+      'gamebuild.done': 'Done',
       'status.enterDev': 'Dev mode — full toolbox. Build, then Play to test.',
       'status.enterGame': 'Game mode — you are aboard the station.',
+      'status.enterGameBuild': 'Expand station — construction costs credits.',
+      'status.noCredits': 'Not enough credits: need {need}, have {have}.',
 
       // modes
       'mode.build': 'Build',
@@ -372,11 +375,14 @@
 
       'mode.dev': 'Dev',
       'mode.game': 'Juego',
+      'mode.gamebuild': 'Construir',
       'game.expand': 'Expandir estación',
       'game.menu': 'Menú',
-      'game.expandSoon': 'La construcción de jugador (con créditos) llega con el sistema de economía.',
+      'gamebuild.done': 'Listo',
       'status.enterDev': 'Modo Dev — caja de herramientas completa. Construye y pulsa Jugar para probar.',
       'status.enterGame': 'Modo Juego — estás a bordo de la estación.',
+      'status.enterGameBuild': 'Expandir estación — construir cuesta créditos.',
+      'status.noCredits': 'Créditos insuficientes: necesitas {need}, tienes {have}.',
 
       'mode.build': 'Construir',
       'mode.play': 'Jugar',

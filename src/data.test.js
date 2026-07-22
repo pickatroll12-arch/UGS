@@ -236,5 +236,16 @@ check('wallBlocks true for any wall, false for null', data.wallBlocks(data.creat
   check('migration drops legacy wallMaterial field', up.levels[0].rooms[0].tiles[0][0].wallMaterial === undefined);
 }
 
+// 9. build economy (R2-08)
+check('new save has credits + build costs', s.resources.credits === 500 && s.buildCosts.wall === 2 && s.buildCosts.deck === 100);
+{
+  const { save: eco } = save.deserialize(JSON.stringify({
+    format: data.FORMAT, formatVersion: 2, name: 'E', startLevelId: 'L1',
+    levels: [{ id: 'L1', name: 'D', entry: { roomId: 'R1', x: 0, y: 0 }, rooms: [{ id: 'R1', size: { w: 1, h: 1 }, transform: { x: 0, y: 0, rotation: 0 }, objects: [], events: [], tiles: [[{ floor: 'deck', wall: null }]] }] }],
+    links: [], resources: { credits: '250' }, buildCosts: { wall: 9 }
+  }));
+  check('normalize coerces credits + merges custom costs over defaults', eco.resources.credits === 250 && eco.buildCosts.wall === 9 && eco.buildCosts.object === 5);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -310,6 +310,32 @@ const run = async () => {
   await page.click('#gMenu'); await page.waitForTimeout(120);
   ck('shell: Game "Menu" returns to the main menu', await page.evaluate(() => window.UGS.editorApp.appMode === 'menu'));
 
+  // ── 7c. Game Build economy (R2-08): construction charges credits ─────────
+  await page.click('#mmPlay'); await page.waitForTimeout(150);
+  await page.click('#gExpand'); await page.waitForTimeout(150);
+  const gbState = await page.evaluate(() => ({ mode: window.UGS.editorApp.appMode, credits: window.UGS.editorApp.save.resources.credits }));
+  const paintTarget = await page.evaluate(() => {
+    const app = window.UGS.editorApp, R = window.UGS.render;
+    const c = R.tileCenterWorld(app.save.levels[0].rooms[0], 5, 5);
+    const s = R.worldToScreen(app.camera, c.x, c.y);
+    app.tool = 'floor'; app.brush.floor = 'dark';
+    return { x: s.x, y: s.y };
+  });
+  await page.mouse.click(paintTarget.x, paintTarget.y); await page.waitForTimeout(80);
+  const afterPaint = await page.evaluate(() => window.UGS.editorApp.save.resources.credits);
+  ck('game build: painting a floor charges credits', gbState.mode === 'gamebuild' && afterPaint === gbState.credits - 1, { before: gbState.credits, afterPaint });
+  await page.evaluate(() => { window.UGS.editorApp.save.resources.credits = 0; });
+  const t2 = await page.evaluate(() => {
+    const app = window.UGS.editorApp, R = window.UGS.render;
+    const c = R.tileCenterWorld(app.save.levels[0].rooms[0], 6, 6);
+    const s = R.worldToScreen(app.camera, c.x, c.y); app.brush.floor = 'light';
+    return { x: s.x, y: s.y };
+  });
+  await page.mouse.click(t2.x, t2.y); await page.waitForTimeout(80);
+  ck('game build: zero credits blocks construction', await page.evaluate(() => window.UGS.editorApp.save.levels[0].rooms[0].tiles[6][6].floor !== 'light'));
+  await page.click('#bDone'); await page.waitForTimeout(60);
+  await page.click('#gMenu'); await page.waitForTimeout(80);
+
   // ── 8. no console errors across the whole run ────────────────────────────
   ck('no console/page errors during smoke run', errors.length === 0, errors);
 

@@ -241,11 +241,13 @@
 
     if (app.tool === 'floor') {
       if (tile.floor === app.brush.floor) return false;
+      if (!buildCharge('floorPaint')) return false;   // R2-08
       tile.floor = app.brush.floor; return true;
     }
     if (app.tool === 'wall') {
       const w = tile.wall;
       if (w && w.kind === app.brush.wallKind && w.orientation === app.brush.wallOrient && w.material === app.brush.wallMat) return false;
+      if (!buildCharge('wall')) return false;          // R2-08
       if (tile.floor === 'void') tile.floor = 'deck';
       tile.wall = D.createWall(app.brush.wallKind, app.brush.wallOrient, app.brush.wallMat); return true;
     }
@@ -264,6 +266,9 @@
     const tile = room.tiles[hit.ly][hit.lx];
     if (!tile || tile.floor === 'void' || tile.wall) return setStatus(t('status.objectNeedsFloor'));
     if (room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) return setStatus(t('status.tileHasObject'));
+    const def0 = D.OBJECT_DEFS[app.brush.object] || {};
+    const costKey = (def0.openable || app.brush.object === 'elevator') ? 'doorElevator' : 'object';
+    if (!buildCharge(costKey)) return;   // R2-08
     pushHistory();
     const obj = D.createObjectInstance(app.brush.object, hit.lx, hit.ly);
     obj.rotation = D.snapAngle(app.brush.objectRotation || 0);   // R2-01: place at the brush angle
@@ -1178,8 +1183,9 @@
     document.body.classList.toggle('mode-menu', mode === 'menu');
     document.body.classList.toggle('mode-dev', mode === 'dev');
     document.body.classList.toggle('mode-game', mode === 'game');
+    document.body.classList.toggle('mode-gamebuild', mode === 'gamebuild');
     const chip = document.getElementById('modeChip');
-    if (chip) chip.textContent = mode === 'game' ? t('mode.game') : (mode === 'dev' ? t('mode.dev') : '');
+    if (chip) chip.textContent = mode === 'game' ? t('mode.game') : (mode === 'gamebuild' ? t('mode.gamebuild') : (mode === 'dev' ? t('mode.dev') : ''));
     if (mode === 'menu') {
       if (app.mode === 'play') setMode('build');
       persistSave(); refreshContinue();
@@ -1188,8 +1194,25 @@
     } else if (mode === 'game') {
       // player runtime: the sim runs and the pawn is controllable, but no dev toolbox
       setMode('play'); setStatus(t('status.enterGame'));
+    } else if (mode === 'gamebuild') {
+      // paid player construction: build tools, no dev side panel; sim paused
+      setMode('build'); setTool('floor'); updateCredits(); setStatus(t('status.enterGameBuild'));
     }
     invalidate();
+  }
+  // R2-08: charge credits for a player-build action (Game Build only). Dev is
+  // free. Returns true if the action may proceed (and deducts), false if the
+  // player can't afford it.
+  function buildCharge(costKey) {
+    if (app.appMode !== 'gamebuild') return true;   // Dev never charges
+    const cost = (app.save.buildCosts && app.save.buildCosts[costKey]) || 0;
+    const have = (app.save.resources && app.save.resources.credits) || 0;
+    if (have < cost) { setStatus(t('status.noCredits', { need: cost, have })); return false; }
+    app.save.resources.credits = have - cost; updateCredits(); return true;
+  }
+  function updateCredits() {
+    const el = document.getElementById('creditsVal');
+    if (el) el.textContent = String((app.save && app.save.resources && app.save.resources.credits) || 0);
   }
   function setupShell() {
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
@@ -1206,7 +1229,8 @@
     on('menuBtn', () => enterAppMode('menu'));
     on('gMenu', () => enterAppMode('menu'));
     on('gPause', () => { app.clock.paused = !app.clock.paused; updatePlayBar(); updateGameBar(); });
-    on('gExpand', () => setStatus(t('game.expandSoon')));   // Game Build lands with credits (R2-08)
+    on('gExpand', () => enterAppMode('gamebuild'));   // R2-08: paid player construction
+    on('bDone', () => enterAppMode('game'));
     refreshContinue();
   }
   function updateGameBar() {
