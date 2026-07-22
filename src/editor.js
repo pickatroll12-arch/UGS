@@ -84,44 +84,15 @@
   }
 
   // ---- demo seed (same as M2) --------------------------------------------
-  function seedDemo() {
-    const save = D.createSaveFile('Demo Station');
+  // A clean starting station: one deck, one room, floor + ring walls + entry.
+  // No objects, no extra decks, no motion, no links — the user builds from here.
+  function blankStation() {
+    const save = D.createSaveFile('Untitled Station');
     const level = save.levels[0]; level.name = 'Deck 1';
     const a = level.rooms[0];
-    a.name = 'Main Hall'; a.size = { w: 12, h: 9 };
+    a.name = 'Room 1'; a.size = { w: 12, h: 9 };
     a.tiles = grid(12, 9, 'deck'); ringWalls(a);
-    a.tiles[4][6].floor = 'roundPad';
-    a.objects.push(D.createObjectInstance('console', 2, 2));
-    a.objects.push(D.createObjectInstance('crate', 9, 6));
-    a.objects.push(D.createObjectInstance('plant', 3, 6));
-    a.objects.push(D.createObjectInstance('elevator', 6, 4));
-    level.entry = { roomId: a.id, x: 2, y: 7 };
-
-    const b = D.createRoom('Annex', 6, 6);
-    b.tiles = grid(6, 6, 'service'); ringWalls(b); b.movable = true;
-    b.transform = D.createTransform(6, 11, 90);   // below the hall, no overlap
-    b.transform.pivot = { x: 3, y: 3 };           // rotate in place if rotated
-    b.objects.push(D.createObjectInstance('miner', 2, 2));
-    b.objects.push(D.createObjectInstance('light', 4, 1));
-    // authored motion: slides sideways and back forever (visible on Play)
-    const slide = D.createRoomEvent('slide');
-    slide.trigger = { type: 'time' }; slide.loop = true;
-    slide.action = { kind: 'shift', to: { x: 12, y: 11 }, duration: 2.2 };
-    b.events.push(slide);
-    level.rooms.push(b);
-
-    // second deck + an elevator link (Deck 1 elevator <-> Deck 2 spawn)
-    const deck2 = D.createLevel('Deck 2');
-    deck2.rooms[0].name = 'Upper Hall'; deck2.rooms[0].size = { w: 10, h: 8 };
-    deck2.rooms[0].tiles = grid(10, 8, 'dark'); ringWalls(deck2.rooms[0]);
-    deck2.rooms[0].objects.push(D.createObjectInstance('elevator', 2, 2));
-    deck2.rooms[0].objects.push(D.createObjectInstance('console', 6, 3));
-    deck2.entry = { roomId: deck2.rooms[0].id, x: 3, y: 3 };
-    save.levels.push(deck2);
-    const link = D.createLink(level.id, deck2.id); link.kind = 'elevator'; link.mode = 'preload';
-    link.from = { levelId: level.id, roomId: a.id, x: 6, y: 4 };            // the Deck 1 elevator
-    link.to = { levelId: deck2.id, roomId: deck2.rooms[0].id, x: 2, y: 2 }; // the Deck 2 elevator
-    save.links.push(link);
+    level.entry = { roomId: a.id, x: 2, y: 2 };
     return save;
   }
   function grid(w, h, floor) { return Array.from({ length: h }, () => Array.from({ length: w }, () => D.createTile(floor))); }
@@ -784,7 +755,7 @@
     document.getElementById('playBtn').addEventListener('click', () => setMode('play'));
     document.getElementById('undoBtn').addEventListener('click', undo);
     document.getElementById('redoBtn').addEventListener('click', redo);
-    document.getElementById('newBtn').addEventListener('click', () => loadSave(seedDemo(), 'New demo station.'));
+    document.getElementById('newBtn').addEventListener('click', () => loadSave(blankStation(), 'New station — one empty room. Paint floors, raise walls, place objects.'));
     document.getElementById('exportBtn').addEventListener('click', () => {
       try { setStatus('Exported ' + S.exportToFile(app.save)); } catch (err) { setStatus('Export failed: ' + err.message); }
     });
@@ -832,7 +803,7 @@
     if (engine.bus) engine.bus.on('pawn:arrived', onPawnArrived);
 
     buildPalettes();
-    loadSave(seedDemo(), 'Milestone 6 — playable slice: Build a deck, then Play and click to walk.');
+    loadSave(blankStation(), 'Empty room ready. Paint floors and raise walls, or hit Play to walk the pawn.');
     setMode('build'); setTool('select');
     requestAnimationFrame(frame);
 
