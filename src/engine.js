@@ -99,6 +99,17 @@
     return { kind: 'segments', segs: buildSegments(event, poseOfRoom(room)), i: 0, t: 0, loop: !!event.loop };
   }
 
+  // A structurally incomplete event is skipped by the sim so a half-authored
+  // orbit/carousel/shift can't fling a room to a degenerate pose. The editor
+  // surfaces the same conditions as ⚠ warnings.
+  function eventUsable(event) {
+    const a = event && event.action; if (!a) return false;
+    if (a.kind === 'orbit') return !!a.center && Number.isFinite(+a.center.x) && Number.isFinite(+a.center.y) && +a.radius > 0;
+    if (a.kind === 'carousel') return Array.isArray(a.poses) && a.poses.length >= 2;
+    if (a.kind === 'shift') return !!a.to;
+    return true;
+  }
+
   function create() {
     const base = new Map();      // roomId -> authored pose (restored on stop)
     const runs = new Map();      // roomId -> runtime ({kind:'segments'|'orbit', ...})
@@ -110,6 +121,7 @@
     function findRoom(level, id) { return level.rooms.find(r => r.id === id) || null; }
 
     function fire(room, event) {
+      if (!eventUsable(event)) return;   // skip incomplete/degenerate events
       const rt = buildRuntime(room, event);
       if (rt.kind === 'orbit' || rt.segs.length) { runs.set(room.id, rt); emit('motion:start', { room, event }); }
     }
@@ -184,5 +196,5 @@
     };
   }
 
-  return { create, buildSegments, roomCenterWorld };
+  return { create, buildSegments, roomCenterWorld, eventUsable };
 });

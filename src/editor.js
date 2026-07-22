@@ -742,7 +742,13 @@
       for (const ev of room.events) {
         const kind = ev.action ? ev.action.kind : '?';
         const extra = kind === 'orbit' ? ` ${ev.action.direction === 'ccw' ? '⟲' : '⟳'}` : (ev.loop ? ' ⟳' : '');
-        h += `<div class="row" style="margin-top:4px"><b>${esc(ev.name)}</b><span>${kind}${extra} · ${ev.trigger ? ev.trigger.type : 'manual'}</span></div>`;
+        const trig = ev.trigger ? ev.trigger.type : 'manual';
+        const issue = eventIssue(ev);
+        const off = ev.enabled === false;
+        h += `<div class="row" style="margin-top:6px${off ? ';opacity:.5' : ''}">`
+          + `<b><label style="cursor:pointer"><input type="checkbox" data-act="evt-toggle" data-id="${ev.id}" ${off ? '' : 'checked'}> ${issue ? '<span title="' + esc(issue) + '">⚠</span> ' : ''}${esc(ev.name)}</label></b>`
+          + `<span>${esc(I.label('motionKind.' + kind, kind))}${extra} · ${esc(I.label('trigger.' + trig, trig))}</span></div>`;
+        if (issue) h += `<div class="hint" style="margin:2px 0 0;color:#e0a24a">${esc(issue)}</div>`;
         h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">${esc(t('insp.test'))}</button>`;
         if (kind === 'orbit') h += `<button data-act="evt-orbitdir" data-id="${ev.id}">${esc(t('insp.flip'))}</button>`;
         h += `<button class="danger" data-act="evt-del" data-id="${ev.id}">✕</button></div>`;
@@ -826,6 +832,26 @@
     ] };
     room.events.push(ev);
     updateInspector(); setStatus(`Added ${kind} event. Drag the handle to aim it, hit Play to see it.`);
+  }
+  // Validate a motion event; returns a human warning string, or '' if fine.
+  function eventIssue(ev) {
+    const a = ev.action || {};
+    if (a.kind === 'orbit') {
+      if (!a.center || !Number.isFinite(+a.center.x) || !Number.isFinite(+a.center.y)) return t('warn.orbitCenter');
+      if (!(+a.radius > 0)) return t('warn.orbitRadius');
+    }
+    if (a.kind === 'carousel') {
+      if (!Array.isArray(a.poses) || a.poses.length < 2) return t('warn.carouselPoses');
+    }
+    if (a.kind === 'shift' && !a.to) return t('warn.shiftTarget');
+    return '';
+  }
+  function toggleRoomEvent(room, id) {
+    if (!requireBuild()) return;
+    const ev = room.events.find(e => e.id === id); if (!ev) return;
+    pushHistory(); ev.enabled = ev.enabled === false ? true : false;
+    updateInspector();
+    setStatus(t(ev.enabled === false ? 'status.eventDisabled' : 'status.eventEnabled', { name: ev.name }));
   }
   function deleteRoomEvent(room, id) { pushHistory(); room.events = room.events.filter(e => e.id !== id); updateInspector(); }
   function testRoomEvent(room, id) {
@@ -1063,7 +1089,9 @@
       else if (act === 'evt-orbitdir' && room) { const ev = room.events.find(x => x.id === e.target.dataset.id); if (ev) { pushHistory(); ev.action.direction = ev.action.direction === 'ccw' ? 'cw' : 'ccw'; updateInspector(); } }
     });
     inspector.addEventListener('change', e => {
-      if (e.target.dataset.act === 'movable') { const room = selectedRoom(); if (room) { pushHistory(); room.movable = e.target.checked; } }
+      const act = e.target.dataset.act;
+      if (act === 'movable') { const room = selectedRoom(); if (room) { pushHistory(); room.movable = e.target.checked; } }
+      else if (act === 'evt-toggle') { const room = selectedRoom(); if (room) toggleRoomEvent(room, e.target.dataset.id); }
     });
 
     document.getElementById('dupRoomBtn').addEventListener('click', duplicateActiveRoom);

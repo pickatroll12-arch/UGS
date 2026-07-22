@@ -88,5 +88,22 @@ function movingRoom(action, loop) {
   e.stop(lvl);
 }
 
+// --- incomplete events are skipped by the sim (validation) ---
+{
+  ck('eventUsable: valid shift', engine.eventUsable({ action: { kind: 'shift', to: { x: 1, y: 0 } } }) === true);
+  ck('eventUsable: shift without target', engine.eventUsable({ action: { kind: 'shift' } }) === false);
+  ck('eventUsable: orbit radius 0', engine.eventUsable({ action: { kind: 'orbit', center: { x: 0, y: 0 }, radius: 0 } }) === false);
+  ck('eventUsable: orbit ok', engine.eventUsable({ action: { kind: 'orbit', center: { x: 0, y: 0 }, radius: 3 } }) === true);
+  ck('eventUsable: carousel needs 2 poses', engine.eventUsable({ action: { kind: 'carousel', poses: [{ x: 0, y: 0, rotation: 0 }] } }) === false);
+
+  // a degenerate orbit must not move the room in play
+  const { lvl, room } = movingRoom({ kind: 'orbit', center: { x: 1, y: 1 }, radius: 0, period: 4, direction: 'cw' }, true);
+  const e = engine.create(); e.start(lvl);
+  ck('degenerate orbit not fired', e.activeCount() === 0);
+  e.update(lvl, 0.5);
+  ck('degenerate orbit leaves room put', room.transform.x === 0 && room.transform.y === 0);
+  e.stop(lvl);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -746,5 +746,26 @@ The next objective is therefore not “more features.” It is:
   both endpoints (renderer `m.sel`). Broken links (endpoint room/deck gone) show
   a ⚠ marker + warning tooltip. All link edits are Build-only + undoable.
   Headless-verified list/mode-toggle/kind-change/select/broken-warning/delete.
-- **Next: S1-R9 — Motion/event editor polish** (clearer authoring: enable/disable
-  events, validation for incomplete orbit/carousel, clearer labels).
+- **S1-R9 — Motion/event editor polish — ✅ done.** Each motion event now has an
+  enable/disable checkbox (the engine already honours `enabled`), translated
+  kind + trigger labels (Shift/Rotate/Orbit/Carousel · manual/auto/signal), and
+  a ⚠ validity marker + amber explanation for incomplete events (orbit missing
+  centre/radius, carousel < 2 poses, shift without a target). The sim now skips
+  structurally-degenerate events (`engine.eventUsable`) so a half-authored orbit
+  can no longer fling a room. Tests: +7 in `engine.test.js` (eventUsable cases +
+  degenerate-orbit stays put); headless-verified toggles, warnings, and that a
+  disabled/invalid event does not animate.
+
+---
+
+## 12. Revised Stage 1 — COMPLETE ✅
+
+All revised milestones (S1-R0 … S1-R9) plus the owner's default-room and
+rotation decisions are implemented, tested, and pushed to
+`claude/html-isometric-game-m7sj57`. Suites: **core 23 · data 41 · engine 22 ·
+i18n 19 · nav 13 = 118**, all green via `npm test`; every phase headless-verified
+at 1280×720. Exit criteria (§R10) met: the builder is uncramped and bilingual;
+rooms are selectable, resizable, and safely manageable; Build/Play is one
+workspace that can't corrupt the design; links are inspectable; motion is
+validated. Ready for Stage 2 (crew) when the owner is — pending their answers to
+the open questions in `AGENTIC_REVIEW.md` §10.
