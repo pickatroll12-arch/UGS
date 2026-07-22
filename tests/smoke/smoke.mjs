@@ -90,6 +90,24 @@ const run = async () => {
   const resizeStatus = await page.evaluate(() => document.getElementById('status').textContent);
   ck('resize: localized trim warning shown', /recortad/i.test(resizeStatus) && /5×5/.test(resizeStatus), resizeStatus);
 
+  // ── 3b. tool hotkeys (R2-01): numbers, letter alias, typing guard, R ─────
+  const tool = () => page.evaluate(() => window.UGS.editorApp.tool);
+  await page.mouse.move(640, 360);
+  await page.keyboard.press('3'); ck('hotkey 3 selects Floor', (await tool()) === 'floor');
+  await page.keyboard.press('8'); ck('hotkey 8 selects Link', (await tool()) === 'link');
+  await page.keyboard.press('v'); ck('letter alias v selects Select', (await tool()) === 'select');
+  // typing guard: a key pressed while a field is focused must NOT switch tools
+  await page.focus('#levelName');
+  await page.keyboard.press('4');
+  ck('hotkeys ignored while typing in a field', (await tool()) === 'select');
+  await page.evaluate(() => document.getElementById('levelName').blur());
+  // R rotates the object brush angle (no object selected) and picks Object tool
+  await page.keyboard.press('Escape');
+  const brushBefore = await page.evaluate(() => window.UGS.editorApp.brush.objectRotation);
+  await page.keyboard.press('r');
+  const afterR = await page.evaluate(() => ({ rot: window.UGS.editorApp.brush.objectRotation, tool: window.UGS.editorApp.tool }));
+  ck('R rotates the object brush by 45° and selects Object', afterR.rot === (brushBefore + 45) % 360 && afterR.tool === 'object', afterR);
+
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);
   await page.waitForFunction(() => window.UGS.editorApp.save.levels.length === 2, { timeout: 5000 });

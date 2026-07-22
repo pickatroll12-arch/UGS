@@ -29,7 +29,7 @@
     activeLevelId: null,
     mode: 'build',
     tool: 'select',                // select | floor | wall | object | entry | erase | fill
-    brush: { floor: 'deck', wallShape: 'solid', wallMat: 'hull', object: 'console' },
+    brush: { floor: 'deck', wallShape: 'solid', wallMat: 'hull', object: 'console', objectRotation: 0 },
     camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4 },
     hover: null,
     selection: null,               // { roomId, lx, ly, objectId }
@@ -156,6 +156,21 @@
     const hintEl = document.getElementById('toolHint');
     if (hintEl) hintEl.textContent = t('tool.' + tool + '.hint');
   }
+  // hotkeys must not fire while typing in a form field (R2-01)
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
+  }
+  // R rotates the selected object; with no object selected it cycles the angle
+  // that the Object tool will stamp onto the next piece it places.
+  function rotateBrushOrPiece() {
+    if (app.mode !== 'build') return;
+    if (app.selection && app.selection.objectId) { rotateSelectedObject(); return; }
+    app.brush.objectRotation = ((app.brush.objectRotation || 0) + D.ROT_STEP) % 360;
+    setTool('object');
+    setStatus(t('status.brushRotated', { deg: app.brush.objectRotation }));
+  }
   function setTool(tool) {
     if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
@@ -201,6 +216,7 @@
     if (room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) return setStatus(t('status.tileHasObject'));
     pushHistory();
     const obj = D.createObjectInstance(app.brush.object, hit.lx, hit.ly);
+    obj.rotation = D.snapAngle(app.brush.objectRotation || 0);   // R2-01: place at the brush angle
     room.objects.push(obj);
     app.selection = { roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id };
     updateInspector(); setStatus(t('status.objectPlaced', { name: I.label('obj.' + obj.type, obj.name) }));
@@ -1046,6 +1062,9 @@
 
     window.addEventListener('keydown', e => {
       const k = e.key.toLowerCase();
+      // R2-01: hotkeys are ignored while the user is typing in a field, so
+      // e.g. renaming a room or editing a resize value never fires a tool.
+      if (isTypingTarget(e.target)) return;
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }
@@ -1058,9 +1077,16 @@
       if (app.mode === 'play') {
         if (k === ' ') { e.preventDefault(); app.clock.paused = !app.clock.paused; updatePlayBar(); return; }
         if (k === '1' || k === '2' || k === '3') { app.clock.speed = +k; app.clock.paused = false; updatePlayBar(); return; }
+        return;   // no build hotkeys while simulating
       }
-      const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill', l: 'link' };
-      if (toolKeys[k] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[k]); return; }
+      if (e.ctrlKey || e.metaKey) return;
+      // R rotates the selected object, or the object brush's placement angle.
+      if (k === 'r') { rotateBrushOrPiece(); return; }
+      // R2-01 tool hotkeys: numbers 1–8 (doc map) + the original letters as aliases.
+      const NUM_TOOLS = { '1': 'select', '2': 'erase', '3': 'floor', '4': 'wall', '5': 'object', '6': 'entry', '7': 'fill', '8': 'link' };
+      const LETTER_TOOLS = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill', l: 'link' };
+      const tool = NUM_TOOLS[e.key] || LETTER_TOOLS[k];
+      if (tool) { setTool(tool); return; }
       keys.add(k);
     });
     window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));

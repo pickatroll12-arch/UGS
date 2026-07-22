@@ -85,7 +85,11 @@
     background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
   #toolrail button { display: flex; flex-direction: column; align-items: center; gap: 3px;
     padding: 8px 2px; font-size: 10px; border-radius: 8px; }
+  #toolrail button { position: relative; }
   #toolrail button .ic { font-size: 17px; line-height: 1; }
+  #toolrail button .rk { position: absolute; top: 3px; right: 4px; font-size: 8px; font-weight: 700;
+    color: var(--muted); opacity: .8; }
+  #toolrail button.active .rk { color: #333; }
   .rail-sep { height: 1px; background: var(--line); margin: 4px 2px; }
   #toolrail .rail-mini button { padding: 6px 2px; font-size: 9px; }
 
@@ -188,14 +192,14 @@
 
 <!-- ── LEFT TOOL RAIL ────────────────────────────────────────── -->
 <nav id="toolrail">
-  <button class="tool active" data-tool="select" data-i18n-attr="title:tool.select.hint"><span class="ic">▣</span><span data-i18n="tool.select">Select</span></button>
-  <button class="tool" data-tool="floor" data-i18n-attr="title:tool.floor.hint"><span class="ic">▦</span><span data-i18n="tool.floor">Floor</span></button>
-  <button class="tool" data-tool="wall" data-i18n-attr="title:tool.wall.hint"><span class="ic">▤</span><span data-i18n="tool.wall">Wall</span></button>
-  <button class="tool" data-tool="object" data-i18n-attr="title:tool.object.hint"><span class="ic">◈</span><span data-i18n="tool.object">Object</span></button>
-  <button class="tool" data-tool="entry" data-i18n-attr="title:tool.entry.hint"><span class="ic">⚑</span><span data-i18n="tool.entry">Entry</span></button>
-  <button class="tool" data-tool="erase" data-i18n-attr="title:tool.erase.hint"><span class="ic">⌫</span><span data-i18n="tool.erase">Erase</span></button>
-  <button class="tool" data-tool="fill" data-i18n-attr="title:tool.fill.hint"><span class="ic">▩</span><span data-i18n="tool.fill">Fill</span></button>
-  <button class="tool" data-tool="link" data-i18n-attr="title:tool.link.hint"><span class="ic">⛓</span><span data-i18n="tool.link">Link</span></button>
+  <button class="tool active" data-tool="select" data-key="1" data-i18n-attr="title:tool.select.hint"><span class="rk">1</span><span class="ic">▣</span><span data-i18n="tool.select">Select</span></button>
+  <button class="tool" data-tool="erase" data-key="2" data-i18n-attr="title:tool.erase.hint"><span class="rk">2</span><span class="ic">⌫</span><span data-i18n="tool.erase">Erase</span></button>
+  <button class="tool" data-tool="floor" data-key="3" data-i18n-attr="title:tool.floor.hint"><span class="rk">3</span><span class="ic">▦</span><span data-i18n="tool.floor">Floor</span></button>
+  <button class="tool" data-tool="wall" data-key="4" data-i18n-attr="title:tool.wall.hint"><span class="rk">4</span><span class="ic">▤</span><span data-i18n="tool.wall">Wall</span></button>
+  <button class="tool" data-tool="object" data-key="5" data-i18n-attr="title:tool.object.hint"><span class="rk">5</span><span class="ic">◈</span><span data-i18n="tool.object">Object</span></button>
+  <button class="tool" data-tool="entry" data-key="6" data-i18n-attr="title:tool.entry.hint"><span class="rk">6</span><span class="ic">⚑</span><span data-i18n="tool.entry">Entry</span></button>
+  <button class="tool" data-tool="fill" data-key="7" data-i18n-attr="title:tool.fill.hint"><span class="rk">7</span><span class="ic">▩</span><span data-i18n="tool.fill">Fill</span></button>
+  <button class="tool" data-tool="link" data-key="8" data-i18n-attr="title:tool.link.hint"><span class="rk">8</span><span class="ic">⛓</span><span data-i18n="tool.link">Link</span></button>
   <div class="rail-sep"></div>
   <div class="rail-mini" style="display:flex;flex-direction:column;gap:5px;">
     <button id="undoBtn" data-i18n-attr="title:action.undo"><span class="ic">↶</span><span data-i18n="action.undo">Undo</span></button>
@@ -254,9 +258,8 @@
       <button id="newBtn" data-i18n="action.new">New</button>
     </div>
     <p class="hint">
-      <span class="kbd">V</span> <span class="kbd">F</span> <span class="kbd">G</span>
-      <span class="kbd">B</span> <span class="kbd">N</span> <span class="kbd">X</span>
-      <span class="kbd">K</span> <span class="kbd">L</span> · <span class="kbd">Ctrl+Z/Y</span> · <span class="kbd">Del</span>
+      <span class="kbd">1</span>–<span class="kbd">8</span> tools · <span class="kbd">R</span> rotate ·
+      <span class="kbd">Ctrl+Z/Y</span> undo/redo · <span class="kbd">Del</span> delete · <span class="kbd">Esc</span> cancel
     </p>
   </details>
 </aside>
