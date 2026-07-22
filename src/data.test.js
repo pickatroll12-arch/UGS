@@ -171,6 +171,19 @@ function mkRoom(w, h) {
   check('real resize actually shrank', r.size.w === 3 && r.size.h === 3);
 }
 
+// 6c. per-axis anchor for edge/corner resize handles (R2-04)
+{
+  const r = mkRoom(4, 4);
+  r.objects.push(data.createObjectInstance('crate', 1, 1));
+  // grow width to the left (west edge): ax 'hi' shifts content right by the delta
+  const res = data.resizeRoom(r, 6, 4, { ax: 'hi', ay: 'lo' });
+  check('ax:hi shifts content on x only', res.offset.dx === 2 && res.offset.dy === 0);
+  check('ax:hi moved the object right', r.objects[0].x === 3 && r.objects[0].y === 1);
+  const r2 = mkRoom(4, 4);
+  const res2 = data.resizeRoom(r2, 6, 6, { ax: 'lo', ay: 'hi' });   // NE corner: grow right + top
+  check('corner anchor offsets each axis independently', res2.offset.dx === 0 && res2.offset.dy === 2);
+}
+
 // 7. rotation authoring step (45°)
 check('ROT_STEP is 45', data.ROT_STEP === 45);
 check('snapAngle rounds to nearest 45', data.snapAngle(47) === 45 && data.snapAngle(30) === 45 && data.snapAngle(20) === 0);

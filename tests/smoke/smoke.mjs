@@ -136,6 +136,24 @@ const run = async () => {
   // clean the object back out so later sections start tidy
   await page.evaluate(() => { const r = window.UGS.editorApp.save.levels[0].rooms[0]; r.objects = r.objects.filter(o => !(o.x === 5 && o.y === 4)); window.UGS.editorApp.selection = null; });
 
+  // ── 3d. resize handles (R2-04): drag the east handle to grow width ───────
+  page.on('dialog', d => d.accept());   // trimming confirm, if any
+  const rz = await page.evaluate(() => {
+    const app = window.UGS.editorApp, R = window.UGS.render;
+    const r = app.save.levels[0].rooms[0];
+    app.selection = { kind: 'room', roomId: r.id, lx: Math.floor(r.size.w / 2), ly: Math.floor(r.size.h / 2), objectId: null };
+    const h = R.resizeHandles(app.camera, r).find(x => x.kind === 'e');
+    const tgtW = R.localToWorld(r, r.size.w + 3, r.size.h / 2);
+    const tgt = R.worldToScreen(app.camera, tgtW.x, tgtW.y);
+    return { hx: h.sx, hy: h.sy, tx: tgt.x, ty: tgt.y, w0: r.size.w };
+  });
+  await page.mouse.move(rz.hx, rz.hy); await page.mouse.down();
+  await page.mouse.move(rz.tx, rz.ty, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(80);
+  const w1 = await page.evaluate(() => window.UGS.editorApp.save.levels[0].rooms[0].size.w);
+  ck('resize handle: dragging the east handle grows width', w1 > rz.w0, { w0: rz.w0, w1 });
+  await page.evaluate(() => { window.UGS.editorApp.selection = null; });
+
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);
   await page.waitForFunction(() => window.UGS.editorApp.save.levels.length === 2, { timeout: 5000 });

@@ -48,6 +48,7 @@
   let painting = false, panning = false, dragged = false;
   let movingObj = null;            // { roomId, objectId }
   let dragHandle = null;           // { roomId, eventId, kind, poseIndex }
+  let dragResize = null;           // R2-04: { roomId, we, he, ax, ay, startW, startH, gx, gy, gw, gh }
   let agents = null;               // pawn manager (Play mode)
   let strokeChanged = false;       // did the current gesture actually mutate?
   let lastPaintKey = '';           // dedupe repeated paints on the same tile
@@ -605,10 +606,18 @@
 
     if (app.mode !== 'build') { panning = true; return; }
 
-    // motion handles take priority when a room is selected with the Select tool
+    // resize + motion handles take priority when a room is selected (Select tool)
     if (app.tool === 'select' && app.selection) {
       const room = roomById(app.selection.roomId);
       if (room) {
+        // R2-04: resize handles (only when the whole room is selected)
+        if (app.selection.kind === 'room') {
+          const rh = R.resizeHandles(app.camera, room).find(hh => Math.abs(hh.sx - mouse.x) + Math.abs(hh.sy - mouse.y) < 12);
+          if (rh) {
+            dragResize = { roomId: room.id, we: rh.we, he: rh.he, ax: rh.ax, ay: rh.ay, startW: room.size.w, startH: room.size.h, gx: room.transform.x, gy: room.transform.y, gw: room.size.w, gh: room.size.h };
+            return;
+          }
+        }
         const hs = R.motionHandles(app.camera, room);
         const h = hs.find(hh => Math.abs(hh.sx - mouse.x) + Math.abs(hh.sy - mouse.y) < 12);
         if (h) { dragHandle = { roomId: room.id, eventId: h.eventId, kind: h.kind, poseIndex: h.poseIndex }; pushHistory(); return; }
@@ -632,6 +641,27 @@
     updateMouse(e);
     const moved = Math.abs(e.clientX - mouse.lastX) + Math.abs(e.clientY - mouse.lastY);
     if (mouse.down && moved > 2) dragged = true;
+
+    if (dragResize) {
+      const room = roomById(dragResize.roomId);
+      if (room) {
+        const P = R.screenToWorld(app.camera, mouse.x, mouse.y);
+        const lp = R.worldToLocal(room, P.x, P.y);   // mouse in room-local tile space
+        let gw = dragResize.startW, gh = dragResize.startH;
+        if (dragResize.we === 'e') gw = Math.round(lp.x);
+        else if (dragResize.we === 'w') gw = dragResize.startW - Math.round(lp.x);
+        if (dragResize.he === 's') gh = Math.round(lp.y);
+        else if (dragResize.he === 'n') gh = dragResize.startH - Math.round(lp.y);
+        gw = CORE.clamp(gw, 1, 64); gh = CORE.clamp(gh, 1, 64);
+        // ghost transform shift keeps the anchored edge fixed while previewing
+        const dx = dragResize.ax === 'hi' ? gw - dragResize.startW : 0;
+        const dy = dragResize.ay === 'hi' ? gh - dragResize.startH : 0;
+        dragResize.gw = gw; dragResize.gh = gh;
+        dragResize.gx = room.transform.x - dx; dragResize.gy = room.transform.y - dy;
+        strokeChanged = true;
+      }
+      return;
+    }
 
     if (dragHandle) {
       const room = roomById(dragHandle.roomId);
@@ -693,7 +723,10 @@
       const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
       playClick(hit);
     } else if (mouse.down && app.mode === 'build') {
-      if (dragHandle) {
+      if (dragResize) {
+        const dr = dragResize; dragResize = null;
+        if (dr.gw !== dr.startW || dr.gh !== dr.startH) applyHandleResize(dr);
+      } else if (dragHandle) {
         if (!strokeChanged) discardHistory();
       } else if (movingObj) {
         // grabbed an object: a drag moved it; a plain click just selects it
@@ -722,7 +755,7 @@
         }
       }
     }
-    mouse.down = false; painting = panning = false; movingObj = null; dragHandle = null; dragged = false;
+    mouse.down = false; painting = panning = false; movingObj = null; dragHandle = null; dragResize = null; dragged = false;
   }
 
   // R2-02: double-click selects the whole room (Select tool, Build only).
@@ -891,6 +924,28 @@
       if (k.to && k.to.roomId === room.id) { k.to.x = clampX(k.to.x + dx); k.to.y = clampY(k.to.y + dy); }
     }
   }
+
+  // R2-04: commit a drag from a resize handle. Same non-destructive rules as the
+  // numeric resize (confirm before losing content, no undo entry if cancelled),
+  // plus a transform shift so the edge opposite the handle stays fixed in world.
+  function applyHandleResize(dr) {
+    const room = roomById(dr.roomId); if (!room) return;
+    const nw = dr.gw, nh = dr.gh, opts = { ax: dr.ax, ay: dr.ay };
+    const dry = D.resizeRoom(room, nw, nh, Object.assign({ dryRun: true }, opts));
+    if (dry.wouldDrop.length || dry.trimmedTiles || dry.trimmedWalls) {
+      if (!window.confirm(t('confirm.resizeLoss', { objects: dry.wouldDrop.length, tiles: dry.trimmedTiles, walls: dry.trimmedWalls }))) { setStatus(t('status.resizeCancelled')); return; }
+    }
+    pushHistory();
+    const res = D.resizeRoom(room, nw, nh, Object.assign({ force: true }, opts));
+    room.transform.x -= res.offset.dx; room.transform.y -= res.offset.dy;   // keep the anchored edge fixed
+    repairAfterResize(room, res.offset.dx, res.offset.dy, res.newW, res.newH);
+    app.selection = { kind: 'room', roomId: room.id, lx: Math.floor(res.newW / 2), ly: Math.floor(res.newH / 2), objectId: null };
+    updateInspector(); refreshLevelSelect(); refreshLinkList(); invalidate();
+    let msg = t('status.resized', { w: res.newW, h: res.newH });
+    if (res.trimmedTiles || res.trimmedWalls) msg += ' ' + t('status.resizeTrimmed', { tiles: res.trimmedTiles, walls: res.trimmedWalls });
+    if (res.dropped.length) msg += ' ' + t('status.droppedN', { n: res.dropped.length });
+    setStatus(msg);
+  }
   function addRoomEvent(room, kind) {
     pushHistory();
     room.movable = true;
@@ -976,7 +1031,10 @@
       hiddenLayers: app.hiddenLayers,
       activeRoomId: app.selection ? app.selection.roomId : null,
       previewRoom: (app.mode === 'build' && app.selection) ? roomById(app.selection.roomId) : null,
-      showRoomOutlines: app.mode === 'build'
+      showRoomOutlines: app.mode === 'build',
+      // R2-04: show resize handles when a whole room is selected (Build)
+      resizeRoom: (app.mode === 'build' && app.selection && (app.selection.kind === 'room')) ? roomById(app.selection.roomId) : null,
+      resizeGhost: dragResize ? { x: dragResize.gx, y: dragResize.gy, w: dragResize.gw, h: dragResize.gh } : null
     });
     if (agents && agents.pawns.length) R.drawAgents(ctx, app.camera, lvl, agents.pawns, { selectedId: agents.selected && agents.selected.id, time: engine.time });
     hud.textContent = `${app.save.name} · ${lvl.name}  [${app.mode}·${app.tool}]\n` +
@@ -1114,6 +1172,7 @@
       if (k === 'escape') {
         const ov = document.getElementById('helpOverlay');
         if (ov && ov.classList.contains('on')) { showHelp(false); return; }
+        if (dragResize) { dragResize = null; invalidate(); return; }   // R2-04: cancel an in-progress resize
         app.selection = null; updateInspector(); return;
       }
       if (app.mode === 'play') {

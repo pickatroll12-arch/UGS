@@ -148,10 +148,15 @@
     newW = clamp(Math.round(num(newW, oldW)), 1, 64);
     newH = clamp(Math.round(num(newH, oldH)), 1, 64);
 
-    // offset mapping old (x,y) -> new (x+dx, y+dy)
-    let dx = 0, dy = 0;
-    if (anchor === 'se') { dx = newW - oldW; dy = newH - oldH; }
-    else if (anchor === 'center') { dx = Math.floor((newW - oldW) / 2); dy = Math.floor((newH - oldH) / 2); }
+    // offset mapping old (x,y) -> new (x+dx, y+dy). Anchor is per-axis: ax/ay in
+    // {'lo','mid','hi'} say which edge stays fixed on each axis. The string
+    // `anchor` (nw/center/se) is a shorthand; explicit opts.ax/opts.ay win. Edge
+    // and corner handles (R2-04) use the per-axis form (e.g. west edge = ax:'hi').
+    const axMap = { nw: 'lo', center: 'mid', se: 'hi' };
+    const ax = opts.ax || axMap[anchor] || 'lo';
+    const ay = opts.ay || axMap[anchor] || 'lo';
+    const off = (a, delta) => a === 'hi' ? delta : (a === 'mid' ? Math.floor(delta / 2) : 0);
+    const dx = off(ax, newW - oldW), dy = off(ay, newH - oldH);
 
     const inBounds = (x, y) => x >= 0 && y >= 0 && x < newW && y < newH;
 

@@ -368,6 +368,9 @@
     // --- room motion preview (Build aid) ---
     if (opts.previewRoom) drawRoomMotion(ctx, cam, opts.previewRoom);
 
+    // --- room resize handles (R2-04) ---
+    if (opts.resizeRoom) drawResizeHandles(ctx, cam, opts.resizeRoom, opts.resizeGhost);
+
     // --- hover / selection tile highlight ---
     if (opts.hover) highlightTile(ctx, cam, level, opts.hover, opts.hoverFill || 'rgba(255,255,255,0.14)', opts.hoverStroke || '#cfcfd6', hw, hh);
     if (opts.selection) highlightTile(ctx, cam, level, opts.selection, 'rgba(255,255,255,0.05)', '#ffffff', hw, hh);
@@ -575,6 +578,46 @@
     return out;
   }
 
+  // R2-04: 8 resize handles (edge midpoints + corners) in screen space. Each
+  // carries the per-axis anchor (ax/ay) and which edges it moves, so the editor
+  // can compute a new size and keep the opposite edge fixed. Positions go
+  // through localToWorld→worldToScreen, so they respect the active projection.
+  function resizeHandles(cam, room) {
+    const out = []; if (!room) return out;
+    const w = room.size.w, h = room.size.h;
+    const H = [
+      { kind: 'nw', u: 0, v: 0, ax: 'hi', ay: 'hi', we: 'w', he: 'n' },
+      { kind: 'n', u: w / 2, v: 0, ax: 'lo', ay: 'hi', we: null, he: 'n' },
+      { kind: 'ne', u: w, v: 0, ax: 'lo', ay: 'hi', we: 'e', he: 'n' },
+      { kind: 'e', u: w, v: h / 2, ax: 'lo', ay: 'lo', we: 'e', he: null },
+      { kind: 'se', u: w, v: h, ax: 'lo', ay: 'lo', we: 'e', he: 's' },
+      { kind: 's', u: w / 2, v: h, ax: 'lo', ay: 'lo', we: null, he: 's' },
+      { kind: 'sw', u: 0, v: h, ax: 'hi', ay: 'lo', we: 'w', he: 's' },
+      { kind: 'w', u: 0, v: h / 2, ax: 'hi', ay: 'lo', we: 'w', he: null }
+    ];
+    for (const hh of H) { const wpt = localToWorld(room, hh.u, hh.v); const s = worldToScreen(cam, wpt.x, wpt.y); out.push(Object.assign({ sx: s.x, sy: s.y }, hh)); }
+    return out;
+  }
+  function drawResizeHandles(ctx, cam, room, ghost) {
+    const hs = resizeHandles(cam, room);
+    // ghost footprint (prospective bounds) while dragging
+    if (ghost) {
+      const g = { transform: { x: ghost.x, y: ghost.y, rotation: room.transform.rotation, pivot: room.transform.pivot }, size: { w: ghost.w, h: ghost.h } };
+      const c = [localToWorld(g, 0, 0), localToWorld(g, g.size.w, 0), localToWorld(g, g.size.w, g.size.h), localToWorld(g, 0, g.size.h)].map(p => worldToScreen(cam, p.x, p.y));
+      ctx.save();
+      ctx.fillStyle = 'rgba(120,190,255,0.10)'; ctx.strokeStyle = '#7ac0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath();
+      ctx.fill(); ctx.stroke(); ctx.restore();
+    }
+    ctx.save();
+    for (const h of hs) {
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1b6fb0'; ctx.lineWidth = 1.5;
+      const r = (h.kind.length === 2 ? 5 : 4);   // corners a touch bigger
+      ctx.beginPath(); ctx.rect(h.sx - r, h.sy - r, r * 2, r * 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function outlineRoom(ctx, cam, room, stroke, width) {
     // trace the 4 transformed corners of the room footprint
     const corners = [
@@ -671,6 +714,6 @@
     TILE_W, TILE_H, WALL_H, OBJ_H,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
-    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, drawLinkMarkers, drawAgents, centerOn, shade
+    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, resizeHandles, drawLinkMarkers, drawAgents, centerOn, shade
   };
 });
