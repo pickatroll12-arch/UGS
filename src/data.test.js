@@ -91,7 +91,7 @@ check('bad floor material coerced to deck', s3.levels[0].rooms[0].tiles[0][0].fl
 check('bad wall shape coerced to null', s3.levels[0].rooms[0].tiles[0][0].wall === null);
 check('unknown object type dropped, valid kept', s3.levels[0].rooms[0].objects.length === 1 && s3.levels[0].rooms[0].objects[0].type === 'crate');
 check('out-of-bounds object clamped into room', (() => { const o = s3.levels[0].rooms[0].objects[0]; return o.x <= 2 && o.y <= 1; })());
-check('odd rotation snapped to a right angle', [0, 90, 180, 270].includes(s3.levels[0].rooms[0].transform.rotation));
+check('odd rotation snapped to the 45° step', [0, 45, 90, 135, 180, 225, 270, 315].includes(s3.levels[0].rooms[0].transform.rotation) && s3.levels[0].rooms[0].transform.rotation === 45);
 check('dangling link dropped with a warning', s3.links.length === 0 && w3.some(w => /link/i.test(w)));
 check('invalid startLevelId repaired', s3.levels.some(l => l.id === s3.startLevelId));
 
@@ -99,6 +99,69 @@ check('invalid startLevelId repaired', s3.levels.some(l => l.id === s3.startLeve
 let rejected = false;
 try { save.deserialize({ format: 'some-other-game', levels: [] }); } catch (e) { rejected = true; }
 check('foreign format is rejected', rejected);
+
+// 6. resizeRoom — pure resize with content preservation
+function mkRoom(w, h) {
+  const r = data.createRoom('R', w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) r.tiles[y][x] = data.createTile('deck');
+  return r;
+}
+// enlarge (nw): existing tiles/objects preserved, new tiles added
+{
+  const r = mkRoom(4, 4);
+  r.tiles[1][1] = { floor: 'dark', wall: 'solid', wallMaterial: 'hull' };
+  r.objects.push(data.createObjectInstance('crate', 2, 2));
+  const res = data.resizeRoom(r, 6, 5, { anchor: 'nw' });
+  check('enlarge ok', res.ok === true && r.size.w === 6 && r.size.h === 5);
+  check('enlarge preserves a painted tile', r.tiles[1][1].floor === 'dark' && r.tiles[1][1].wall === 'solid');
+  check('enlarge keeps object in place (nw offset 0)', r.objects[0].x === 2 && r.objects[0].y === 2);
+  check('enlarge adds default floor tiles', r.tiles[4][5].floor === 'deck');
+}
+// center anchor shifts content
+{
+  const r = mkRoom(2, 2);
+  r.objects.push(data.createObjectInstance('crate', 0, 0));
+  const res = data.resizeRoom(r, 4, 4, { anchor: 'center' });
+  check('center offset applied to object', res.offset.dx === 1 && res.offset.dy === 1 && r.objects[0].x === 1 && r.objects[0].y === 1);
+}
+// shrink that would drop an object: blocked without force, untouched
+{
+  const r = mkRoom(5, 5);
+  r.objects.push(data.createObjectInstance('crate', 4, 4));
+  const res = data.resizeRoom(r, 3, 3, { anchor: 'nw' });
+  check('shrink dropping objects is blocked', res.ok === false && res.wouldDrop.length === 1);
+  check('blocked shrink does not mutate the room', r.size.w === 5 && r.objects.length === 1);
+}
+// shrink with force: object dropped and reported
+{
+  const r = mkRoom(5, 5);
+  r.objects.push(data.createObjectInstance('crate', 4, 4));
+  r.objects.push(data.createObjectInstance('crate', 1, 1));
+  const res = data.resizeRoom(r, 3, 3, { anchor: 'nw', force: true });
+  check('forced shrink applies and drops out-of-bounds object', res.ok === true && res.dropped.length === 1 && r.objects.length === 1);
+  check('forced shrink keeps in-bounds object', r.objects[0].x === 1 && r.objects[0].y === 1);
+  check('forced shrink reports trimmed tiles', res.warnings.some(w => /trim/i.test(w)));
+}
+// pivot clamped into new bounds on shrink
+{
+  const r = mkRoom(6, 6);
+  r.transform.pivot = { x: 6, y: 6 };
+  const res = data.resizeRoom(r, 3, 3, { anchor: 'nw', force: true });
+  check('pivot clamped to new size', r.transform.pivot.x <= 3 && r.transform.pivot.y <= 3 && res.ok === true);
+}
+// clamps absurd sizes into 1..64
+{
+  const r = mkRoom(3, 3);
+  data.resizeRoom(r, 999, 0, { force: true });
+  check('resize clamps size to 1..64', r.size.w === 64 && r.size.h === 1);
+}
+
+// 7. rotation authoring step (45°)
+check('ROT_STEP is 45', data.ROT_STEP === 45);
+check('snapAngle rounds to nearest 45', data.snapAngle(47) === 45 && data.snapAngle(30) === 45 && data.snapAngle(20) === 0);
+check('snapAngle keeps cardinals', data.snapAngle(90) === 90 && data.snapAngle(270) === 270);
+check('snapAngle wraps negatives and >=360', data.snapAngle(-45) === 315 && data.snapAngle(360) === 0);
+check('createTransform snaps rotation to 45', data.createTransform(0, 0, 100).rotation === 90 && data.createTransform(0, 0, 115).rotation === 135);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

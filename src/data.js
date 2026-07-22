@@ -95,10 +95,14 @@
     return { floor: isFloor(floor) ? floor : 'deck', wall: null, wallMaterial: null };
   }
 
+  // Authoring rotation step (degrees). Objects, rooms, and gizmo handles all
+  // snap to this; it divides 360 evenly and keeps legacy 0/90/180/270 valid.
+  const ROT_STEP = 45;
+  function snapAngle(deg) { return ((Math.round(num(deg) / ROT_STEP) * ROT_STEP) % 360 + 360) % 360; }
+
   function createTransform(x = 0, y = 0, rotation = 0) {
-    // rotation is stored in degrees, normalised to 0/90/180/270.
-    const rot = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
-    return { x: num(x), y: num(y), rotation: rot, pivot: { x: 0, y: 0 } };
+    // rotation is stored in degrees, snapped to the 45° authoring step.
+    return { x: num(x), y: num(y), rotation: snapAngle(rotation), pivot: { x: 0, y: 0 } };
   }
 
   function createRoom(name = 'Room', w = 8, h = 8) {
@@ -115,6 +119,78 @@
       movable: false,
       events: []      // RoomEvent[] — shift / rotate / carousel / script
     };
+  }
+
+  // Resize a room's tile grid, preserving overlapping content.
+  //
+  //   resizeRoom(room, newW, newH, opts) -> result
+  //     opts.anchor : 'nw' | 'center' | 'se'  (where old content stays put)
+  //     opts.fill   : floor id for newly exposed tiles (default 'deck')
+  //     opts.force  : when shrinking would drop objects, only actually drop
+  //                   them if force===true; otherwise abort untouched.
+  //
+  // The function is pure w.r.t. the caller's decision-making: when it would
+  // lose objects and force is not set, it returns { ok:false, wouldDrop:[...] }
+  // and does NOT mutate the room, so the editor can warn/confirm first. On
+  // success it mutates the room (tiles, size, object coords, pivot) and returns
+  // the applied { dx, dy } offset so the caller can repair external references
+  // (level entry, links, selection). Tile trimming (floor/wall loss on shrink)
+  // is expected and only surfaced via `warnings`, never blocked.
+  function resizeRoom(room, newW, newH, opts) {
+    opts = opts || {};
+    const anchor = opts.anchor || 'nw';
+    const fill = isFloor(opts.fill) ? opts.fill : 'deck';
+    const oldW = room.size.w, oldH = room.size.h;
+    newW = clamp(Math.round(num(newW, oldW)), 1, 64);
+    newH = clamp(Math.round(num(newH, oldH)), 1, 64);
+
+    // offset mapping old (x,y) -> new (x+dx, y+dy)
+    let dx = 0, dy = 0;
+    if (anchor === 'se') { dx = newW - oldW; dy = newH - oldH; }
+    else if (anchor === 'center') { dx = Math.floor((newW - oldW) / 2); dy = Math.floor((newH - oldH) / 2); }
+
+    const warnings = [];
+    const inBounds = (x, y) => x >= 0 && y >= 0 && x < newW && y < newH;
+
+    // which objects would fall outside the new bounds?
+    const wouldDrop = room.objects.filter(o => !inBounds(o.x + dx, o.y + dy));
+    if (wouldDrop.length && !opts.force) {
+      return { ok: false, wouldDrop, dropped: [], offset: { dx, dy }, newW, newH,
+        warnings: [`${wouldDrop.length} object(s) fall outside the new size`] };
+    }
+
+    // build the new grid, copying overlapping tiles
+    let trimmed = 0;
+    const grid = Array.from({ length: newH }, () => Array.from({ length: newW }, () => createTile(fill)));
+    for (let y = 0; y < oldH; y++) {
+      for (let x = 0; x < oldW; x++) {
+        const nx = x + dx, ny = y + dy;
+        if (inBounds(nx, ny)) {
+          const src = room.tiles[y][x];
+          grid[ny][nx] = { floor: src.floor, wall: src.wall, wallMaterial: src.wallMaterial };
+        } else if (room.tiles[y][x] && (room.tiles[y][x].wall || room.tiles[y][x].floor !== 'void')) {
+          trimmed++;
+        }
+      }
+    }
+    if (trimmed) warnings.push(`${trimmed} tile(s) trimmed off the edge`);
+
+    // commit: mutate the room
+    room.tiles = grid;
+    room.size = { w: newW, h: newH };
+    const dropped = wouldDrop;
+    if (dropped.length) room.objects = room.objects.filter(o => inBounds(o.x + dx, o.y + dy));
+    for (const o of room.objects) { o.x += dx; o.y += dy; }
+
+    // keep the rotation pivot inside the room
+    if (room.transform && room.transform.pivot) {
+      const px = clamp(num(room.transform.pivot.x) + dx, 0, newW);
+      const py = clamp(num(room.transform.pivot.y) + dy, 0, newH);
+      if (px !== room.transform.pivot.x || py !== room.transform.pivot.y) warnings.push('rotation pivot clamped to new bounds');
+      room.transform.pivot = { x: px, y: py };
+    }
+
+    return { ok: true, wouldDrop: [], dropped, offset: { dx, dy }, newW, newH, warnings };
   }
 
   function createObjectInstance(type, x, y) {
@@ -297,7 +373,7 @@
       const def = OBJECT_DEFS[o.type];
       inst.id = str(o.id, inst.id);
       inst.name = str(o.name, inst.name);
-      inst.rotation = num(o.rotation) % 360;
+      inst.rotation = snapAngle(o.rotation);
       inst.layer = isLayer(o.layer) ? o.layer : def.layer;
       if (o.interactive != null) inst.interactive = bool(o.interactive);
       if (o.collision != null) inst.collision = bool(o.collision);
@@ -350,8 +426,8 @@
     FORMAT, FORMAT_VERSION,
     MATERIALS, WALL_SHAPES, LAYERS, OBJECT_DEFS,
     isMaterial, isFloor, isObjectType, isWallShape, isLayer, objectBlocks,
-    uid, clamp,
-    createTile, createTransform, createRoom, createObjectInstance,
+    uid, clamp, snapAngle, ROT_STEP,
+    createTile, createTransform, createRoom, resizeRoom, createObjectInstance,
     createRoomEvent, createLink, createLevel, createSaveFile,
     normalizeSave, normalizeLevel, normalizeRoom, normalizeRoomEvent, normalizeLink
   };

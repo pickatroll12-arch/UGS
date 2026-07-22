@@ -37,6 +37,7 @@
     hiddenLayers: new Set(),       // layer names toggled off
     clock: { paused: false, speed: 1 },   // Play-mode simulation clock
     pendingLink: null,             // { levelId, roomId, lx, ly } source awaiting a target
+    selectedLinkId: null,          // id of the link highlighted in the Links list
     resident: new Set(),           // level ids currently "loaded" (preload/stream model)
   };
   const undoStack = [];
@@ -68,13 +69,15 @@
   // ---- history ------------------------------------------------------------
   function pushHistory() { undoStack.push(clone(app.save)); if (undoStack.length > 80) undoStack.shift(); redoStack.length = 0; }
   function discardHistory() { undoStack.pop(); }        // for gestures that changed nothing
+  // guard: editing mutations only apply in Build. Returns false (+ status) in Play.
+  function requireBuild() { if (app.mode === 'play') { setStatus(t('status.editInBuild')); return false; } return true; }
   function undo() {
-    if (app.mode === 'play') return setStatus('Stop Play to undo.');
+    if (!requireBuild()) return;
     if (!undoStack.length) return setStatus('Nothing to undo.');
     redoStack.push(clone(app.save)); app.save = undoStack.pop(); afterRestore('Undo.');
   }
   function redo() {
-    if (app.mode === 'play') return setStatus('Stop Play to redo.');
+    if (!requireBuild()) return;
     if (!redoStack.length) return setStatus('Nothing to redo.');
     undoStack.push(clone(app.save)); app.save = redoStack.pop(); afterRestore('Redo.');
   }
@@ -110,7 +113,7 @@
     app.save = save; app.activeLevelId = save.startLevelId || save.levels[0].id;
     app.selection = null; undoStack.length = 0; redoStack.length = 0;
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    refreshLevelSelect(); updateInspector(); setStatus(msg || 'Loaded.');
+    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); setStatus(msg || 'Loaded.');
   }
   function setMode(mode) {
     if (mode === app.mode) return;
@@ -130,7 +133,7 @@
     document.body.classList.toggle('playing', mode === 'play');
     updatePlayBar();
     updateInspector();
-    setStatus(mode === 'play' ? 'Play mode — sim running. Space to pause, 1/2/3 speed.' : 'Build mode.');
+    setStatus(t(mode === 'play' ? 'status.playMode' : 'status.buildMode'));
   }
 
   function updatePlayBar() {
@@ -141,13 +144,22 @@
     if (pb) pb.textContent = app.clock.paused ? t('play.resume') : t('play.pause');
     [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
   }
+  // which contextual palette group the bottom bar shows for each tool
+  const TOOL_GROUP = { select: 'select', floor: 'floor', fill: 'floor', wall: 'wall', object: 'object' };
+  function syncToolContext(tool) {
+    document.querySelectorAll('#bb-palettes .bb-grp').forEach(g =>
+      g.classList.toggle('on', g.dataset.grp === TOOL_GROUP[tool]));
+    const hintEl = document.getElementById('toolHint');
+    if (hintEl) hintEl.textContent = t('tool.' + tool + '.hint');
+  }
   function setTool(tool) {
     if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
     canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+    syncToolContext(tool);
     if (tool === 'link') linkStartTool();
-    else setStatus(tool[0].toUpperCase() + tool.slice(1) + ' tool.');
+    else setStatus(t('status.tool', { tool: t('tool.' + tool) }));
   }
 
   // ---- tool mutations (each returns whether it changed anything) ----------
@@ -202,6 +214,7 @@
   // ---- levels (decks) -----------------------------------------------------
   function levelName(id) { const l = app.save.levels.find(x => x.id === id); return l ? l.name : '?'; }
   function addLevel() {
+    if (!requireBuild()) return;
     pushHistory();
     const lvl = D.createLevel('Deck ' + (app.save.levels.length + 1));
     app.save.levels.push(lvl);
@@ -209,6 +222,7 @@
     setStatus(`Added ${lvl.name}.`);
   }
   function deleteLevel() {
+    if (!requireBuild()) return;
     if (app.save.levels.length <= 1) return setStatus('Cannot delete the last deck.');
     pushHistory();
     const id = app.activeLevelId;
@@ -227,7 +241,7 @@
     app.activeLevelId = id; app.selection = null;
     if (app.mode === 'play') engine.start(activeLevel());
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    updateInspector();
+    updateInspector(); refreshRoomList(); refreshLinkList();
   }
 
   // ---- links (level graph) ------------------------------------------------
@@ -259,14 +273,16 @@
     app.save.links.push(link);
     const msg = `Linked ${levelName(link.from.levelId)} → ${levelName(link.to.levelId)} (${link.mode}).`;
     app.pendingLink = null;
+    refreshLinkList();
     setStatus(msg);
   }
   // marker list for the active level (both endpoints that live here + pending)
   function linkMarkers() {
     const id = app.activeLevelId, out = [];
     for (const k of app.save.links) {
-      if (k.from.levelId === id) out.push({ roomId: k.from.roomId, x: k.from.x, y: k.from.y, kind: 'source', label: '↑ ' + levelName(k.to.levelId) });
-      if (k.to.levelId === id) out.push({ roomId: k.to.roomId, x: k.to.x, y: k.to.y, kind: 'spawn', label: levelName(k.from.levelId) });
+      const sel = k.id === app.selectedLinkId;
+      if (k.from.levelId === id) out.push({ roomId: k.from.roomId, x: k.from.x, y: k.from.y, kind: 'source', sel, label: '↑ ' + levelName(k.to.levelId) });
+      if (k.to.levelId === id) out.push({ roomId: k.to.roomId, x: k.to.x, y: k.to.y, kind: 'spawn', sel, label: levelName(k.from.levelId) });
     }
     if (app.pendingLink && app.pendingLink.levelId === id) out.push({ roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly, kind: 'pending', label: 'source' });
     return out;
@@ -369,6 +385,7 @@
   }
 
   function duplicateActiveRoom() {
+    if (!requireBuild()) return;
     const src = app.selection ? roomById(app.selection.roomId) : activeLevel().rooms[0];
     if (!src) return;
     pushHistory();
@@ -377,7 +394,146 @@
     copy.events.forEach(e => { e.id = D.uid('evt'); });
     copy.transform = D.createTransform(src.transform.x + src.size.w + 2, src.transform.y, src.transform.rotation);
     activeLevel().rooms.push(copy);
+    selectRoom(copy);
     setStatus(`Room "${src.name}" duplicated.`);
+  }
+
+  // ---- room list & room-level actions (S1-R4) -----------------------------
+  // free world-x just right of the current rightmost room, so a new/added room
+  // does not overlap existing ones.
+  function nextRoomX(level) {
+    let maxR = 0;
+    for (const r of level.rooms) maxR = Math.max(maxR, num(r.transform && r.transform.x) + r.size.w);
+    return maxR + 2;
+  }
+  function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+
+  function selectRoom(room) {
+    if (!room) return;
+    app.selection = { roomId: room.id, lx: Math.floor(room.size.w / 2), ly: Math.floor(room.size.h / 2), objectId: null };
+    updateInspector(); invalidate();   // updateInspector refreshes the room list
+  }
+
+  function refreshRoomList() {
+    const wrap = document.getElementById('roomList'); if (!wrap) return;
+    const lvl = activeLevel(); wrap.innerHTML = '';
+    if (!lvl.rooms.length) { wrap.innerHTML = `<span class="muted" style="font-size:11px">${t('rooms.empty')}</span>`; }
+    for (const room of lvl.rooms) {
+      const b = document.createElement('button');
+      const sel = app.selection && app.selection.roomId === room.id;
+      b.classList.toggle('active', !!sel);
+      b.innerHTML = `<span>${esc(room.name)}</span><span class="rl-meta">${room.size.w}×${room.size.h}${room.objects.length ? ' · ' + room.objects.length : ''}</span>`;
+      b.addEventListener('click', () => selectRoom(room));
+      wrap.appendChild(b);
+    }
+    const nameEl = document.getElementById('roomName');
+    if (nameEl) { const r = selectedRoom(); nameEl.value = r ? r.name : ''; nameEl.disabled = !r; }
+  }
+
+  function addRoom() {
+    if (!requireBuild()) return;
+    const lvl = activeLevel();
+    pushHistory();
+    const room = D.createRoom('Room ' + (lvl.rooms.length + 1), 8, 8);
+    room.tiles = grid(8, 8, 'deck'); ringWalls(room);
+    room.transform = D.createTransform(nextRoomX(lvl), 0, 0);
+    room.transform.pivot = { x: 4, y: 4 };
+    lvl.rooms.push(room);
+    selectRoom(room);
+    setStatus(t('status.roomAdded', { name: room.name }));
+  }
+
+  function deleteSelectedRoom() {
+    if (!requireBuild()) return;
+    const lvl = activeLevel();
+    const room = selectedRoom(); if (!room) return;
+    if (lvl.rooms.length <= 1) { setStatus(t('status.cantDeleteLastRoom')); return; }
+    if (!window.confirm(t('confirm.deleteRoom', { name: room.name }))) return;
+    pushHistory();
+    const name = room.name;
+    lvl.rooms = lvl.rooms.filter(r => r !== room);
+    // drop links whose endpoints reference this room
+    if (app.save.links) app.save.links = app.save.links.filter(k =>
+      !(k.from && k.from.roomId === room.id) && !(k.to && k.to.roomId === room.id));
+    // repoint the deck entry if it lived in the deleted room
+    if (lvl.entry && lvl.entry.roomId === room.id) {
+      const first = lvl.rooms[0];
+      lvl.entry = { roomId: first.id, x: Math.min(2, first.size.w - 1), y: Math.min(2, first.size.h - 1) };
+    }
+    selectRoom(lvl.rooms[0]);
+    setStatus(t('status.roomDeleted', { name }));
+  }
+
+  // ---- link list & link-level actions (S1-R8) -----------------------------
+  const LINK_KINDS = ['elevator', 'door', 'hatch', 'custom'];
+  // is a link endpoint still valid (its level + room exist)?
+  function endpointOk(ep) {
+    const lvl = app.save.levels.find(l => l.id === ep.levelId); if (!lvl) return false;
+    return ep.roomId == null || lvl.rooms.some(r => r.id === ep.roomId);
+  }
+  function linkBroken(k) { return !endpointOk(k.from) || !endpointOk(k.to); }
+
+  function refreshLinkList() {
+    const wrap = document.getElementById('linkList'); if (!wrap) return;
+    wrap.innerHTML = '';
+    const links = app.save.links || [];
+    if (!links.length) { wrap.innerHTML = `<span class="muted" style="font-size:11px">${t('links.empty')}</span>`; return; }
+    for (const k of links) {
+      const row = document.createElement('div'); row.className = 'linkrow';
+      if (k.id === app.selectedLinkId) row.classList.add('active');
+      const broken = linkBroken(k);
+      const name = document.createElement('button'); name.className = 'lk-name';
+      name.innerHTML = `${broken ? '⚠ ' : ''}${esc(levelName(k.from.levelId))} → ${esc(levelName(k.to.levelId))}`;
+      name.title = broken ? t('warn.brokenLink') : '';
+      name.addEventListener('click', () => selectLink(k.id));
+      const kindSel = document.createElement('select'); kindSel.className = 'lk-kind';
+      for (const kk of LINK_KINDS) { const o = document.createElement('option'); o.value = kk; o.textContent = t('linkKind.' + kk); o.selected = k.kind === kk; kindSel.appendChild(o); }
+      kindSel.addEventListener('change', e => setLinkKind(k.id, e.target.value));
+      const modeBtn = document.createElement('button'); modeBtn.className = 'lk-mode';
+      modeBtn.textContent = t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream'));
+      modeBtn.title = t('mode.hint'); modeBtn.addEventListener('click', () => toggleLinkMode(k.id));
+      const del = document.createElement('button'); del.className = 'danger lk-del'; del.textContent = '✕';
+      del.title = t('links.delete'); del.addEventListener('click', () => deleteLink(k.id));
+      row.append(name, kindSel, modeBtn, del);
+      wrap.appendChild(row);
+    }
+  }
+  function selectLink(id) {
+    const k = (app.save.links || []).find(x => x.id === id); if (!k) return;
+    app.selectedLinkId = id;
+    // jump to the source deck so at least one highlighted endpoint is on screen
+    if (k.from.levelId !== app.activeLevelId) switchLevel(k.from.levelId);
+    refreshLinkList(); invalidate();
+    setStatus(`${t('linkKind.' + (k.kind || 'custom'))}: ${levelName(k.from.levelId)} → ${levelName(k.to.levelId)} · ${t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream'))}`);
+  }
+  function deleteLink(id) {
+    if (!requireBuild()) return;
+    if (!(app.save.links || []).some(k => k.id === id)) return;
+    pushHistory();
+    app.save.links = app.save.links.filter(k => k.id !== id);
+    if (app.selectedLinkId === id) app.selectedLinkId = null;
+    refreshLinkList(); invalidate(); setStatus(t('status.linkDeleted'));
+  }
+  function setLinkKind(id, kind) {
+    if (!requireBuild()) return;
+    const k = (app.save.links || []).find(x => x.id === id); if (!k) return;
+    pushHistory(); k.kind = LINK_KINDS.includes(kind) ? kind : 'custom';
+    refreshLinkList();
+  }
+  function toggleLinkMode(id) {
+    if (!requireBuild()) return;
+    const k = (app.save.links || []).find(x => x.id === id); if (!k) return;
+    pushHistory(); k.mode = k.mode === 'preload' ? 'stream' : 'preload';
+    refreshLinkList(); setStatus(t('status.linkModeChanged', { mode: t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream')) }));
+  }
+
+  function renameSelectedRoom(name) {
+    if (!requireBuild()) return;
+    const room = selectedRoom(); if (!room) return;
+    const clean = (name || '').trim(); if (!clean || clean === room.name) return;
+    pushHistory(); room.name = clean;
+    refreshRoomList(); updateInspector();
+    setStatus(t('status.roomRenamed', { name: clean }));
   }
 
   function toggleSelectedDoor() {
@@ -437,7 +593,7 @@
           t.x = Math.round(t.x + (P.x - rc.x)); t.y = Math.round(t.y + (P.y - rc.y)); strokeChanged = true;
         } else if (dragHandle.kind === 'room-rotate') {
           const ang = Math.atan2(P.y - rc.y, P.x - rc.x) * 180 / Math.PI;
-          const rot = ((Math.round((ang + 90) / 90) * 90) % 360 + 360) % 360;   // grip points "up" at rot 0
+          const rot = D.snapAngle(ang + 90);   // grip points "up" at rot 0; snaps to the 45° step
           const before = R.roomCenterWorld(room);
           t.rotation = rot;
           const after = R.roomCenterWorld(room);
@@ -541,6 +697,7 @@
   // ---- inspector ----------------------------------------------------------
   function updateInspector() {
     const lvl = activeLevel();
+    refreshRoomList();
     if (!app.selection) { inspector.innerHTML = `<span class="muted">${esc(t('insp.empty'))}</span>`; return; }
     const room = roomById(app.selection.roomId);
     if (!room) { inspector.innerHTML = '<span class="muted">—</span>'; return; }
@@ -549,6 +706,18 @@
 
     let h = `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
     h += `<div class="row"><b>${esc(t('insp.transform'))}</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
+    h += `<div class="row"><b>${esc(t('insp.size'))}</b><span>${room.size.w} × ${room.size.h}</span></div>`;
+    h += `<div class="resize">`
+      + `<input type="number" data-rz="w" min="1" max="64" value="${room.size.w}" title="W">`
+      + `<span class="rz-x">×</span>`
+      + `<input type="number" data-rz="h" min="1" max="64" value="${room.size.h}" title="H">`
+      + `<select data-rz="anchor" title="${esc(t('insp.anchor'))}">`
+      + `<option value="nw">${esc(t('anchor.nw'))}</option>`
+      + `<option value="center">${esc(t('anchor.center'))}</option>`
+      + `<option value="se">${esc(t('anchor.se'))}</option>`
+      + `</select>`
+      + `<button data-act="resize">${esc(t('insp.applySize'))}</button>`
+      + `</div>`;
     h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
     if (tile) {
       h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
@@ -573,7 +742,13 @@
       for (const ev of room.events) {
         const kind = ev.action ? ev.action.kind : '?';
         const extra = kind === 'orbit' ? ` ${ev.action.direction === 'ccw' ? '⟲' : '⟳'}` : (ev.loop ? ' ⟳' : '');
-        h += `<div class="row" style="margin-top:4px"><b>${esc(ev.name)}</b><span>${kind}${extra} · ${ev.trigger ? ev.trigger.type : 'manual'}</span></div>`;
+        const trig = ev.trigger ? ev.trigger.type : 'manual';
+        const issue = eventIssue(ev);
+        const off = ev.enabled === false;
+        h += `<div class="row" style="margin-top:6px${off ? ';opacity:.5' : ''}">`
+          + `<b><label style="cursor:pointer"><input type="checkbox" data-act="evt-toggle" data-id="${ev.id}" ${off ? '' : 'checked'}> ${issue ? '<span title="' + esc(issue) + '">⚠</span> ' : ''}${esc(ev.name)}</label></b>`
+          + `<span>${esc(I.label('motionKind.' + kind, kind))}${extra} · ${esc(I.label('trigger.' + trig, trig))}</span></div>`;
+        if (issue) h += `<div class="hint" style="margin:2px 0 0;color:#e0a24a">${esc(issue)}</div>`;
         h += `<div class="mini"><button data-act="evt-fire" data-id="${ev.id}">${esc(t('insp.test'))}</button>`;
         if (kind === 'orbit') h += `<button data-act="evt-orbitdir" data-id="${ev.id}">${esc(t('insp.flip'))}</button>`;
         h += `<button class="danger" data-act="evt-del" data-id="${ev.id}">✕</button></div>`;
@@ -592,6 +767,58 @@
 
   // ---- room motion authoring ---------------------------------------------
   function selectedRoom() { return app.selection ? roomById(app.selection.roomId) : null; }
+
+  // Resize the selected room from the inspector inputs. Non-destructive: a
+  // shrink that would drop objects asks for confirmation first (owner rule),
+  // then repairs the level entry, links, and selection by the applied offset.
+  function resizeSelectedRoom() {
+    if (!requireBuild()) return;
+    const room = selectedRoom(); if (!room) return;
+    const wEl = inspector.querySelector('[data-rz="w"]');
+    const hEl = inspector.querySelector('[data-rz="h"]');
+    const aEl = inspector.querySelector('[data-rz="anchor"]');
+    if (!wEl || !hEl) return;
+    const nw = Math.round(+wEl.value), nh = Math.round(+hEl.value);
+    const anchor = aEl ? aEl.value : 'nw';
+    if (!(nw >= 1) || !(nh >= 1)) return;
+    if (nw === room.size.w && nh === room.size.h) { setStatus(t('status.sizeUnchanged')); return; }
+
+    pushHistory();
+    let res = D.resizeRoom(room, nw, nh, { anchor, force: false });
+    if (!res.ok) {
+      if (!window.confirm(t('confirm.dropObjects', { n: res.wouldDrop.length }))) {
+        discardHistory(); setStatus(t('status.resizeCancelled')); return;
+      }
+      res = D.resizeRoom(room, nw, nh, { anchor, force: true });
+    }
+    const { dx, dy } = res.offset;
+    repairAfterResize(room, dx, dy, res.newW, res.newH);
+    if (app.selection && app.selection.roomId === room.id) {
+      app.selection.lx = CORE.clamp(app.selection.lx + dx, 0, res.newW - 1);
+      app.selection.ly = CORE.clamp(app.selection.ly + dy, 0, res.newH - 1);
+    }
+    updateInspector(); refreshLevelSelect(); invalidate();
+    const extra = res.dropped.length ? ' ' + t('status.droppedN', { n: res.dropped.length }) : '';
+    setStatus(t('status.resized', { w: res.newW, h: res.newH }) + extra);
+  }
+
+  // After a room resize, shift/clamp everything that references its tiles.
+  function repairAfterResize(room, dx, dy, w, h) {
+    const clampX = (x) => CORE.clamp(Math.round(x), 0, w - 1);
+    const clampY = (y) => CORE.clamp(Math.round(y), 0, h - 1);
+    // level entry (entry lives on the level, not the room)
+    for (const lvl of app.save.levels) {
+      if (lvl.entry && lvl.entry.roomId === room.id) {
+        lvl.entry.x = clampX(lvl.entry.x + dx);
+        lvl.entry.y = clampY(lvl.entry.y + dy);
+      }
+    }
+    // link endpoints that land in this room
+    for (const k of (app.save.links || [])) {
+      if (k.from && k.from.roomId === room.id) { k.from.x = clampX(k.from.x + dx); k.from.y = clampY(k.from.y + dy); }
+      if (k.to && k.to.roomId === room.id) { k.to.x = clampX(k.to.x + dx); k.to.y = clampY(k.to.y + dy); }
+    }
+  }
   function addRoomEvent(room, kind) {
     pushHistory();
     room.movable = true;
@@ -605,6 +832,26 @@
     ] };
     room.events.push(ev);
     updateInspector(); setStatus(`Added ${kind} event. Drag the handle to aim it, hit Play to see it.`);
+  }
+  // Validate a motion event; returns a human warning string, or '' if fine.
+  function eventIssue(ev) {
+    const a = ev.action || {};
+    if (a.kind === 'orbit') {
+      if (!a.center || !Number.isFinite(+a.center.x) || !Number.isFinite(+a.center.y)) return t('warn.orbitCenter');
+      if (!(+a.radius > 0)) return t('warn.orbitRadius');
+    }
+    if (a.kind === 'carousel') {
+      if (!Array.isArray(a.poses) || a.poses.length < 2) return t('warn.carouselPoses');
+    }
+    if (a.kind === 'shift' && !a.to) return t('warn.shiftTarget');
+    return '';
+  }
+  function toggleRoomEvent(room, id) {
+    if (!requireBuild()) return;
+    const ev = room.events.find(e => e.id === id); if (!ev) return;
+    pushHistory(); ev.enabled = ev.enabled === false ? true : false;
+    updateInspector();
+    setStatus(t(ev.enabled === false ? 'status.eventDisabled' : 'status.eventEnabled', { name: ev.name }));
   }
   function deleteRoomEvent(room, id) { pushHistory(); room.events = room.events.filter(e => e.id !== id); updateInspector(); }
   function testRoomEvent(room, id) {
@@ -716,6 +963,23 @@
     if (active) b.classList.add('active'); b.addEventListener('click', onClick); return b;
   }
 
+  // ---- help overlay (first-run onboarding) --------------------------------
+  const HELP_SEEN_KEY = 'ugs.helpSeen';
+  function showHelp(on) {
+    const ov = document.getElementById('helpOverlay'); if (!ov) return;
+    ov.classList.toggle('on', on !== false);
+  }
+  function setupHelp() {
+    const ov = document.getElementById('helpOverlay');
+    const btn = document.getElementById('helpBtn');
+    const close = document.getElementById('helpClose');
+    if (btn) btn.addEventListener('click', () => showHelp(true));
+    if (close) close.addEventListener('click', () => { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {} });
+    if (ov) ov.addEventListener('click', e => { if (e.target === ov) { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e2) {} } });
+    let seen = false; try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
+    if (!seen) showHelp(true);
+  }
+
   // ---- language wiring -----------------------------------------------------
   function setupLanguage() {
     const sel = document.getElementById('langSelect');
@@ -735,7 +999,10 @@
     I.subscribe((lang) => {
       buildPalettes();
       updateInspector();
+      refreshRoomList();
+      refreshLinkList();
       updatePlayBar();
+      syncToolContext(app.tool);
       if (sel) sel.value = lang;
       setStatus(t('status.langChanged', { lang: t('lang.' + lang) }));
     });
@@ -768,7 +1035,11 @@
       if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }
       if (k === 'delete' || k === 'backspace') { if (app.mode === 'build') deleteSelectedObject(); return; }
-      if (k === 'escape') { app.selection = null; updateInspector(); return; }
+      if (k === 'escape') {
+        const ov = document.getElementById('helpOverlay');
+        if (ov && ov.classList.contains('on')) { showHelp(false); return; }
+        app.selection = null; updateInspector(); return;
+      }
       if (app.mode === 'play') {
         if (k === ' ') { e.preventDefault(); app.clock.paused = !app.clock.paused; updatePlayBar(); return; }
         if (k === '1' || k === '2' || k === '3') { app.clock.speed = +k; app.clock.paused = false; updatePlayBar(); return; }
@@ -781,12 +1052,6 @@
 
     document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 
-    // tab switching
-    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
-      const name = btn.dataset.tab;
-      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
-      document.querySelectorAll('[data-tabpanel]').forEach(p => { p.hidden = p.dataset.tabpanel !== name; });
-    }));
     document.getElementById('buildBtn').addEventListener('click', () => setMode('build'));
     document.getElementById('playBtn').addEventListener('click', () => setMode('play'));
     document.getElementById('undoBtn').addEventListener('click', undo);
@@ -811,6 +1076,7 @@
       const act = e.target.dataset.act; if (!act) return;
       const room = selectedRoom();
       if (act === 'rotate') rotateSelectedObject();
+      else if (act === 'resize') resizeSelectedRoom();
       else if (act === 'dup') duplicateSelectedObject();
       else if (act === 'toggle') { pushHistory(); if (!toggleSelectedDoor()) discardHistory(); }
       else if (act === 'delete') deleteSelectedObject();
@@ -823,10 +1089,15 @@
       else if (act === 'evt-orbitdir' && room) { const ev = room.events.find(x => x.id === e.target.dataset.id); if (ev) { pushHistory(); ev.action.direction = ev.action.direction === 'ccw' ? 'cw' : 'ccw'; updateInspector(); } }
     });
     inspector.addEventListener('change', e => {
-      if (e.target.dataset.act === 'movable') { const room = selectedRoom(); if (room) { pushHistory(); room.movable = e.target.checked; } }
+      const act = e.target.dataset.act;
+      if (act === 'movable') { const room = selectedRoom(); if (room) { pushHistory(); room.movable = e.target.checked; } }
+      else if (act === 'evt-toggle') { const room = selectedRoom(); if (room) toggleRoomEvent(room, e.target.dataset.id); }
     });
 
     document.getElementById('dupRoomBtn').addEventListener('click', duplicateActiveRoom);
+    document.getElementById('addRoomBtn').addEventListener('click', addRoom);
+    document.getElementById('delRoomBtn').addEventListener('click', deleteSelectedRoom);
+    document.getElementById('roomName').addEventListener('change', e => renameSelectedRoom(e.target.value));
     document.getElementById('addLevelBtn').addEventListener('click', addLevel);
     document.getElementById('delLevelBtn').addEventListener('click', deleteLevel);
     document.getElementById('levelName').addEventListener('change', e => renameLevel(e.target.value));
@@ -839,6 +1110,7 @@
     if (engine.bus) engine.bus.on('pawn:arrived', onPawnArrived);
 
     setupLanguage();
+    setupHelp();
     buildPalettes();
     loadSave(blankStation(), t('status.emptyReady'));
     setMode('build'); setTool('select');

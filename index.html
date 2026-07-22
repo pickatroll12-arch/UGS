@@ -6,8 +6,9 @@
 <title>UGS — Station Builder</title>
 <style>
   :root {
-    --bg: #0e0e10; --panel: rgba(20,20,24,0.94); --line: #3a3a41;
-    --line-bright: #6a6a72; --text: #eececf; --text: #ececf0; --muted: #9a9aa2; --accent: #fff;
+    --bg: #0e0e10; --panel: rgba(20,20,24,0.96); --panel-solid: #16161a; --line: #3a3a41;
+    --line-bright: #6a6a72; --text: #ececf0; --muted: #9a9aa2; --accent: #fff;
+    --top-h: 48px; --rail-w: 74px; --side-w: 268px; --bottom-h: 96px;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -17,176 +18,280 @@
     cursor: crosshair; background:
       radial-gradient(circle at 50% 45%, rgba(255,255,255,0.04), transparent 55%), var(--bg); }
 
-  .panel { position: fixed; z-index: 3; top: 12px; left: 12px; width: 250px;
-    padding: 12px; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 10px; box-shadow: 0 16px 44px rgba(0,0,0,0.42); backdrop-filter: blur(10px); }
-  .panel h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: .04em; }
-  .panel .sub { margin: 0 0 12px; font-size: 11px; color: var(--muted); }
-  .sect { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .sect:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+  button, select, input { font: inherit; color: var(--text); background: #27272c;
+    border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; cursor: pointer; }
+  button:hover { border-color: var(--line-bright); background: #313137; }
+  button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  button.danger { color: #ffdada; border-color: #6b3c3c; }
+  select { cursor: pointer; }
+  input { cursor: text; }
   .lbl { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
     color: #ccccd2; margin: 0 0 7px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chips button { padding: 5px 8px; font-size: 11px; }
-  .langpick { display: flex; align-items: center; gap: 6px; margin: 10px 0 2px; }
-  .langpick .ic { font-size: 13px; opacity: .8; }
-  .langpick select { flex: 1; padding: 5px 8px; font-size: 11px; }
-  .tabbar { display: flex; gap: 5px; margin: 12px 0 4px; }
-  .tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 7px 4px; font-size: 10px; color: var(--muted); }
-  .tabbar button .ic { font-size: 15px; line-height: 1; }
-  .tabbar button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
-  .tabpanel[hidden] { display: none; }
-  button, select { font: inherit; color: var(--text); background: #27272c;
-    border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; cursor: pointer; }
-  button:hover { border-color: var(--line-bright); background: #313137; }
-  button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
-  button.danger { color: #ffdada; border-color: #6b3c3c; }
-  select { width: 100%; }
-  #inspector .mini { display: flex; gap: 6px; margin-top: 8px; }
-  #inspector .mini button { padding: 5px 8px; font-size: 11px; }
-  .panel { max-height: calc(100vh - 24px); overflow-y: auto; }
+  .hint { margin: 8px 0 0; font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .kbd { padding: 1px 4px; background: #26262a; border: 1px solid #4a4a51; border-radius: 4px; font-size: 9px; }
+
+  /* ── TOP BAR ─────────────────────────────────────────────── */
+  #topbar { position: fixed; z-index: 5; top: 0; left: 0; right: 0; height: var(--top-h);
+    display: flex; align-items: center; gap: 16px; padding: 0 12px;
+    background: var(--panel); border-bottom: 1px solid var(--line); backdrop-filter: blur(10px); }
+  .tb-brand { display: flex; flex-direction: column; line-height: 1.1; min-width: 128px; }
+  .tb-logo { font-size: 14px; font-weight: 800; letter-spacing: .06em; }
+  .tb-sub { font-size: 10px; color: var(--muted); }
+  .tb-group { display: flex; align-items: center; gap: 7px; }
+  .tb-group .tb-cap { font-size: 10px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); }
+  #levelSelect { min-width: 130px; padding: 5px 8px; }
+  .tb-spacer { flex: 1; }
+  .modeswitch { display: flex; gap: 4px; padding: 3px; background: #1c1c20;
+    border: 1px solid var(--line); border-radius: 9px; }
+  .modeswitch button { padding: 5px 14px; border: 0; background: transparent; border-radius: 6px; }
+  .modeswitch button.active { background: var(--accent); color: #111; }
+  .langpick { display: flex; align-items: center; gap: 6px; }
+  .langpick .ic { font-size: 14px; opacity: .8; }
+  .langpick select { padding: 5px 8px; font-size: 12px; }
+  #simChip { display: none; font-size: 11px; font-weight: 800; letter-spacing: .1em;
+    color: #ffd24a; padding: 4px 9px; border: 1px solid #6b5a2a; border-radius: 20px;
+    background: rgba(255,210,74,0.08); animation: simpulse 1.6s ease-in-out infinite; }
+  body.playing #simChip { display: inline-block; }
+  @keyframes simpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  .iconbtn { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; }
+
+  /* ── HELP OVERLAY ────────────────────────────────────────── */
+  #helpOverlay { position: fixed; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(6,6,8,0.68); backdrop-filter: blur(3px); }
+  #helpOverlay.on { display: flex; }
+  .help-card { width: min(560px, 100%); max-height: 86vh; overflow-y: auto;
+    background: var(--panel-solid); border: 1px solid var(--line-bright); border-radius: 14px;
+    padding: 22px 24px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); }
+  .help-card h2 { margin: 0 0 6px; font-size: 18px; letter-spacing: .02em; }
+  .help-card .help-intro { margin: 0 0 14px; font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .help-card h3 { margin: 14px 0 3px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #cfcfd6; }
+  .help-card p { margin: 0; font-size: 12.5px; color: var(--text); line-height: 1.55; }
+  .help-actions { margin-top: 20px; display: flex; justify-content: flex-end; }
+  .help-actions button { padding: 8px 18px; background: var(--accent); color: #111; font-weight: 700; border-color: var(--accent); }
+  /* editing controls are inert while simulating */
+  body.playing #toolrail,
+  body.playing .editing-only { opacity: .4; pointer-events: none; filter: grayscale(1); }
+
+  /* ── LEFT TOOL RAIL ──────────────────────────────────────── */
+  #toolrail { position: fixed; z-index: 4; top: var(--top-h); left: 0; bottom: 0;
+    width: var(--rail-w); display: flex; flex-direction: column; gap: 5px; padding: 8px 7px;
+    background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+  #toolrail button { display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 2px; font-size: 10px; border-radius: 8px; }
+  #toolrail button .ic { font-size: 17px; line-height: 1; }
+  .rail-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+  #toolrail .rail-mini button { padding: 6px 2px; font-size: 9px; }
+
+  /* ── RIGHT SIDE PANEL ────────────────────────────────────── */
+  #sidepanel { position: fixed; z-index: 4; top: var(--top-h); right: 0; bottom: 0;
+    width: var(--side-w); padding: 12px; overflow-y: auto;
+    background: var(--panel); border-left: 1px solid var(--line); backdrop-filter: blur(10px); }
+  .sp-sect { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .sp-sect:last-child { border-bottom: 0; margin-bottom: 0; }
+  details.sp-sect > summary { cursor: pointer; list-style: none; font-size: 10px; font-weight: 800;
+    letter-spacing: .12em; text-transform: uppercase; color: #ccccd2; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px; }
+  details.sp-sect > summary::-webkit-details-marker { display: none; }
+  details.sp-sect > summary::before { content: '▸'; font-size: 9px; color: var(--muted); transition: transform .15s; }
+  details.sp-sect[open] > summary::before { transform: rotate(90deg); }
   #inspector { font-size: 12px; line-height: 1.5; color: var(--text); }
   #inspector .muted { color: var(--muted); }
   #inspector .row { display: flex; justify-content: space-between; gap: 8px; }
   #inspector .row b { color: var(--muted); font-weight: 600; }
   #inspector hr { border: 0; border-top: 1px solid var(--line); margin: 7px 0; }
-  #hud { position: fixed; z-index: 3; top: 12px; right: 12px; font-family: ui-monospace, monospace;
-    font-size: 11px; line-height: 1.5; color: var(--muted); background: rgba(0,0,0,0.4);
-    border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; white-space: pre;
-    pointer-events: none; text-align: right; }
-  #status { position: fixed; z-index: 3; right: 12px; bottom: 12px; max-width: 60vw;
-    font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line);
-    border-radius: 7px; padding: 8px 11px; pointer-events: none; }
-  #playBar { position: fixed; z-index: 4; bottom: 14px; left: 50%; transform: translateX(-50%);
-    display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 44px rgba(0,0,0,0.4); }
+  #inspector .mini { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  #inspector .mini button { padding: 5px 8px; font-size: 11px; }
+  #inspector .resize { display: flex; align-items: center; gap: 5px; margin: 6px 0 2px; }
+  #inspector .resize input[type=number] { width: 46px; padding: 4px 5px; font-size: 11px; text-align: center; }
+  #inspector .resize .rz-x { color: var(--muted); font-size: 11px; }
+  #inspector .resize select { flex: 1; min-width: 0; padding: 4px 5px; font-size: 11px; }
+  #inspector .resize button { padding: 5px 8px; font-size: 11px; white-space: nowrap; }
+  .roomlist { display: flex; flex-direction: column; gap: 4px; }
+  .roomlist button { text-align: left; padding: 6px 9px; font-size: 12px; display: flex;
+    justify-content: space-between; align-items: center; gap: 8px; }
+  .roomlist button .rl-meta { font-size: 10px; color: var(--muted); }
+  .roomlist button.active .rl-meta { color: #333; }
+  .linklist { display: flex; flex-direction: column; gap: 5px; }
+  .linkrow { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 7px; }
+  .linkrow.active { background: rgba(255,255,255,0.09); outline: 1px solid var(--line-bright); }
+  .linkrow .lk-name { flex: 1; min-width: 0; text-align: left; padding: 5px 7px; font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .linkrow .lk-kind { width: 74px; padding: 4px 4px; font-size: 10px; }
+  .linkrow .lk-mode { padding: 4px 6px; font-size: 10px; }
+  .linkrow .lk-del { padding: 4px 7px; font-size: 11px; }
+
+  /* ── BOTTOM BAR (build mode) ─────────────────────────────── */
+  #bottombar { position: fixed; z-index: 4; left: var(--rail-w); right: var(--side-w); bottom: 0;
+    min-height: var(--bottom-h); display: flex; flex-direction: column; gap: 6px; padding: 9px 14px;
+    background: var(--panel); border-top: 1px solid var(--line); backdrop-filter: blur(10px); }
+  #bb-palettes { display: flex; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+  .bb-grp { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .bb-grp.on { display: flex; }
+  .bb-lbl { font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .bb-hint { font-size: 11px; color: var(--muted); }
+  body.playing #bottombar { display: none; }
+
+  /* ── FLOATING: hud / status / play bar ───────────────────── */
+  #hud { position: fixed; z-index: 4; top: calc(var(--top-h) + 10px); right: calc(var(--side-w) + 12px);
+    font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; color: var(--muted);
+    background: rgba(0,0,0,0.4); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px;
+    white-space: pre; pointer-events: none; text-align: right; }
+  #status { position: fixed; z-index: 6; left: calc(var(--rail-w) + 14px); bottom: calc(var(--bottom-h) + 12px);
+    max-width: 40vw; font-size: 12px; color: var(--text); background: var(--panel-solid);
+    border: 1px solid var(--line); border-radius: 7px; padding: 8px 11px; pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  body.playing #status { bottom: 78px; left: 50%; transform: translateX(-50%); max-width: 60vw; }
+  #playBar { position: fixed; z-index: 5; bottom: 14px; left: calc(50% + (var(--rail-w) - var(--side-w)) / 2);
+    transform: translateX(-50%); display: none; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 44px rgba(0,0,0,0.4); }
   #playBar strong { font-size: 11px; letter-spacing: .12em; color: #d8d8dd; }
   #playBar button { padding: 6px 10px; }
-  #playBar .pb-hint { font-size: 10px; color: var(--muted); margin-left: 4px; }
+  #playBar .pb-hint { font-size: 10px; color: var(--muted); margin-left: 4px; max-width: 42vw; }
   body.playing #game { cursor: pointer; }
-  .hint { margin: 8px 0 0; font-size: 10px; color: var(--muted); line-height: 1.5; }
-  .kbd { padding: 1px 4px; background: #26262a; border: 1px solid #4a4a51; border-radius: 4px; font-size: 9px; }
+
+  /* keep it usable on shorter/narrower screens */
+  @media (max-width: 1180px) { :root { --side-w: 240px; --rail-w: 66px; } }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<aside class="panel">
-  <h1 data-i18n="app.brand">UGS · STATION BUILDER</h1>
-  <p class="sub" data-i18n="app.subtitle">Stage 1 · revised — usable builder pass</p>
-
+<!-- ── TOP BAR ───────────────────────────────────────────────── -->
+<header id="topbar">
+  <div class="tb-brand">
+    <span class="tb-logo" data-i18n="app.brand">UGS · STATION BUILDER</span>
+    <span class="tb-sub" data-i18n="app.subtitle">Stage 1 · revised</span>
+  </div>
+  <div class="tb-group">
+    <span class="tb-cap" data-i18n="topbar.deck">Deck</span>
+    <select id="levelSelect"></select>
+  </div>
+  <div class="tb-spacer"></div>
+  <span id="simChip" data-i18n="play.simRunning">● Simulating</span>
+  <button id="helpBtn" class="iconbtn" data-i18n-attr="title:help.open;aria-label:help.open">?</button>
   <label class="langpick">
     <span class="ic">🌐</span>
     <select id="langSelect" aria-label="Language"></select>
   </label>
-
-  <div class="grid2">
+  <div class="modeswitch">
     <button id="buildBtn" class="active" data-i18n="mode.build">Build</button>
     <button id="playBtn" data-i18n="mode.play">Play</button>
   </div>
-  <select id="levelSelect" style="margin-top:8px;"></select>
+</header>
 
-  <!-- tabbed toolbox -->
-  <div class="tabbar">
-    <button class="tab active" data-tab="build"><span class="ic">🧱</span><span data-i18n="tab.build">Build</span></button>
-    <button class="tab" data-tab="rooms"><span class="ic">🎞️</span><span data-i18n="tab.rooms">Rooms</span></button>
-    <button class="tab" data-tab="save"><span class="ic">💾</span><span data-i18n="tab.save">Save</span></button>
+<!-- ── LEFT TOOL RAIL ────────────────────────────────────────── -->
+<nav id="toolrail">
+  <button class="tool active" data-tool="select" data-i18n-attr="title:tool.select.hint"><span class="ic">▣</span><span data-i18n="tool.select">Select</span></button>
+  <button class="tool" data-tool="floor" data-i18n-attr="title:tool.floor.hint"><span class="ic">▦</span><span data-i18n="tool.floor">Floor</span></button>
+  <button class="tool" data-tool="wall" data-i18n-attr="title:tool.wall.hint"><span class="ic">▤</span><span data-i18n="tool.wall">Wall</span></button>
+  <button class="tool" data-tool="object" data-i18n-attr="title:tool.object.hint"><span class="ic">◈</span><span data-i18n="tool.object">Object</span></button>
+  <button class="tool" data-tool="entry" data-i18n-attr="title:tool.entry.hint"><span class="ic">⚑</span><span data-i18n="tool.entry">Entry</span></button>
+  <button class="tool" data-tool="erase" data-i18n-attr="title:tool.erase.hint"><span class="ic">⌫</span><span data-i18n="tool.erase">Erase</span></button>
+  <button class="tool" data-tool="fill" data-i18n-attr="title:tool.fill.hint"><span class="ic">▩</span><span data-i18n="tool.fill">Fill</span></button>
+  <button class="tool" data-tool="link" data-i18n-attr="title:tool.link.hint"><span class="ic">⛓</span><span data-i18n="tool.link">Link</span></button>
+  <div class="rail-sep"></div>
+  <div class="rail-mini" style="display:flex;flex-direction:column;gap:5px;">
+    <button id="undoBtn" data-i18n-attr="title:action.undo"><span class="ic">↶</span><span data-i18n="action.undo">Undo</span></button>
+    <button id="redoBtn" data-i18n-attr="title:action.redo"><span class="ic">↷</span><span data-i18n="action.redo">Redo</span></button>
   </div>
+</nav>
 
-  <div class="tabpanel" data-tabpanel="build">
-    <div class="sect">
-      <p class="lbl" data-i18n="section.tools">Tools</p>
-      <div class="grid3">
-        <button class="tool active" data-tool="select" data-i18n="tool.select" data-i18n-attr="title:tool.select.hint">Select</button>
-        <button class="tool" data-tool="floor" data-i18n="tool.floor" data-i18n-attr="title:tool.floor.hint">Floor</button>
-        <button class="tool" data-tool="wall" data-i18n="tool.wall" data-i18n-attr="title:tool.wall.hint">Wall</button>
-        <button class="tool" data-tool="object" data-i18n="tool.object" data-i18n-attr="title:tool.object.hint">Object</button>
-        <button class="tool" data-tool="entry" data-i18n="tool.entry" data-i18n-attr="title:tool.entry.hint">Entry</button>
-        <button class="tool" data-tool="erase" data-i18n="tool.erase" data-i18n-attr="title:tool.erase.hint">Erase</button>
-        <button class="tool" data-tool="fill" data-i18n="tool.fill" data-i18n-attr="title:tool.fill.hint">Fill</button>
-        <button class="tool" data-tool="link" data-i18n="tool.link" data-i18n-attr="title:tool.link.hint">Link</button>
-      </div>
-      <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)"><span data-i18n="filter.label">Select filter</span>
-        <select id="selectFilter" style="margin-top:4px;">
-          <option value="all" data-i18n="filter.all">All</option>
-          <option value="object" data-i18n="filter.object">Objects only</option>
-          <option value="wall" data-i18n="filter.wall">Walls only</option>
-          <option value="floor" data-i18n="filter.floor">Floors only</option>
-        </select>
-      </label>
+<!-- ── RIGHT SIDE PANEL ──────────────────────────────────────── -->
+<aside id="sidepanel">
+  <section class="sp-sect">
+    <p class="lbl" data-i18n="inspector.title">Inspector</p>
+    <div id="inspector"><span class="muted" data-i18n="inspector.empty">Nothing selected.</span></div>
+  </section>
+
+  <details class="sp-sect editing-only" open>
+    <summary data-i18n="decks.title">Decks (levels)</summary>
+    <input id="levelName" type="text" style="width:100%;margin-bottom:6px;" placeholder="Deck name" data-i18n-attr="placeholder:decks.namePlaceholder">
+    <div class="grid2">
+      <button id="addLevelBtn" data-i18n="decks.add">+ Add deck</button>
+      <button id="delLevelBtn" class="danger" data-i18n="decks.delete">Delete deck</button>
     </div>
-    <div class="sect">
-      <p class="lbl" data-i18n="palette.floorMat">Floor material</p>
+    <p class="hint" data-i18n="decks.linkHint">Use the Link tool to connect decks: click a source tile
+      (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
+    <p class="lbl" style="margin-top:12px;" data-i18n="links.title">Links</p>
+    <div id="linkList" class="linklist"></div>
+  </details>
+
+  <details class="sp-sect editing-only" open>
+    <summary data-i18n="rooms.title">Rooms</summary>
+    <div id="roomList" class="roomlist"></div>
+    <input id="roomName" type="text" style="width:100%;margin:7px 0 6px;" placeholder="Room name" data-i18n-attr="placeholder:rooms.namePlaceholder">
+    <div class="grid3">
+      <button id="addRoomBtn" data-i18n="rooms.add">+ Room</button>
+      <button id="dupRoomBtn" data-i18n="rooms.duplicate">Duplicate</button>
+      <button id="delRoomBtn" class="danger" data-i18n="rooms.delete">Delete</button>
+    </div>
+  </details>
+
+  <details class="sp-sect">
+    <summary data-i18n="layers.title">Layers</summary>
+    <div id="layerToggles" class="chips"></div>
+  </details>
+
+  <details class="sp-sect">
+    <summary data-i18n="motion.title">Room motion</summary>
+    <p class="hint" data-i18n="motion.hint">Select a room (Select tool) — its motion events appear in the
+      Inspector above. Add Shift / Rotate / Orbit / Carousel, then drag the
+      coloured handle on the map to aim it. Hit Play to watch.</p>
+  </details>
+
+  <details class="sp-sect editing-only">
+    <summary data-i18n="package.title">Package</summary>
+    <div class="grid3">
+      <button id="exportBtn" data-i18n="action.export">Export</button>
+      <button id="importBtn" data-i18n="action.import">Import</button>
+      <button id="newBtn" data-i18n="action.new">New</button>
+    </div>
+    <p class="hint">
+      <span class="kbd">V</span> <span class="kbd">F</span> <span class="kbd">G</span>
+      <span class="kbd">B</span> <span class="kbd">N</span> <span class="kbd">X</span>
+      <span class="kbd">K</span> <span class="kbd">L</span> · <span class="kbd">Ctrl+Z/Y</span> · <span class="kbd">Del</span>
+    </p>
+  </details>
+</aside>
+
+<!-- ── BOTTOM BAR (build) — contextual palette for the active tool ─ -->
+<footer id="bottombar">
+  <div id="bb-palettes">
+    <div class="bb-grp" data-grp="select">
+      <span class="bb-lbl" data-i18n="filter.label">Select filter</span>
+      <select id="selectFilter">
+        <option value="all" data-i18n="filter.all">All</option>
+        <option value="object" data-i18n="filter.object">Objects only</option>
+        <option value="wall" data-i18n="filter.wall">Walls only</option>
+        <option value="floor" data-i18n="filter.floor">Floors only</option>
+      </select>
+    </div>
+    <div class="bb-grp" data-grp="floor">
+      <span class="bb-lbl" data-i18n="palette.floorMat">Floor material</span>
       <div id="floorPalette" class="chips"></div>
     </div>
-    <div class="sect">
-      <p class="lbl" data-i18n="palette.wallShape">Wall shape</p>
+    <div class="bb-grp" data-grp="wall">
+      <span class="bb-lbl" data-i18n="palette.wallShape">Wall shape</span>
       <div id="wallPalette" class="chips"></div>
-      <p class="lbl" style="margin-top:9px;" data-i18n="palette.wallMat">Wall material</p>
+      <span class="bb-lbl" data-i18n="palette.wallMat">Wall material</span>
       <div id="wallMatPalette" class="chips"></div>
     </div>
-    <div class="sect">
-      <p class="lbl" data-i18n="palette.objects">Objects</p>
+    <div class="bb-grp" data-grp="object">
+      <span class="bb-lbl" data-i18n="palette.objects">Objects</span>
       <div id="objectPalette" class="chips"></div>
     </div>
   </div>
+  <div id="toolHint" class="bb-hint"></div>
+</footer>
 
-  <div class="tabpanel" data-tabpanel="rooms" hidden>
-    <div class="sect">
-      <p class="lbl" data-i18n="decks.title">Decks (levels)</p>
-      <input id="levelName" type="text" style="width:100%;margin-bottom:6px;" placeholder="Deck name" data-i18n-attr="placeholder:decks.namePlaceholder">
-      <div class="grid2">
-        <button id="addLevelBtn" data-i18n="decks.add">+ Add deck</button>
-        <button id="delLevelBtn" class="danger" data-i18n="decks.delete">Delete deck</button>
-      </div>
-      <p class="hint" data-i18n="decks.linkHint">Use the Link tool to connect decks: click a source tile
-        (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
-    </div>
-    <div class="sect">
-      <p class="lbl" data-i18n="layers.title">Layers</p>
-      <div id="layerToggles" class="chips"></div>
-      <button id="dupRoomBtn" style="margin-top:8px;width:100%;" data-i18n="room.duplicate">Duplicate room</button>
-    </div>
-    <div class="sect">
-      <p class="lbl" data-i18n="motion.title">Room motion</p>
-      <p class="hint" data-i18n="motion.hint">Select a room (Select tool) — its motion events appear in the
-        Inspector below. Add Shift / Rotate / Orbit / Carousel, then drag the
-        coloured handle on the map to aim it. Hit Play to watch.</p>
-    </div>
-  </div>
-
-  <div class="tabpanel" data-tabpanel="save" hidden>
-    <div class="sect">
-      <p class="lbl" data-i18n="history.title">History</p>
-      <div class="grid2">
-        <button id="undoBtn" data-i18n="action.undo">Undo</button>
-        <button id="redoBtn" data-i18n="action.redo">Redo</button>
-      </div>
-    </div>
-    <div class="sect">
-      <p class="lbl" data-i18n="package.title">Package</p>
-      <div class="grid3">
-        <button id="exportBtn" data-i18n="action.export">Export</button>
-        <button id="importBtn" data-i18n="action.import">Import</button>
-        <button id="newBtn" data-i18n="action.new">New</button>
-      </div>
-      <p class="hint">
-        <span class="kbd">V</span>select <span class="kbd">F</span>floor <span class="kbd">G</span>wall
-        <span class="kbd">B</span>object <span class="kbd">N</span>entry <span class="kbd">X</span>erase
-        <span class="kbd">K</span>fill · <span class="kbd">Ctrl+Z/Y</span> undo · <span class="kbd">Del</span> delete
-      </p>
-    </div>
-  </div>
-
-  <div class="sect">
-    <p class="lbl" data-i18n="inspector.title">Inspector</p>
-    <div id="inspector"><span class="muted" data-i18n="inspector.empty">Nothing selected.</span></div>
-  </div>
-</aside>
-
+<!-- ── PLAY BAR (play) ───────────────────────────────────────── -->
 <div id="playBar">
   <strong data-i18n="play.title">PLAY</strong>
   <button id="pauseBtn" data-i18n="play.pause">❚❚ Pause</button>
@@ -194,6 +299,25 @@
   <button id="speed2">2×</button>
   <button id="speed3">3×</button>
   <span class="pb-hint" data-i18n="play.hint">Click a floor tile to walk the pawn · a door to open it · an elevator to change deck · Space pause · 1/2/3 speed</span>
+</div>
+
+<!-- ── HELP OVERLAY (first-run, reopen via ?) ────────────────── -->
+<div id="helpOverlay" role="dialog" aria-modal="true">
+  <div class="help-card">
+    <h2 data-i18n="help.title">Welcome to the Station Builder</h2>
+    <p class="help-intro" data-i18n="help.intro">Design a space station deck by deck…</p>
+    <h3 data-i18n="help.modesTitle">Build &amp; Play</h3>
+    <p data-i18n="help.modes">Use the top-right switch…</p>
+    <h3 data-i18n="help.toolsTitle">Tools</h3>
+    <p data-i18n="help.tools">Pick a tool on the left rail…</p>
+    <h3 data-i18n="help.roomsTitle">Rooms &amp; decks</h3>
+    <p data-i18n="help.rooms">A deck holds one or more rooms…</p>
+    <h3 data-i18n="help.saveTitle">Saving</h3>
+    <p data-i18n="help.save">Export packages the whole station…</p>
+    <div class="help-actions">
+      <button id="helpClose" data-i18n="help.gotit">Got it</button>
+    </div>
+  </div>
 </div>
 
 <div id="hud"></div>

@@ -680,5 +680,92 @@ The next objective is therefore not “more features.” It is:
   so the save format stays language-neutral. `src/i18n.test.js` (19 tests,
   incl. en/es key parity). Rotation-step decision (owner: segmented/360°)
   deferred to S1-R7.
-- **Next: S1-R2 — Editor layout redesign** (top bar · tool rail · right
-  inspector · bottom bar; usable at ~1280×720).
+- **S1-R2 — Editor layout redesign — ✅ done.** Replaced the single cramped
+  250 px panel with four regions: a top bar (brand · deck switcher · language ·
+  Build/Play toggle), a vertical left tool rail (8 tools + undo/redo, icon +
+  label), a right side panel (Inspector always on top; collapsible Decks /
+  Layers / Room motion / Package sections), and a contextual bottom bar that
+  shows only the active tool's palette (select-filter / floor / wall / object)
+  plus a live tool hint. Play mode hides the bottom bar and shows the play bar.
+  Verified headless at 1280×720: all regions present, no overflow, palettes
+  switch per tool, EN/ES live — no clipping (the old Spanish clipping is gone).
+- **S1-R3 — Room resizing — ✅ done.** Pure `data.resizeRoom(room, w, h, {anchor,
+  fill, force})`: clamps 1..64, anchors nw/center/se, preserves overlapping
+  tiles + objects, fills new tiles, clamps the rotation pivot, and (owner rule)
+  a shrink that would drop objects returns `{ok:false, wouldDrop}` **without
+  mutating** unless `force` is set — it never deletes silently. Inspector gains
+  a size row (W × H + anchor + Resize); the editor confirms before a
+  destructive shrink, then repairs the level entry, link endpoints, and
+  selection by the applied offset, all under one undo step. Tests: +12 in
+  `data.test.js` (enlarge/center/blocked-shrink/forced-shrink/pivot/clamp);
+  headless-verified the full UI flow incl. confirm accept/dismiss and undo.
+- **S1-R4 — Room selection & manipulation UX — ✅ done.** New "Rooms" side-panel
+  section lists the active deck's rooms (name + size + object count); clicking a
+  row selects the whole room and highlights it (the renderer already draws a
+  bright outline for the active room). Consolidated room-level actions: Add
+  (empty floor+walls room, auto-placed clear of others), Duplicate, Delete, and
+  inline Rename. Delete guards the last room, confirms first, drops attached
+  links, and repoints the deck entry to a surviving room. Room list stays in
+  sync on selection, deck switch, and language change. Headless-verified
+  add/duplicate/rename/select/delete + last-room guard + entry repair.
+- **S1-R5 — Build/Play workspace model — ✅ done.** One workspace, two clearly
+  separated modes. Entering Play shows a pulsing "● Simulating" chip in the top
+  bar and makes every editing control inert — the tool rail and the mutating
+  side-panel sections (Decks, Rooms, Package) are dimmed + `pointer-events:none`
+  + grayscale; the bottom-bar palette is hidden and the play bar shows instead.
+  Defense in depth: a `requireBuild()` guard no-ops undo/redo and every
+  room/deck/resize mutation in Play (translated "Switch to Build to edit."
+  status). Camera and active deck are preserved across the switch; returning to
+  Build stops the sim and restores authored room poses (engine is
+  non-destructive). Headless-verified: chip shown, rail inert, room animates in
+  Play then snaps back to its authored transform in Build, edits blocked,
+  camera identical across modes.
+- **S1-R6 — Tool clarity & onboarding — ✅ done.** Every tool already has a
+  tooltip (data-i18n-attr title) and a live one-line hint in the bottom bar;
+  empty states are covered (Inspector "nothing selected", Rooms "no rooms",
+  "no motion events"). Added a dismissible first-run help overlay (Welcome +
+  Build/Play, Tools, Rooms/decks, Saving) shown once via a `localStorage`
+  flag, reopenable with a top-bar "?" button, closable via Got it / backdrop /
+  Escape, fully localized. Headless-verified first-run show, persist, reopen,
+  Escape, es localization, and no-show on the second run.
+- **S1-R7 — Geometry & rotation consistency — ✅ done.** Unified the authoring
+  rotation step on **45°** (owner delegated the choice). `data.snapAngle` +
+  `ROT_STEP` are the single source: objects rotate 45°, the room rotate gizmo
+  snaps via `snapAngle`, and `createTransform` / object normalization snap on
+  load — so a 45°/135° pose now survives a save round-trip (previously rooms
+  snapped to 0/90/180/270). 45° divides 360 evenly and keeps legacy cardinal
+  rooms valid. Documented in the UI: the wall-tool hint states diagonal shapes
+  still block the whole tile; the room map hint notes 45° steps. Tests: +5 in
+  `data.test.js` (snapAngle rounding/wrap/cardinals, createTransform snap);
+  engine/orbit suites unaffected (rotate-by-90 motion still valid).
+- **S1-R8 — Link & deck workflow polish — ✅ done.** New Links list in the Decks
+  panel shows every link as "Deck A → Deck B" with an inline kind selector
+  (elevator/door/hatch/custom), a preload/stream toggle (with a tooltip
+  clarifying what each means), and a delete button — no more hunting for the
+  tile. Selecting a link jumps to its source deck and draws a bright halo on
+  both endpoints (renderer `m.sel`). Broken links (endpoint room/deck gone) show
+  a ⚠ marker + warning tooltip. All link edits are Build-only + undoable.
+  Headless-verified list/mode-toggle/kind-change/select/broken-warning/delete.
+- **S1-R9 — Motion/event editor polish — ✅ done.** Each motion event now has an
+  enable/disable checkbox (the engine already honours `enabled`), translated
+  kind + trigger labels (Shift/Rotate/Orbit/Carousel · manual/auto/signal), and
+  a ⚠ validity marker + amber explanation for incomplete events (orbit missing
+  centre/radius, carousel < 2 poses, shift without a target). The sim now skips
+  structurally-degenerate events (`engine.eventUsable`) so a half-authored orbit
+  can no longer fling a room. Tests: +7 in `engine.test.js` (eventUsable cases +
+  degenerate-orbit stays put); headless-verified toggles, warnings, and that a
+  disabled/invalid event does not animate.
+
+---
+
+## 12. Revised Stage 1 — COMPLETE ✅
+
+All revised milestones (S1-R0 … S1-R9) plus the owner's default-room and
+rotation decisions are implemented, tested, and pushed to
+`claude/html-isometric-game-m7sj57`. Suites: **core 23 · data 41 · engine 22 ·
+i18n 19 · nav 13 = 118**, all green via `npm test`; every phase headless-verified
+at 1280×720. Exit criteria (§R10) met: the builder is uncramped and bilingual;
+rooms are selectable, resizable, and safely manageable; Build/Play is one
+workspace that can't corrupt the design; links are inspectable; motion is
+validated. Ready for Stage 2 (crew) when the owner is — pending their answers to
+the open questions in `AGENTIC_REVIEW.md` §10.

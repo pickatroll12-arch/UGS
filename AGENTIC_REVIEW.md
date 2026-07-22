@@ -274,7 +274,15 @@ collision/navigation. Do not silently imply diagonal walkability in the editor.
 
 Priority: medium.
 
-### 6.2 Rotation granularity is inconsistent
+### 6.2 Rotation granularity is inconsistent — ✅ RESOLVED (S1-R7)
+
+Unified on a single 45° authoring step (owner delegated the choice). Objects,
+room gizmo, and save normalization all snap via `data.snapAngle` / `ROT_STEP`;
+45° divides 360 evenly and keeps legacy 0/90/180/270 rooms valid. Diagonal
+walls are documented in the wall-tool hint as full-tile blockers. Original note
+retained below for context.
+
+
 
 Current behavior:
 
