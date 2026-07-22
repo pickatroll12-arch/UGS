@@ -68,13 +68,15 @@
   // ---- history ------------------------------------------------------------
   function pushHistory() { undoStack.push(clone(app.save)); if (undoStack.length > 80) undoStack.shift(); redoStack.length = 0; }
   function discardHistory() { undoStack.pop(); }        // for gestures that changed nothing
+  // guard: editing mutations only apply in Build. Returns false (+ status) in Play.
+  function requireBuild() { if (app.mode === 'play') { setStatus(t('status.editInBuild')); return false; } return true; }
   function undo() {
-    if (app.mode === 'play') return setStatus('Stop Play to undo.');
+    if (!requireBuild()) return;
     if (!undoStack.length) return setStatus('Nothing to undo.');
     redoStack.push(clone(app.save)); app.save = undoStack.pop(); afterRestore('Undo.');
   }
   function redo() {
-    if (app.mode === 'play') return setStatus('Stop Play to redo.');
+    if (!requireBuild()) return;
     if (!redoStack.length) return setStatus('Nothing to redo.');
     undoStack.push(clone(app.save)); app.save = redoStack.pop(); afterRestore('Redo.');
   }
@@ -211,6 +213,7 @@
   // ---- levels (decks) -----------------------------------------------------
   function levelName(id) { const l = app.save.levels.find(x => x.id === id); return l ? l.name : '?'; }
   function addLevel() {
+    if (!requireBuild()) return;
     pushHistory();
     const lvl = D.createLevel('Deck ' + (app.save.levels.length + 1));
     app.save.levels.push(lvl);
@@ -218,6 +221,7 @@
     setStatus(`Added ${lvl.name}.`);
   }
   function deleteLevel() {
+    if (!requireBuild()) return;
     if (app.save.levels.length <= 1) return setStatus('Cannot delete the last deck.');
     pushHistory();
     const id = app.activeLevelId;
@@ -378,6 +382,7 @@
   }
 
   function duplicateActiveRoom() {
+    if (!requireBuild()) return;
     const src = app.selection ? roomById(app.selection.roomId) : activeLevel().rooms[0];
     if (!src) return;
     pushHistory();
@@ -423,6 +428,7 @@
   }
 
   function addRoom() {
+    if (!requireBuild()) return;
     const lvl = activeLevel();
     pushHistory();
     const room = D.createRoom('Room ' + (lvl.rooms.length + 1), 8, 8);
@@ -435,6 +441,7 @@
   }
 
   function deleteSelectedRoom() {
+    if (!requireBuild()) return;
     const lvl = activeLevel();
     const room = selectedRoom(); if (!room) return;
     if (lvl.rooms.length <= 1) { setStatus(t('status.cantDeleteLastRoom')); return; }
@@ -455,6 +462,7 @@
   }
 
   function renameSelectedRoom(name) {
+    if (!requireBuild()) return;
     const room = selectedRoom(); if (!room) return;
     const clean = (name || '').trim(); if (!clean || clean === room.name) return;
     pushHistory(); room.name = clean;
@@ -692,6 +700,7 @@
   // shrink that would drop objects asks for confirmation first (owner rule),
   // then repairs the level entry, links, and selection by the applied offset.
   function resizeSelectedRoom() {
+    if (!requireBuild()) return;
     const room = selectedRoom(); if (!room) return;
     const wEl = inspector.querySelector('[data-rz="w"]');
     const hEl = inspector.querySelector('[data-rz="h"]');

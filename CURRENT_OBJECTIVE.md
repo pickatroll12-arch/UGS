@@ -708,6 +708,17 @@ The next objective is therefore not “more features.” It is:
   links, and repoints the deck entry to a surviving room. Room list stays in
   sync on selection, deck switch, and language change. Headless-verified
   add/duplicate/rename/select/delete + last-room guard + entry repair.
-- **Next: S1-R5 — Build/Play workspace model** (clearer, safer mode transition;
-  no accidental edits while simulating; camera/deck preserved; authored poses
-  restored on return to Build).
+- **S1-R5 — Build/Play workspace model — ✅ done.** One workspace, two clearly
+  separated modes. Entering Play shows a pulsing "● Simulating" chip in the top
+  bar and makes every editing control inert — the tool rail and the mutating
+  side-panel sections (Decks, Rooms, Package) are dimmed + `pointer-events:none`
+  + grayscale; the bottom-bar palette is hidden and the play bar shows instead.
+  Defense in depth: a `requireBuild()` guard no-ops undo/redo and every
+  room/deck/resize mutation in Play (translated "Switch to Build to edit."
+  status). Camera and active deck are preserved across the switch; returning to
+  Build stops the sim and restores authored room poses (engine is
+  non-destructive). Headless-verified: chip shown, rail inert, room animates in
+  Play then snaps back to its authored transform in Build, edits blocked,
+  camera identical across modes.
+- **Next: S1-R6 — Tool clarity & onboarding** (per-tool bottom hint already
+  live; add empty-state explanations and a dismissible first-run help).

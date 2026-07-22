@@ -125,6 +125,7 @@
 
       // play bar
       'play.title': 'PLAY',
+      'play.simRunning': '● Simulating',
       'play.pause': '❚❚ Pause',
       'play.resume': '▶ Resume',
       'play.hint': 'Click a floor tile to walk the pawn · a door to open it · an elevator to change deck · Space pause · 1/2/3 speed',
@@ -145,6 +146,7 @@
       'status.tool': '{tool} tool.',
       'status.buildMode': 'Build mode.',
       'status.playMode': 'Play mode — sim running. Space to pause, 1/2/3 speed.',
+      'status.editInBuild': 'Switch to Build to edit.',
 
       // floor materials (by id)
       'mat.deck': 'Deck',
@@ -310,6 +312,7 @@
       'inspector.empty': 'Nada seleccionado.',
 
       'play.title': 'JUGAR',
+      'play.simRunning': '● Simulando',
       'play.pause': '❚❚ Pausa',
       'play.resume': '▶ Reanudar',
       'play.hint': 'Clic en un tile de piso para caminar · en una puerta para abrir · en un ascensor para cambiar de deck · Espacio pausa · 1/2/3 velocidad',
@@ -328,6 +331,7 @@
       'status.tool': 'Herramienta {tool}.',
       'status.buildMode': 'Modo construir.',
       'status.playMode': 'Modo jugar — simulación activa. Espacio para pausar, 1/2/3 velocidad.',
+      'status.editInBuild': 'Cambia a Construir para editar.',
 
       'mat.deck': 'Cubierta',
       'mat.dark': 'Oscuro',

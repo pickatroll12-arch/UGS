@@ -53,6 +53,14 @@
   .langpick { display: flex; align-items: center; gap: 6px; }
   .langpick .ic { font-size: 14px; opacity: .8; }
   .langpick select { padding: 5px 8px; font-size: 12px; }
+  #simChip { display: none; font-size: 11px; font-weight: 800; letter-spacing: .1em;
+    color: #ffd24a; padding: 4px 9px; border: 1px solid #6b5a2a; border-radius: 20px;
+    background: rgba(255,210,74,0.08); animation: simpulse 1.6s ease-in-out infinite; }
+  body.playing #simChip { display: inline-block; }
+  @keyframes simpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  /* editing controls are inert while simulating */
+  body.playing #toolrail,
+  body.playing .editing-only { opacity: .4; pointer-events: none; filter: grayscale(1); }
 
   /* ── LEFT TOOL RAIL ──────────────────────────────────────── */
   #toolrail { position: fixed; z-index: 4; top: var(--top-h); left: 0; bottom: 0;
@@ -141,6 +149,7 @@
     <select id="levelSelect"></select>
   </div>
   <div class="tb-spacer"></div>
+  <span id="simChip" data-i18n="play.simRunning">● Simulating</span>
   <label class="langpick">
     <span class="ic">🌐</span>
     <select id="langSelect" aria-label="Language"></select>
@@ -175,7 +184,7 @@
     <div id="inspector"><span class="muted" data-i18n="inspector.empty">Nothing selected.</span></div>
   </section>
 
-  <details class="sp-sect" open>
+  <details class="sp-sect editing-only" open>
     <summary data-i18n="decks.title">Decks (levels)</summary>
     <input id="levelName" type="text" style="width:100%;margin-bottom:6px;" placeholder="Deck name" data-i18n-attr="placeholder:decks.namePlaceholder">
     <div class="grid2">
@@ -186,7 +195,7 @@
       (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
   </details>
 
-  <details class="sp-sect" open>
+  <details class="sp-sect editing-only" open>
     <summary data-i18n="rooms.title">Rooms</summary>
     <div id="roomList" class="roomlist"></div>
     <input id="roomName" type="text" style="width:100%;margin:7px 0 6px;" placeholder="Room name" data-i18n-attr="placeholder:rooms.namePlaceholder">
@@ -209,7 +218,7 @@
       coloured handle on the map to aim it. Hit Play to watch.</p>
   </details>
 
-  <details class="sp-sect">
+  <details class="sp-sect editing-only">
     <summary data-i18n="package.title">Package</summary>
     <div class="grid3">
       <button id="exportBtn" data-i18n="action.export">Export</button>
