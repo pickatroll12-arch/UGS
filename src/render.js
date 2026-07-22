@@ -38,17 +38,26 @@
   };
 
   // ---- projection ---------------------------------------------------------
+  // R2-03: the camera carries a projection that only changes the iso tile
+  // HEIGHT — a steeper "tilted" view vs a flatter, more top-down one. Tile width
+  // is constant, so the same diamond math (world<->screen, picking, draw order)
+  // works for both projections; no second render path.
+  const PROJECTIONS = { isoTilted: 32, isoFlat: 52 };
+  const PROJECTION_IDS = ['isoTilted', 'isoFlat'];
+  function projH(cam) { return (cam && PROJECTIONS[cam.projection]) || TILE_H; }
+
   function worldToScreen(cam, wx, wy) {
     const sx = (wx - wy) * (TILE_W / 2);
-    const sy = (wx + wy) * (TILE_H / 2);
+    const sy = (wx + wy) * (projH(cam) / 2);
     return { x: sx * cam.zoom + cam.x, y: sy * cam.zoom + cam.y };
   }
   function screenToWorld(cam, px, py) {
     const sx = (px - cam.x) / cam.zoom;
     const sy = (py - cam.y) / cam.zoom;
+    const th = projH(cam);
     return {
-      x: (sx / (TILE_W / 2) + sy / (TILE_H / 2)) / 2,
-      y: (sy / (TILE_H / 2) - sx / (TILE_W / 2)) / 2
+      x: (sx / (TILE_W / 2) + sy / (th / 2)) / 2,
+      y: (sy / (th / 2) - sx / (TILE_W / 2)) / 2
     };
   }
 
@@ -116,7 +125,7 @@
   function pickTopmost(cam, level, px, py, opts) {
     opts = opts || {};
     const hidden = opts.hiddenLayers, filter = opts.filter || 'all';
-    const hw = (TILE_W / 2) * cam.zoom, hh = (TILE_H / 2) * cam.zoom;
+    const hw = (TILE_W / 2) * cam.zoom, hh = (projH(cam) / 2) * cam.zoom;
     const H = WALL_H * cam.zoom, z = cam.zoom;
     const ents = [];
     if (filter !== 'floor' && filter !== 'object') {
@@ -216,6 +225,40 @@
     ctx.lineTo(s.x, s.y + hh - H);
     ctx.lineTo(s.x - hw, s.y - H);
     ctx.closePath(); ctx.fill();
+  }
+
+  // R2-06: extrude an arbitrary ground polygon (screen-space points) up by H,
+  // drawing its side faces then the top. Used to render oriented wall pieces
+  // (a full block is the whole diamond; a diagonal is half of it; a rounded
+  // wall bows the cut edge inward).
+  function extrudeAt(ctx, pts, H, topCol, sideCol) {
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      // outward-ish faces get a slightly darker right side for depth
+      ctx.fillStyle = (a.x + b.x) / 2 > pts.reduce((s, p) => s + p.x, 0) / pts.length ? shade(sideCol, -18) : sideCol;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x, b.y - H); ctx.lineTo(a.x, a.y - H);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = topCol;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y - H);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y - H);
+    ctx.closePath(); ctx.fill();
+  }
+  // Ground-plane polygon for a wall piece, in screen space around centre s.
+  function wallPolygon(s, hw, hh, kind, orientation) {
+    const C = [{ x: s.x, y: s.y - hh }, { x: s.x + hw, y: s.y }, { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }]; // T,R,B,L
+    if (kind === 'block') return C;
+    const i = (Math.round(((orientation % 360) + 360) % 360 / 90)) % 4;   // 0..3
+    const tri = [C[i], C[(i + 1) % 4], C[(i + 2) % 4]];
+    if (kind === 'diagonal') return tri;
+    // rounded: bow the cut (hypotenuse from tri[0] to tri[2]) inward toward the 4th corner
+    const opp = C[(i + 3) % 4];
+    const mid = { x: (tri[0].x + tri[2].x) / 2, y: (tri[0].y + tri[2].y) / 2 };
+    const inner = { x: mid.x + (opp.x - mid.x) * 0.55, y: mid.y + (opp.y - mid.y) * 0.55 };
+    return [tri[0], tri[1], tri[2], inner];
   }
 
   // ---- object art (flat placeholders, swapped for sprites later) ----------
@@ -318,14 +361,14 @@
   function drawLevel(ctx, cam, level, opts) {
     opts = opts || {};
     const hw = (TILE_W / 2) * cam.zoom;
-    const hh = (TILE_H / 2) * cam.zoom;
+    const hh = (projH(cam) / 2) * cam.zoom;
 
     // viewport-culling bounds (world screen px + a generous margin so tall
     // walls/objects and moving rooms near the edge still draw). Skips draw calls
     // for everything off-screen — the main perf lever when zoomed in.
     const vw = opts.view ? opts.view.w : (typeof window !== 'undefined' ? window.innerWidth : 1e5);
     const vh = opts.view ? opts.view.h : (typeof window !== 'undefined' ? window.innerHeight : 1e5);
-    const mx = 3 * TILE_W * cam.zoom, my = 3 * TILE_H * cam.zoom + WALL_H * cam.zoom;
+    const mx = 3 * TILE_W * cam.zoom, my = 3 * projH(cam) * cam.zoom + WALL_H * cam.zoom;
     const onScreen = (s) => s.x >= -mx && s.x <= vw + mx && s.y >= -my && s.y <= vh + my;
 
     // --- pass 1: floors (depth-sorted across all rooms) ---
@@ -355,7 +398,9 @@
     if (opts.showRoomOutlines) {
       for (const room of level.rooms) {
         const active = room.id === opts.activeRoomId;
-        outlineRoom(ctx, cam, room, active ? '#e6e6ea' : 'rgba(150,150,160,0.5)', active ? 2 : 1);
+        const stroke = active ? '#e6e6ea' : 'rgba(150,150,160,0.5)', width = active ? 2 : 1;
+        if (roomIsRect(room)) outlineRoom(ctx, cam, room, stroke, width);
+        else outlineRoomCells(ctx, cam, room, stroke, width);   // free-form silhouette
       }
     }
 
@@ -367,6 +412,9 @@
 
     // --- room motion preview (Build aid) ---
     if (opts.previewRoom) drawRoomMotion(ctx, cam, opts.previewRoom);
+
+    // --- room resize handles (R2-04) ---
+    if (opts.resizeRoom) drawResizeHandles(ctx, cam, opts.resizeRoom, opts.resizeGhost);
 
     // --- hover / selection tile highlight ---
     if (opts.hover) highlightTile(ctx, cam, level, opts.hover, opts.hoverFill || 'rgba(255,255,255,0.14)', opts.hoverStroke || '#cfcfd6', hw, hh);
@@ -398,13 +446,15 @@
     for (const e of ents) {
       const s = worldToScreen(cam, e.wx, e.wy);
       if (e.kind === 'wall') {
-        const mat = data.MATERIALS[e.tile.wallMaterial] || data.MATERIALS.hull;
+        const wall = e.tile.wall || {};
+        const mat = data.MATERIALS[wall.material] || data.MATERIALS[e.tile.wallMaterial] || data.MATERIALS.hull;
+        const pts = wallPolygon(s, hw, hh, wall.kind || 'block', wall.orientation || 0);
         if (mat.glass) {
           ctx.save(); ctx.globalAlpha = 0.5;
-          blockAt(ctx, s, hw, hh, WALL_H * 0.82 * cam.zoom, shade(mat.color, 30), mat.color);
+          extrudeAt(ctx, pts, WALL_H * 0.82 * cam.zoom, shade(mat.color, 30), mat.color);
           ctx.restore();
         } else {
-          blockAt(ctx, s, hw, hh, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
+          extrudeAt(ctx, pts, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
         }
       } else {
         drawObject(ctx, s, cam.zoom, e.obj, e.sel);
@@ -575,6 +625,79 @@
     return out;
   }
 
+  // R2-04: 8 resize handles (edge midpoints + corners) in screen space. Each
+  // carries the per-axis anchor (ax/ay) and which edges it moves, so the editor
+  // can compute a new size and keep the opposite edge fixed. Positions go
+  // through localToWorld→worldToScreen, so they respect the active projection.
+  function resizeHandles(cam, room) {
+    const out = []; if (!room) return out;
+    const w = room.size.w, h = room.size.h;
+    const H = [
+      { kind: 'nw', u: 0, v: 0, ax: 'hi', ay: 'hi', we: 'w', he: 'n' },
+      { kind: 'n', u: w / 2, v: 0, ax: 'lo', ay: 'hi', we: null, he: 'n' },
+      { kind: 'ne', u: w, v: 0, ax: 'lo', ay: 'hi', we: 'e', he: 'n' },
+      { kind: 'e', u: w, v: h / 2, ax: 'lo', ay: 'lo', we: 'e', he: null },
+      { kind: 'se', u: w, v: h, ax: 'lo', ay: 'lo', we: 'e', he: 's' },
+      { kind: 's', u: w / 2, v: h, ax: 'lo', ay: 'lo', we: null, he: 's' },
+      { kind: 'sw', u: 0, v: h, ax: 'hi', ay: 'lo', we: 'w', he: 's' },
+      { kind: 'w', u: 0, v: h / 2, ax: 'hi', ay: 'lo', we: 'w', he: null }
+    ];
+    for (const hh of H) { const wpt = localToWorld(room, hh.u, hh.v); const s = worldToScreen(cam, wpt.x, wpt.y); out.push(Object.assign({ sx: s.x, sy: s.y }, hh)); }
+    return out;
+  }
+  function drawResizeHandles(ctx, cam, room, ghost) {
+    const hs = resizeHandles(cam, room);
+    // ghost footprint (prospective bounds) while dragging
+    if (ghost) {
+      const g = { transform: { x: ghost.x, y: ghost.y, rotation: room.transform.rotation, pivot: room.transform.pivot }, size: { w: ghost.w, h: ghost.h } };
+      const c = [localToWorld(g, 0, 0), localToWorld(g, g.size.w, 0), localToWorld(g, g.size.w, g.size.h), localToWorld(g, 0, g.size.h)].map(p => worldToScreen(cam, p.x, p.y));
+      ctx.save();
+      ctx.fillStyle = 'rgba(120,190,255,0.10)'; ctx.strokeStyle = '#7ac0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath();
+      ctx.fill(); ctx.stroke(); ctx.restore();
+    }
+    ctx.save();
+    for (const h of hs) {
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1b6fb0'; ctx.lineWidth = 1.5;
+      const r = (h.kind.length === 2 ? 5 : 4);   // corners a touch bigger
+      ctx.beginPath(); ctx.rect(h.sx - r, h.sy - r, r * 2, r * 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // R2-05: trace the silhouette of a free-form room by drawing the outer edges
+  // of its occupied cells (floor !== 'void'), so L/T/U/corridor rooms outline
+  // correctly instead of showing their bounding box. Falls back to the bbox
+  // outline when the room is a full rectangle (cheaper, identical result).
+  function roomIsRect(room) {
+    for (let y = 0; y < room.size.h; y++) for (let x = 0; x < room.size.w; x++) {
+      const t = room.tiles[y] && room.tiles[y][x];
+      if (!t || t.floor === 'void') return false;
+    }
+    return true;
+  }
+  function outlineRoomCells(ctx, cam, room, stroke, width) {
+    const occ = (x, y) => { const t = room.tiles[y] && room.tiles[y][x]; return !!t && t.floor !== 'void'; };
+    ctx.save();
+    ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    const seg = (ax, ay, bx, by) => {
+      const a = worldToScreen(cam, localToWorld(room, ax, ay).x, localToWorld(room, ax, ay).y);
+      const b = worldToScreen(cam, localToWorld(room, bx, by).x, localToWorld(room, bx, by).y);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    };
+    for (let y = 0; y < room.size.h; y++) {
+      for (let x = 0; x < room.size.w; x++) {
+        if (!occ(x, y)) continue;
+        if (!occ(x, y - 1)) seg(x, y, x + 1, y);           // top edge
+        if (!occ(x + 1, y)) seg(x + 1, y, x + 1, y + 1);   // right edge
+        if (!occ(x, y + 1)) seg(x + 1, y + 1, x, y + 1);   // bottom edge
+        if (!occ(x - 1, y)) seg(x, y + 1, x, y);           // left edge
+      }
+    }
+    ctx.stroke(); ctx.restore();
+  }
+
   function outlineRoom(ctx, cam, room, stroke, width) {
     // trace the 4 transformed corners of the room footprint
     const corners = [
@@ -597,7 +720,7 @@
   // transform (a moving room carries them). opts: { selectedId, time, showPaths }
   function drawAgents(ctx, cam, level, pawns, opts) {
     opts = opts || {};
-    const z = cam.zoom, hw = (TILE_W / 2) * z, hh = (TILE_H / 2) * z;
+    const z = cam.zoom, hw = (TILE_W / 2) * z, hh = (projH(cam) / 2) * z;
     // depth-sorted so nearer pawns overlap farther ones
     const list = pawns.filter(p => p.levelId === level.id).map(p => {
       const room = level.rooms.find(r => r.id === p.roomId) || level.rooms[0];
@@ -622,7 +745,7 @@
       const s = worldToScreen(cam, e.wx, e.wy);
       // facing: local dir -> world (room rotation) -> iso screen angle
       const wd = rotatePoint(e.p.facingLocal.x, e.p.facingLocal.y, e.room.transform.rotation, { x: 0, y: 0 });
-      const facing = Math.atan2((wd.x + wd.y) * (TILE_H / TILE_W), wd.x - wd.y);
+      const facing = Math.atan2((wd.x + wd.y) * (projH(cam) / TILE_W), wd.x - wd.y);
       drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
     }
   }
@@ -662,15 +785,15 @@
       }
     }
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    const s = worldToScreen({ x: 0, y: 0, zoom: cam.zoom }, cx, cy);
+    const s = worldToScreen({ x: 0, y: 0, zoom: cam.zoom, projection: cam.projection }, cx, cy);
     cam.x = viewW / 2 - s.x;
     cam.y = viewH / 2 - s.y;
   }
 
   return {
-    TILE_W, TILE_H, WALL_H, OBJ_H,
+    TILE_W, TILE_H, WALL_H, OBJ_H, PROJECTION_IDS, projH,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
-    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, drawLinkMarkers, drawAgents, centerOn, shade
+    pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, resizeHandles, drawLinkMarkers, drawAgents, centerOn, shade
   };
 });

@@ -105,5 +105,50 @@ function movingRoom(action, loop) {
   e.stop(lvl);
 }
 
+// --- BUG-01: a deck transition triggered DURING update must not kill the new
+//     deck's room events (re-entrant stop/start is deferred to end of tick) ---
+{
+  function orbitLevel() {
+    const save = data.createSaveFile('t'); const lvl = save.levels[0];
+    const room = lvl.rooms[0]; room.size = { w: 4, h: 4 };
+    room.transform = data.createTransform(0, 0, 0); room.transform.pivot = { x: 2, y: 2 };
+    const ev = data.createRoomEvent('orb'); ev.trigger = { type: 'time' };
+    ev.action = { kind: 'orbit', center: { x: 8, y: 8 }, radius: 5, period: 4, direction: 'cw' };
+    room.events.push(ev);
+    return { lvl, room };
+  }
+  const A = orbitLevel(), B = orbitLevel();
+  const e = engine.create();
+  e.start(A.lvl);
+  ck('BUG-01: deck A orbit active at start', e.activeCount() === 1);
+
+  // a system that performs a deck transition (stop old + start new) mid-update,
+  // exactly as the editor's pawn:arrived handler does
+  let transit = null;
+  e.addSystem({ step: () => { if (transit) { const g = transit; transit = null; e.stop(g.from); e.start(g.to); } } });
+
+  transit = { from: A.lvl, to: B.lvl };
+  const bx0 = B.room.transform.x, by0 = B.room.transform.y;
+  e.update(A.lvl, 1 / 30);                        // transition deferred + applied this tick
+  ck('BUG-01: engine still running after A→B', e.isRunning());
+  ck('BUG-01: new deck event survives A→B (activeCount>0)', e.activeCount() === 1);
+  e.update(B.lvl, 1 / 30);
+  ck('BUG-01: orbiting room on deck B keeps moving', B.room.transform.x !== bx0 || B.room.transform.y !== by0);
+
+  // round trip back to A
+  transit = { from: B.lvl, to: A.lvl };
+  e.update(B.lvl, 1 / 30);
+  ck('BUG-01: return trip B→A keeps events alive', e.activeCount() === 1 && e.isRunning());
+  const ax0 = A.room.transform.x;
+  e.update(A.lvl, 1 / 30);
+  ck('BUG-01: deck A room animates again after return', A.room.transform.x !== ax0);
+
+  // a speed=3 tick (bigger dt) during travel must behave the same
+  transit = { from: A.lvl, to: B.lvl };
+  e.update(A.lvl, 3 / 30);
+  ck('BUG-01: transition under a large (speed 3) dt keeps events', e.activeCount() === 1 && e.isRunning());
+  e.stop(B.lvl);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

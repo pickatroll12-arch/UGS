@@ -83,5 +83,29 @@ function wall(r, x, y) { r.tiles[y][x] = { floor: 'deck', wall: 'solid', wallMat
   ck('grid marks open floor walkable', g.get(0, 0) === 1);
 }
 
+// --- partial-wall (diagonal) collision: walkable tile, closed side blocks (R2-06 ph2) ---
+{
+  const r = room(3, 3);
+  r.tiles[1][1].wall = data.createWall('diagonal', 0, 'hull');   // partial, closes E/S/SE
+  const g = nav.buildWalkGrid(r, data.objectBlocks);
+  ck('partial wall keeps its tile walkable', g.get(1, 1) === 1);
+  ck('dirClosed: east closed at orient 0', nav.dirClosed(r.tiles[1][1].wall, 1, 0) === true);
+  ck('dirClosed: west open at orient 0', nav.dirClosed(r.tiles[1][1].wall, -1, 0) === false);
+  ck('cross east off a partial wall is blocked', nav.crossBlocked(r, 1, 1, 1, 0) === true);
+  ck('cross west off a partial wall is allowed', nav.crossBlocked(r, 1, 1, -1, 0) === false);
+
+  const r2 = room(3, 3);
+  r2.tiles[1][1].wall = data.createWall('block', 0, 'hull');     // full block
+  ck('a full block tile is NOT walkable', nav.buildWalkGrid(r2, data.objectBlocks).get(1, 1) === 0);
+}
+// a partial wall that closes the only 1-wide corridor blocks the path
+{
+  const r = room(3, 5);
+  for (let y = 0; y < 5; y++) { wall(r, 0, y); wall(r, 2, y); }        // walls either side → column 1 corridor
+  r.tiles[2][1].wall = data.createWall('diagonal', 180, 'hull');       // closes W/N/NW → can't be entered from the north
+  const p = nav.findPath(r, 1, 0, 1, 4, data.objectBlocks);
+  ck('partial wall closing the only corridor blocks the path', p === null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

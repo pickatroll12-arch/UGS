@@ -13,5 +13,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Run test suites
+      - name: Run unit test suites
         run: npm test
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Run browser smoke tests
+        run: npm run smoke

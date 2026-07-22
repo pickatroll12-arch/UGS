@@ -156,12 +156,96 @@ function mkRoom(w, h) {
   check('resize clamps size to 1..64', r.size.w === 64 && r.size.h === 1);
 }
 
+// 6b. resizeRoom dryRun + structured trim counts (BUG-04)
+{
+  const r = mkRoom(5, 5);
+  // paint a wall on the far edge that a shrink will trim
+  r.tiles[4][4] = { floor: 'deck', wall: 'solid', wallMaterial: 'hull' };
+  r.objects.push(data.createObjectInstance('crate', 4, 0));   // will fall outside a 3x3 nw shrink
+  const dry = data.resizeRoom(r, 3, 3, { anchor: 'nw', dryRun: true });
+  check('dryRun does not mutate the room', r.size.w === 5 && r.size.h === 5 && r.objects.length === 1);
+  check('dryRun reports objects that would drop', dry.wouldDrop.length === 1);
+  check('dryRun reports trimmed walls and tiles separately', dry.trimmedWalls === 1 && dry.trimmedTiles > 0);
+  const real = data.resizeRoom(r, 3, 3, { anchor: 'nw', force: true });
+  check('real resize returns the same trim counts', real.trimmedWalls === 1 && real.trimmedTiles === dry.trimmedTiles);
+  check('real resize actually shrank', r.size.w === 3 && r.size.h === 3);
+}
+
+// 6c. per-axis anchor for edge/corner resize handles (R2-04)
+{
+  const r = mkRoom(4, 4);
+  r.objects.push(data.createObjectInstance('crate', 1, 1));
+  // grow width to the left (west edge): ax 'hi' shifts content right by the delta
+  const res = data.resizeRoom(r, 6, 4, { ax: 'hi', ay: 'lo' });
+  check('ax:hi shifts content on x only', res.offset.dx === 2 && res.offset.dy === 0);
+  check('ax:hi moved the object right', r.objects[0].x === 3 && r.objects[0].y === 1);
+  const r2 = mkRoom(4, 4);
+  const res2 = data.resizeRoom(r2, 6, 6, { ax: 'lo', ay: 'hi' });   // NE corner: grow right + top
+  check('corner anchor offsets each axis independently', res2.offset.dx === 0 && res2.offset.dy === 2);
+}
+
+// 6d. free-form room shape masks (R2-05)
+{
+  const rect = data.shapeMask(4, 4, 'rect');
+  check('rect mask is fully inside', rect.every(row => row.every(Boolean)));
+  const L = data.shapeMask(4, 4, 'L');
+  check('L mask drops the top-right block', L[0][3] === false && L[3][0] === true && L[3][3] === true);
+  const corridor = data.shapeMask(5, 5, 'corridor');
+  check('corridor keeps a central band, voids the rest', corridor[2][0] === true && corridor[0][0] === false);
+  const U = data.shapeMask(5, 5, 'U');
+  check('U keeps arms + bottom bar, hollow middle-top', U[0][0] === true && U[0][2] === false && U[4][2] === true);
+  check('shapeMask clamps degenerate sizes', data.shapeMask(0, 0, 'rect').length === 1);
+}
+
 // 7. rotation authoring step (45°)
 check('ROT_STEP is 45', data.ROT_STEP === 45);
 check('snapAngle rounds to nearest 45', data.snapAngle(47) === 45 && data.snapAngle(30) === 45 && data.snapAngle(20) === 0);
 check('snapAngle keeps cardinals', data.snapAngle(90) === 90 && data.snapAngle(270) === 270);
 check('snapAngle wraps negatives and >=360', data.snapAngle(-45) === 315 && data.snapAngle(360) === 0);
 check('createTransform snaps rotation to 45', data.createTransform(0, 0, 100).rotation === 90 && data.createTransform(0, 0, 115).rotation === 135);
+
+// 8. wall pieces + versioned migration (R2-06)
+check('createWall snaps orientation + defaults', (() => {
+  const w = data.createWall('diagonal', 47, 'glass'); return w.kind === 'diagonal' && w.orientation === 45 && w.material === 'glass';
+})());
+check('block defaults to full collision, diagonal to partial', data.createWall('block', 0, 'hull').collision === 'full' && data.createWall('diagonal', 0, 'hull').collision === 'partial');
+check('createWall coerces bad kind to block', data.createWall('nope', 0, 'hull').kind === 'block');
+check('normalizeWall upgrades legacy solid', (() => { const w = data.normalizeWall('solid', 'hull'); return w && w.kind === 'block' && w.material === 'hull'; })());
+check('normalizeWall upgrades diagA/diagB to diagonal', (() => {
+  const a = data.normalizeWall('diagA', 'hull'), b = data.normalizeWall('diagB', 'hull');
+  return a.kind === 'diagonal' && b.kind === 'diagonal' && a.orientation !== b.orientation;
+})());
+check('normalizeWall rejects garbage', data.normalizeWall('bogus') === null && data.normalizeWall({ kind: 'x' }) === null);
+check('normalizeWall passes through a valid piece', (() => { const w = data.normalizeWall({ kind: 'rounded', orientation: 90, material: 'glass', collision: 'full' }); return w.kind === 'rounded' && w.orientation === 90; })());
+check('wallBlocks true for any wall, false for null', data.wallBlocks(data.createWall('block', 0, 'hull')) === true && data.wallBlocks(null) === false);
+// versioned migration: a v1 save with string walls migrates to v2 pieces
+{
+  const v1 = {
+    format: data.FORMAT, formatVersion: 1, id: 's', name: 'Old', startLevelId: 'L1',
+    levels: [{ id: 'L1', name: 'D', entry: { roomId: 'R1', x: 1, y: 1 }, rooms: [{
+      id: 'R1', size: { w: 2, h: 2 }, transform: { x: 0, y: 0, rotation: 0 }, objects: [], events: [],
+      tiles: [[{ floor: 'deck', wall: 'solid', wallMaterial: 'glass' }, { floor: 'deck', wall: 'diagA', wallMaterial: 'hull' }], [{ floor: 'deck', wall: null }, { floor: 'deck', wall: null }]]
+    }] }], links: []
+  };
+  const { save: up } = save.deserialize(JSON.stringify(v1));
+  const w00 = up.levels[0].rooms[0].tiles[0][0].wall;
+  const w01 = up.levels[0].rooms[0].tiles[0][1].wall;
+  check('migration lifts save to current version', up.formatVersion === data.FORMAT_VERSION);
+  check('migration converts solid → block piece w/ material', w00 && w00.kind === 'block' && w00.material === 'glass');
+  check('migration converts diagA → diagonal piece', w01 && w01.kind === 'diagonal');
+  check('migration drops legacy wallMaterial field', up.levels[0].rooms[0].tiles[0][0].wallMaterial === undefined);
+}
+
+// 9. build economy (R2-08)
+check('new save has credits + build costs', s.resources.credits === 500 && s.buildCosts.wall === 2 && s.buildCosts.deck === 100);
+{
+  const { save: eco } = save.deserialize(JSON.stringify({
+    format: data.FORMAT, formatVersion: 2, name: 'E', startLevelId: 'L1',
+    levels: [{ id: 'L1', name: 'D', entry: { roomId: 'R1', x: 0, y: 0 }, rooms: [{ id: 'R1', size: { w: 1, h: 1 }, transform: { x: 0, y: 0, rotation: 0 }, objects: [], events: [], tiles: [[{ floor: 'deck', wall: null }]] }] }],
+    links: [], resources: { credits: '250' }, buildCosts: { wall: 9 }
+  }));
+  check('normalize coerces credits + merges custom costs over defaults', eco.resources.credits === 250 && eco.buildCosts.wall === 9 && eco.buildCosts.object === 5);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

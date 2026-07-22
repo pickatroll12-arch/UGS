@@ -27,10 +27,11 @@
   const app = {
     save: null,
     activeLevelId: null,
-    mode: 'build',
+    appMode: 'menu',               // menu | dev | game  (R2-07 app shell)
+    mode: 'build',                 // within Dev: build (Dev Edit) | play (Dev Test)
     tool: 'select',                // select | floor | wall | object | entry | erase | fill
-    brush: { floor: 'deck', wallShape: 'solid', wallMat: 'hull', object: 'console' },
-    camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4 },
+    brush: { floor: 'deck', wallKind: 'block', wallOrient: 0, wallMat: 'hull', object: 'console', objectRotation: 0 },
+    camera: { x: 0, y: 0, zoom: 1, minZoom: 0.4, maxZoom: 2.4, projection: 'isoTilted' },
     hover: null,
     selection: null,               // { roomId, lx, ly, objectId }
     selectFilter: 'all',           // all | floor | object | wall
@@ -48,6 +49,7 @@
   let painting = false, panning = false, dragged = false;
   let movingObj = null;            // { roomId, objectId }
   let dragHandle = null;           // { roomId, eventId, kind, poseIndex }
+  let dragResize = null;           // R2-04: { roomId, we, he, ax, ay, startW, startH, gx, gy, gw, gh }
   let agents = null;               // pawn manager (Play mode)
   let strokeChanged = false;       // did the current gesture actually mutate?
   let lastPaintKey = '';           // dedupe repeated paints on the same tile
@@ -73,12 +75,12 @@
   function requireBuild() { if (app.mode === 'play') { setStatus(t('status.editInBuild')); return false; } return true; }
   function undo() {
     if (!requireBuild()) return;
-    if (!undoStack.length) return setStatus('Nothing to undo.');
+    if (!undoStack.length) return setStatus(t('status.nothingUndo'));
     redoStack.push(clone(app.save)); app.save = undoStack.pop(); afterRestore('Undo.');
   }
   function redo() {
     if (!requireBuild()) return;
-    if (!redoStack.length) return setStatus('Nothing to redo.');
+    if (!redoStack.length) return setStatus(t('status.nothingRedo'));
     undoStack.push(clone(app.save)); app.save = redoStack.pop(); afterRestore('Redo.');
   }
   function afterRestore(msg) {
@@ -106,14 +108,14 @@
     for (let x = 0; x < w; x++) { setWall(room, x, 0); setWall(room, x, h - 1); }
     for (let y = 0; y < h; y++) { setWall(room, 0, y); setWall(room, w - 1, y); }
   }
-  function setWall(room, x, y) { room.tiles[y][x] = { floor: 'deck', wall: 'solid', wallMaterial: 'hull' }; }
+  function setWall(room, x, y) { room.tiles[y][x] = { floor: 'deck', wall: D.createWall('block', 0, 'hull') }; }
 
   // ---- lifecycle ----------------------------------------------------------
   function loadSave(save, msg) {
     app.save = save; app.activeLevelId = save.startLevelId || save.levels[0].id;
     app.selection = null; undoStack.length = 0; redoStack.length = 0;
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); setStatus(msg || 'Loaded.');
+    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); persistSave(); setStatus(msg || t('status.loaded'));
   }
   function setMode(mode) {
     if (mode === app.mode) return;
@@ -131,6 +133,11 @@
     document.getElementById('buildBtn').classList.toggle('active', mode === 'build');
     document.getElementById('playBtn').classList.toggle('active', mode === 'play');
     document.body.classList.toggle('playing', mode === 'play');
+    // BUG-02: the top-bar deck selector is disabled in Play. Changing the active
+    // deck manually would leave the pawn stranded on the previous deck; during
+    // Play the deck may only change through in-world travel (links / elevators).
+    if (levelSelect) levelSelect.disabled = mode === 'play';
+    applyCursor();   // R2-01: pointer in Play, tool cursor in Build
     updatePlayBar();
     updateInspector();
     setStatus(t(mode === 'play' ? 'status.playMode' : 'status.buildMode'));
@@ -143,6 +150,7 @@
     const pb = document.getElementById('pauseBtn');
     if (pb) pb.textContent = app.clock.paused ? t('play.resume') : t('play.pause');
     [1, 2, 3].forEach(sp => { const el = document.getElementById('speed' + sp); if (el) el.classList.toggle('active', app.clock.speed === sp && !app.clock.paused); });
+    updateGameBar();
   }
   // which contextual palette group the bottom bar shows for each tool
   const TOOL_GROUP = { select: 'select', floor: 'floor', fill: 'floor', wall: 'wall', object: 'object' };
@@ -152,11 +160,71 @@
     const hintEl = document.getElementById('toolHint');
     if (hintEl) hintEl.textContent = t('tool.' + tool + '.hint');
   }
+  // hotkeys must not fire while typing in a form field (R2-01)
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
+  }
+  // R rotates the selected object; with no object selected it cycles the angle
+  // that the Object tool will stamp onto the next piece it places.
+  function rotateBrushOrPiece() {
+    if (app.mode !== 'build') return;
+    // Wall tool: R rotates the wall brush's orientation (diagonal/rounded).
+    if (app.tool === 'wall') {
+      app.brush.wallOrient = ((app.brush.wallOrient || 0) + D.ROT_STEP) % 360;
+      setStatus(t('status.wallRotated', { deg: app.brush.wallOrient }));
+      return;
+    }
+    if (app.selection && app.selection.objectId) { rotateSelectedObject(); return; }
+    app.brush.objectRotation = ((app.brush.objectRotation || 0) + D.ROT_STEP) % 360;
+    setTool('object');
+    setStatus(t('status.brushRotated', { deg: app.brush.objectRotation }));
+  }
+  // R2-01: a distinct cursor per tool (glyph, not just colour) so the active
+  // tool is legible right at the pointer. Built as tiny inline SVG data-URIs
+  // that reuse the tool-rail glyphs; hotspot roughly at the glyph centre.
+  function svgCursor(glyph, hx, hy) {
+    const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'>" +
+      "<text x='14' y='20' font-size='17' text-anchor='middle' fill='white' stroke='black' stroke-width='0.7' font-family='sans-serif'>" +
+      glyph + "</text></svg>";
+    return "url(\"data:image/svg+xml," + encodeURIComponent(svg) + "\") " + hx + " " + hy + ", crosshair";
+  }
+  const TOOL_CURSORS = {
+    select: 'default',
+    erase: svgCursor('⌫', 14, 14),
+    floor: svgCursor('▦', 14, 14),
+    wall: svgCursor('▤', 14, 14),
+    object: svgCursor('◈', 14, 14),
+    entry: svgCursor('⚑', 7, 22),
+    fill: svgCursor('▩', 14, 14),
+    link: svgCursor('⛓', 14, 14)
+  };
+  function applyCursor() {
+    if (!canvas) return;
+    canvas.style.cursor = app.mode === 'play' ? 'pointer' : (TOOL_CURSORS[app.tool] || 'crosshair');
+  }
+  // R2-03: Q/E change the camera projection (steeper "tilted" ↔ flatter view).
+  // The world point under the screen centre is kept fixed so the view re-projects
+  // in place instead of jumping.
+  function cycleProjection(dir) {
+    const ids = R.PROJECTION_IDS;
+    const i = ids.indexOf(app.camera.projection);
+    const next = ids[((i < 0 ? 0 : i) + dir + ids.length) % ids.length];
+    if (next === app.camera.projection) return;
+    const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2;
+    const anchor = R.screenToWorld(app.camera, cx, cy);      // world point at screen centre
+    app.camera.projection = next;
+    const s = R.worldToScreen(Object.assign({}, app.camera, { x: 0, y: 0 }), anchor.x, anchor.y);
+    app.camera.x = cx - s.x; app.camera.y = cy - s.y;        // keep that point centred
+    invalidate();
+    setStatus(t('status.projection', { name: t('proj.' + next) }));
+  }
   function setTool(tool) {
     if (app.tool === 'link' && tool !== 'link') app.pendingLink = null;
     app.tool = tool;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
-    canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+    applyCursor();
     syncToolContext(tool);
     if (tool === 'link') linkStartTool();
     else setStatus(t('status.tool', { tool: t('tool.' + tool) }));
@@ -173,17 +241,20 @@
 
     if (app.tool === 'floor') {
       if (tile.floor === app.brush.floor) return false;
+      if (!buildCharge('floorPaint')) return false;   // R2-08
       tile.floor = app.brush.floor; return true;
     }
     if (app.tool === 'wall') {
-      if (tile.wall === app.brush.wallShape && tile.wallMaterial === app.brush.wallMat) return false;
+      const w = tile.wall;
+      if (w && w.kind === app.brush.wallKind && w.orientation === app.brush.wallOrient && w.material === app.brush.wallMat) return false;
+      if (!buildCharge('wall')) return false;          // R2-08
       if (tile.floor === 'void') tile.floor = 'deck';
-      tile.wall = app.brush.wallShape; tile.wallMaterial = app.brush.wallMat; return true;
+      tile.wall = D.createWall(app.brush.wallKind, app.brush.wallOrient, app.brush.wallMat); return true;
     }
     if (app.tool === 'erase') {
       const obj = room.objects.find(o => o.x === hit.lx && o.y === hit.ly);
       if (obj) { room.objects = room.objects.filter(o => o !== obj); if (app.selection && app.selection.objectId === obj.id) app.selection = null; return true; }
-      if (tile.wall) { tile.wall = null; tile.wallMaterial = null; return true; }
+      if (tile.wall) { tile.wall = null; return true; }
       if (tile.floor !== 'void') { tile.floor = 'void'; return true; }
       return false;
     }
@@ -191,24 +262,28 @@
   }
 
   function placeObject(hit) {
-    const room = roomById(hit.roomId); if (!room) return setStatus('Place on a room tile.');
+    const room = roomById(hit.roomId); if (!room) return setStatus(t('status.placeOnRoom'));
     const tile = room.tiles[hit.ly][hit.lx];
-    if (!tile || tile.floor === 'void' || tile.wall) return setStatus('Object needs an empty floor tile.');
-    if (room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) return setStatus('Tile already has an object.');
+    if (!tile || tile.floor === 'void' || tile.wall) return setStatus(t('status.objectNeedsFloor'));
+    if (room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) return setStatus(t('status.tileHasObject'));
+    const def0 = D.OBJECT_DEFS[app.brush.object] || {};
+    const costKey = (def0.openable || app.brush.object === 'elevator') ? 'doorElevator' : 'object';
+    if (!buildCharge(costKey)) return;   // R2-08
     pushHistory();
     const obj = D.createObjectInstance(app.brush.object, hit.lx, hit.ly);
+    obj.rotation = D.snapAngle(app.brush.objectRotation || 0);   // R2-01: place at the brush angle
     room.objects.push(obj);
     app.selection = { roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id };
-    updateInspector(); setStatus(`${obj.name} placed.`);
+    updateInspector(); setStatus(t('status.objectPlaced', { name: I.label('obj.' + obj.type, obj.name) }));
   }
 
   function setEntry(hit) {
     const room = roomById(hit.roomId); if (!room) return;
     const tile = room.tiles[hit.ly][hit.lx];
-    if (!tile || tile.floor === 'void' || tile.wall) return setStatus('Entry must be a walkable tile.');
+    if (!tile || tile.floor === 'void' || tile.wall) return setStatus(t('status.entryWalkable'));
     pushHistory();
     activeLevel().entry = { roomId: room.id, x: hit.lx, y: hit.ly };
-    setStatus(`Entry set to ${hit.lx},${hit.ly}.`);
+    setStatus(t('status.entrySet', { x: hit.lx, y: hit.ly }));
   }
 
   // ---- levels (decks) -----------------------------------------------------
@@ -219,18 +294,19 @@
     const lvl = D.createLevel('Deck ' + (app.save.levels.length + 1));
     app.save.levels.push(lvl);
     switchLevel(lvl.id); refreshLevelSelect();
-    setStatus(`Added ${lvl.name}.`);
+    setStatus(t('status.deckAdded', { name: lvl.name }));
   }
   function deleteLevel() {
     if (!requireBuild()) return;
-    if (app.save.levels.length <= 1) return setStatus('Cannot delete the last deck.');
+    if (app.save.levels.length <= 1) return setStatus(t('status.cantDeleteLastDeck'));
     pushHistory();
     const id = app.activeLevelId;
     app.save.levels = app.save.levels.filter(l => l.id !== id);
     app.save.links = app.save.links.filter(k => k.from.levelId !== id && k.to.levelId !== id);
+    app.selectedLinkId = null;   // BUG-03: a selected link may have just been dropped
     if (app.save.startLevelId === id) app.save.startLevelId = app.save.levels[0].id;
     switchLevel(app.save.levels[0].id); refreshLevelSelect();
-    setStatus('Deck deleted.');
+    setStatus(t('status.deckDeleted'));
   }
   function renameLevel(name) {
     const lvl = activeLevel(); if (!lvl) return;
@@ -256,25 +332,24 @@
     }
     return null;
   }
-  function linkStartTool() { app.pendingLink = null; setStatus('Link: click a source tile (e.g. an elevator). Then switch deck and click the spawn.'); }
+  function linkStartTool() { app.pendingLink = null; setStatus(t('status.linkStart')); }
   function handleLinkClick(hit) {
     if (!app.pendingLink) {
       app.pendingLink = { levelId: app.activeLevelId, roomId: hit.roomId, lx: hit.lx, ly: hit.ly };
-      setStatus(`Source set on ${levelName(app.activeLevelId)} @${hit.lx},${hit.ly}. Switch to the target deck and click the spawn.`);
+      setStatus(t('status.linkSource', { deck: levelName(app.activeLevelId), x: hit.lx, y: hit.ly }));
       return;
     }
     if (app.pendingLink.levelId === app.activeLevelId && app.pendingLink.roomId === hit.roomId && app.pendingLink.lx === hit.lx && app.pendingLink.ly === hit.ly) {
-      return setStatus('Pick a spawn on a different deck (or another tile).');
+      return setStatus(t('status.linkPickOther'));
     }
     pushHistory();
     const link = D.createLink(app.pendingLink.levelId, app.activeLevelId);
     link.from = { levelId: app.pendingLink.levelId, roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly };
     link.to = { levelId: app.activeLevelId, roomId: hit.roomId, x: hit.lx, y: hit.ly };
     app.save.links.push(link);
-    const msg = `Linked ${levelName(link.from.levelId)} → ${levelName(link.to.levelId)} (${link.mode}).`;
     app.pendingLink = null;
     refreshLinkList();
-    setStatus(msg);
+    setStatus(t('status.linked', { from: levelName(link.from.levelId), to: levelName(link.to.levelId), mode: t('mode.' + (link.mode === 'preload' ? 'preload' : 'stream')) }));
   }
   // marker list for the active level (both endpoints that live here + pending)
   function linkMarkers() {
@@ -310,23 +385,23 @@
     app.activeLevelId = target.id; app.selection = null; app.resident.add(target.id);
     if (app.mode === 'play') engine.start(activeLevel());
     const c = R.tileCenterWorld(spawnRoom, match.spawn.x, match.spawn.y);
-    const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom }, c.x, c.y);
+    const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom, projection: app.camera.projection }, c.x, c.y);
     app.camera.x = canvas.clientWidth / 2 - s.x; app.camera.y = canvas.clientHeight / 2 - s.y;
     refreshLevelSelect(); invalidate();
-    setStatus(`${match.link.kind} → ${levelName(target.id)} · ${match.link.mode === 'stream' ? 'streamed' : 'preloaded'}`);
+    setStatus(t('status.traveled', { kind: I.label('linkKind.' + (match.link.kind || 'custom'), match.link.kind), deck: levelName(target.id), mode: t('mode.' + (match.link.mode === 'preload' ? 'preload' : 'stream')) }));
   }
   // Play-mode click: toggle a door, else order the pawn to walk there.
   function playClick(hit) {
     if (!hit) return;
     if (hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
       hit.object.open = !hit.object.open;
-      setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`); return;
+      setStatus(t(hit.object.open ? 'status.objectOpened' : 'status.objectClosed', { name: I.label('obj.' + hit.object.type, hit.object.name) })); return;
     }
     const pawn = agents && agents.selected; if (!pawn) return;
-    if (hit.roomId !== pawn.roomId) { setStatus('The pawn can\'t path to another room yet — use a link.'); return; }
+    if (hit.roomId !== pawn.roomId) { setStatus(t('status.pawnNoCrossRoom')); return; }
     const room = roomById(pawn.roomId);
-    if (agents.order(pawn, room, hit.lx, hit.ly)) setStatus(`Moving to ${hit.lx},${hit.ly}.`);
-    else setStatus('No path there.');
+    if (agents.order(pawn, room, hit.lx, hit.ly)) setStatus(t('status.pawnMoving', { x: hit.lx, y: hit.ly }));
+    else setStatus(t('status.noPath'));
   }
 
   function deleteSelectedObject() {
@@ -334,7 +409,7 @@
     const room = roomById(app.selection.roomId); if (!room) return;
     pushHistory();
     room.objects = room.objects.filter(o => o.id !== app.selection.objectId);
-    app.selection.objectId = null; updateInspector(); setStatus('Object deleted.');
+    app.selection.objectId = null; updateInspector(); setStatus(t('status.objectDeleted'));
   }
   function rotateSelectedObject() {
     if (!app.selection || !app.selection.objectId) return;
@@ -348,19 +423,19 @@
   function floodFill(hit) {
     const room = roomById(hit.roomId); if (!room) return;
     const from = room.tiles[hit.ly][hit.lx].floor, to = app.brush.floor;
-    if (from === to) return setStatus('Already that floor.');
+    if (from === to) return setStatus(t('status.alreadyFloor'));
     pushHistory();
     const stack = [[hit.lx, hit.ly]]; const seen = new Set(); let n = 0;
     while (stack.length) {
       const [x, y] = stack.pop();
       if (x < 0 || y < 0 || x >= room.size.w || y >= room.size.h) continue;
       const k = x + ',' + y; if (seen.has(k)) continue; seen.add(k);
-      const t = room.tiles[y][x];
-      if (t.wall || t.floor !== from) continue;   // barrier / different region
-      t.floor = to; n++;
+      const ti = room.tiles[y][x];
+      if (ti.wall || ti.floor !== from) continue;   // barrier / different region
+      ti.floor = to; n++;
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
     }
-    if (!n) discardHistory(); else setStatus(`Filled ${n} tiles.`);
+    if (!n) discardHistory(); else setStatus(t('status.filled', { n }));
   }
 
   function duplicateSelectedObject() {
@@ -373,15 +448,15 @@
     for (const [dx, dy] of spots) {
       const nx = src.x + dx, ny = src.y + dy;
       if (nx < 0 || ny < 0 || nx >= room.size.w || ny >= room.size.h) continue;
-      const t = room.tiles[ny][nx];
-      if (t.floor !== 'void' && !t.wall && !room.objects.some(o => o.x === nx && o.y === ny)) { tx = nx; ty = ny; found = true; break; }
+      const ti = room.tiles[ny][nx];
+      if (ti.floor !== 'void' && !ti.wall && !room.objects.some(o => o.x === nx && o.y === ny)) { tx = nx; ty = ny; found = true; break; }
     }
-    if (!found) return setStatus('No free tile to duplicate into.');
+    if (!found) return setStatus(t('status.noFreeTile'));
     pushHistory();
     const copy = clone(src); copy.id = D.uid('obj'); copy.x = tx; copy.y = ty;
     room.objects.push(copy);
     app.selection = { roomId: room.id, lx: tx, ly: ty, objectId: copy.id };
-    updateInspector(); setStatus(`${copy.name} duplicated.`);
+    updateInspector(); setStatus(t('status.objectDuplicated', { name: I.label('obj.' + copy.type, copy.name) }));
   }
 
   function duplicateActiveRoom() {
@@ -395,7 +470,7 @@
     copy.transform = D.createTransform(src.transform.x + src.size.w + 2, src.transform.y, src.transform.rotation);
     activeLevel().rooms.push(copy);
     selectRoom(copy);
-    setStatus(`Room "${src.name}" duplicated.`);
+    setStatus(t('status.roomDuplicated', { name: src.name }));
   }
 
   // ---- room list & room-level actions (S1-R4) -----------------------------
@@ -410,7 +485,7 @@
 
   function selectRoom(room) {
     if (!room) return;
-    app.selection = { roomId: room.id, lx: Math.floor(room.size.w / 2), ly: Math.floor(room.size.h / 2), objectId: null };
+    app.selection = { kind: 'room', roomId: room.id, lx: Math.floor(room.size.w / 2), ly: Math.floor(room.size.h / 2), objectId: null };
     updateInspector(); invalidate();   // updateInspector refreshes the room list
   }
 
@@ -460,7 +535,11 @@
       const first = lvl.rooms[0];
       lvl.entry = { roomId: first.id, x: Math.min(2, first.size.w - 1), y: Math.min(2, first.size.h - 1) };
     }
+    // BUG-03: the Links list must reflect the links we just dropped, and any
+    // link that was selected may no longer exist.
+    app.selectedLinkId = null;
     selectRoom(lvl.rooms[0]);
+    refreshLinkList();
     setStatus(t('status.roomDeleted', { name }));
   }
 
@@ -504,7 +583,7 @@
     // jump to the source deck so at least one highlighted endpoint is on screen
     if (k.from.levelId !== app.activeLevelId) switchLevel(k.from.levelId);
     refreshLinkList(); invalidate();
-    setStatus(`${t('linkKind.' + (k.kind || 'custom'))}: ${levelName(k.from.levelId)} → ${levelName(k.to.levelId)} · ${t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream'))}`);
+    setStatus(t('status.linkSelected', { kind: I.label('linkKind.' + (k.kind || 'custom'), k.kind), from: levelName(k.from.levelId), to: levelName(k.to.levelId), mode: t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream')) }));
   }
   function deleteLink(id) {
     if (!requireBuild()) return;
@@ -527,6 +606,29 @@
     refreshLinkList(); setStatus(t('status.linkModeChanged', { mode: t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream')) }));
   }
 
+  // R2-05: stamp a free-form shape onto the selected room. Cells outside the
+  // shape become 'void' (not part of the room); objects on those cells are
+  // dropped after confirmation. Non-destructive to storage — the bounding-box
+  // grid is unchanged in size.
+  function applyRoomShape(shape) {
+    if (!requireBuild()) return;
+    const room = selectedRoom(); if (!room) return;
+    const mask = D.shapeMask(room.size.w, room.size.h, shape);
+    const lost = room.objects.filter(o => !(mask[o.y] && mask[o.y][o.x]));
+    if (lost.length && !window.confirm(t('confirm.shapeDrop', { n: lost.length }))) { setStatus(t('status.resizeCancelled')); return; }
+    pushHistory();
+    for (let y = 0; y < room.size.h; y++) {
+      for (let x = 0; x < room.size.w; x++) {
+        const tile = room.tiles[y][x];
+        if (mask[y][x]) { if (tile.floor === 'void') tile.floor = 'deck'; }
+        else { tile.floor = 'void'; tile.wall = null; }
+      }
+    }
+    if (lost.length) room.objects = room.objects.filter(o => mask[o.y] && mask[o.y][o.x]);
+    updateInspector(); invalidate();
+    setStatus(t('status.shapeApplied', { shape: I.label('shape.' + shape, shape) }) + (lost.length ? ' ' + t('status.droppedN', { n: lost.length }) : ''));
+  }
+
   function renameSelectedRoom(name) {
     if (!requireBuild()) return;
     const room = selectedRoom(); if (!room) return;
@@ -541,7 +643,7 @@
     const room = roomById(app.selection.roomId); if (!room) return false;
     const obj = room.objects.find(o => o.id === app.selection.objectId); if (!obj) return false;
     if (!D.OBJECT_DEFS[obj.type].openable) return false;
-    obj.open = !obj.open; updateInspector(); setStatus(`${obj.name} ${obj.open ? 'opened' : 'closed'}.`); return true;
+    obj.open = !obj.open; updateInspector(); setStatus(t(obj.open ? 'status.objectOpened' : 'status.objectClosed', { name: I.label('obj.' + obj.type, obj.name) })); return true;
   }
 
   // ---- input --------------------------------------------------------------
@@ -550,16 +652,25 @@
   function onPointerDown(e) {
     if (e.button !== 0) return;
     updateMouse(e); mouse.down = true; dragged = false;
+    mouse.alt = e.altKey;            // R2-02: Alt forces tile selection under an object
     mouse.lastX = e.clientX; mouse.lastY = e.clientY;
     lastPaintKey = ''; strokeChanged = false;
     painting = panning = false; movingObj = null; dragHandle = null;
 
     if (app.mode !== 'build') { panning = true; return; }
 
-    // motion handles take priority when a room is selected with the Select tool
+    // resize + motion handles take priority when a room is selected (Select tool)
     if (app.tool === 'select' && app.selection) {
       const room = roomById(app.selection.roomId);
       if (room) {
+        // R2-04: resize handles (only when the whole room is selected)
+        if (app.selection.kind === 'room') {
+          const rh = R.resizeHandles(app.camera, room).find(hh => Math.abs(hh.sx - mouse.x) + Math.abs(hh.sy - mouse.y) < 12);
+          if (rh) {
+            dragResize = { roomId: room.id, we: rh.we, he: rh.he, ax: rh.ax, ay: rh.ay, startW: room.size.w, startH: room.size.h, gx: room.transform.x, gy: room.transform.y, gw: room.size.w, gh: room.size.h };
+            return;
+          }
+        }
         const hs = R.motionHandles(app.camera, room);
         const h = hs.find(hh => Math.abs(hh.sx - mouse.x) + Math.abs(hh.sy - mouse.y) < 12);
         if (h) { dragHandle = { roomId: room.id, eventId: h.eventId, kind: h.kind, poseIndex: h.poseIndex }; pushHistory(); return; }
@@ -571,7 +682,7 @@
     if (app.tool === 'floor' || app.tool === 'wall' || app.tool === 'erase') {
       pushHistory(); painting = true;
       if (hit) strokeChanged = applyPaint(hit) || strokeChanged;
-    } else if (app.tool === 'select' && hit && hit.object) {
+    } else if (app.tool === 'select' && hit && hit.object && !e.altKey) {
       movingObj = { roomId: hit.roomId, objectId: hit.object.id };
       pushHistory();
     } else {
@@ -583,6 +694,27 @@
     updateMouse(e);
     const moved = Math.abs(e.clientX - mouse.lastX) + Math.abs(e.clientY - mouse.lastY);
     if (mouse.down && moved > 2) dragged = true;
+
+    if (dragResize) {
+      const room = roomById(dragResize.roomId);
+      if (room) {
+        const P = R.screenToWorld(app.camera, mouse.x, mouse.y);
+        const lp = R.worldToLocal(room, P.x, P.y);   // mouse in room-local tile space
+        let gw = dragResize.startW, gh = dragResize.startH;
+        if (dragResize.we === 'e') gw = Math.round(lp.x);
+        else if (dragResize.we === 'w') gw = dragResize.startW - Math.round(lp.x);
+        if (dragResize.he === 's') gh = Math.round(lp.y);
+        else if (dragResize.he === 'n') gh = dragResize.startH - Math.round(lp.y);
+        gw = CORE.clamp(gw, 1, 64); gh = CORE.clamp(gh, 1, 64);
+        // ghost transform shift keeps the anchored edge fixed while previewing
+        const dx = dragResize.ax === 'hi' ? gw - dragResize.startW : 0;
+        const dy = dragResize.ay === 'hi' ? gh - dragResize.startH : 0;
+        dragResize.gw = gw; dragResize.gh = gh;
+        dragResize.gx = room.transform.x - dx; dragResize.gy = room.transform.y - dy;
+        strokeChanged = true;
+      }
+      return;
+    }
 
     if (dragHandle) {
       const room = roomById(dragHandle.roomId);
@@ -625,7 +757,7 @@
         const occupied = room.objects.some(o => o.id !== movingObj.objectId && o.x === hit.lx && o.y === hit.ly);
         if (tile && tile.floor !== 'void' && !tile.wall && !occupied) {
           const obj = room.objects.find(o => o.id === movingObj.objectId);
-          if (obj && (obj.x !== hit.lx || obj.y !== hit.ly)) { obj.x = hit.lx; obj.y = hit.ly; strokeChanged = true; app.selection = { roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id }; }
+          if (obj && (obj.x !== hit.lx || obj.y !== hit.ly)) { obj.x = hit.lx; obj.y = hit.ly; strokeChanged = true; app.selection = { kind: 'object', roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id }; }
         }
       }
       return;
@@ -644,7 +776,10 @@
       const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
       playClick(hit);
     } else if (mouse.down && app.mode === 'build') {
-      if (dragHandle) {
+      if (dragResize) {
+        const dr = dragResize; dragResize = null;
+        if (dr.gw !== dr.startW || dr.gh !== dr.startH) applyHandleResize(dr);
+      } else if (dragHandle) {
         if (!strokeChanged) discardHistory();
       } else if (movingObj) {
         // grabbed an object: a drag moved it; a plain click just selects it
@@ -652,7 +787,7 @@
           discardHistory();
           const room = roomById(movingObj.roomId);
           const obj = room && room.objects.find(o => o.id === movingObj.objectId);
-          if (obj) app.selection = { roomId: room.id, lx: obj.x, ly: obj.y, objectId: obj.id };
+          if (obj) app.selection = { kind: 'object', roomId: room.id, lx: obj.x, ly: obj.y, objectId: obj.id };
         }
         updateInspector();
       } else if (painting) {
@@ -665,13 +800,25 @@
         else if (app.tool === 'entry') { if (hit) setEntry(hit); }
         else if (app.tool === 'fill') { if (hit) floodFill(hit); }
         else if (app.tool === 'link') { if (hit) handleLinkClick(hit); }
-        else { // select (default)
-          app.selection = hit ? { roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: hit.object ? hit.object.id : null } : null;
+        else { // select (default): single click → object (priority) or tile; Alt forces tile
+          if (!hit) app.selection = null;
+          else if (mouse.alt || !hit.object) app.selection = { kind: 'tile', roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: null };
+          else app.selection = { kind: 'object', roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: hit.object.id };
           updateInspector();
         }
       }
     }
-    mouse.down = false; painting = panning = false; movingObj = null; dragHandle = null; dragged = false;
+    mouse.down = false; painting = panning = false; movingObj = null; dragHandle = null; dragResize = null; dragged = false;
+  }
+
+  // R2-02: double-click selects the whole room (Select tool, Build only).
+  function onDblClick(e) {
+    if (app.mode !== 'build' || app.tool !== 'select') return;
+    updateMouse(e);
+    const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
+    if (!hit) return;
+    const room = roomById(hit.roomId); if (!room) return;
+    selectRoom(room);   // sets a room-kind selection centred on the room
   }
 
   function onWheel(e) {
@@ -703,8 +850,10 @@
     if (!room) { inspector.innerHTML = '<span class="muted">—</span>'; return; }
     const obj = app.selection.objectId ? room.objects.find(o => o.id === app.selection.objectId) : null;
     const tile = room.tiles[app.selection.ly] && room.tiles[app.selection.ly][app.selection.lx];
+    const kind = app.selection.kind || (obj ? 'object' : 'tile');   // R2-02 selection kind
 
-    let h = `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
+    let h = `<div class="selkind selkind-${kind}">${esc(t('insp.kind.' + kind))}</div>`;
+    h += `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
     h += `<div class="row"><b>${esc(t('insp.transform'))}</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
     h += `<div class="row"><b>${esc(t('insp.size'))}</b><span>${room.size.w} × ${room.size.h}</span></div>`;
     h += `<div class="resize">`
@@ -718,10 +867,12 @@
       + `</select>`
       + `<button data-act="resize">${esc(t('insp.applySize'))}</button>`
       + `</div>`;
-    h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
-    if (tile) {
-      h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
-      h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall, tile.wall)) : esc(t('val.none'))}</span></div>`;
+    if (kind !== 'room') {
+      h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
+      if (tile) {
+        h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
+        h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall.kind, tile.wall.kind)) + (tile.wall.kind !== 'block' ? ' · ' + (tile.wall.orientation || 0) + '°' : '') : esc(t('val.none'))}</span></div>`;
+      }
     }
     if (obj) {
       const def = D.OBJECT_DEFS[obj.type];
@@ -768,9 +919,12 @@
   // ---- room motion authoring ---------------------------------------------
   function selectedRoom() { return app.selection ? roomById(app.selection.roomId) : null; }
 
-  // Resize the selected room from the inspector inputs. Non-destructive: a
-  // shrink that would drop objects asks for confirmation first (owner rule),
-  // then repairs the level entry, links, and selection by the applied offset.
+  // Resize the selected room from the inspector inputs. Non-destructive: it
+  // assesses the change first (dryRun, no undo entry). A destructive resize —
+  // dropping objects OR trimming floor/wall tiles — is confirmed before any
+  // mutation, so a cancelled resize leaves NO trace in the undo history
+  // (BUG-04). On commit it repairs the level entry, links, and selection by the
+  // applied offset, and reports the trimmed tiles/walls (localized).
   function resizeSelectedRoom() {
     if (!requireBuild()) return;
     const room = selectedRoom(); if (!room) return;
@@ -783,23 +937,27 @@
     if (!(nw >= 1) || !(nh >= 1)) return;
     if (nw === room.size.w && nh === room.size.h) { setStatus(t('status.sizeUnchanged')); return; }
 
-    pushHistory();
-    let res = D.resizeRoom(room, nw, nh, { anchor, force: false });
-    if (!res.ok) {
-      if (!window.confirm(t('confirm.dropObjects', { n: res.wouldDrop.length }))) {
-        discardHistory(); setStatus(t('status.resizeCancelled')); return;
-      }
-      res = D.resizeRoom(room, nw, nh, { anchor, force: true });
+    // assess without mutating and without touching the undo stack
+    const dry = D.resizeRoom(room, nw, nh, { anchor, dryRun: true });
+    const lostObjects = dry.wouldDrop.length, lostTiles = dry.trimmedTiles, lostWalls = dry.trimmedWalls;
+    if (lostObjects || lostTiles || lostWalls) {
+      const msg = t('confirm.resizeLoss', { objects: lostObjects, tiles: lostTiles, walls: lostWalls });
+      if (!window.confirm(msg)) { setStatus(t('status.resizeCancelled')); return; }   // no history touched
     }
+
+    pushHistory();
+    const res = D.resizeRoom(room, nw, nh, { anchor, force: true });
     const { dx, dy } = res.offset;
     repairAfterResize(room, dx, dy, res.newW, res.newH);
     if (app.selection && app.selection.roomId === room.id) {
       app.selection.lx = CORE.clamp(app.selection.lx + dx, 0, res.newW - 1);
       app.selection.ly = CORE.clamp(app.selection.ly + dy, 0, res.newH - 1);
     }
-    updateInspector(); refreshLevelSelect(); invalidate();
-    const extra = res.dropped.length ? ' ' + t('status.droppedN', { n: res.dropped.length }) : '';
-    setStatus(t('status.resized', { w: res.newW, h: res.newH }) + extra);
+    updateInspector(); refreshLevelSelect(); refreshLinkList(); invalidate();
+    let msg = t('status.resized', { w: res.newW, h: res.newH });
+    if (res.trimmedTiles || res.trimmedWalls) msg += ' ' + t('status.resizeTrimmed', { tiles: res.trimmedTiles, walls: res.trimmedWalls });
+    if (res.dropped.length) msg += ' ' + t('status.droppedN', { n: res.dropped.length });
+    setStatus(msg);
   }
 
   // After a room resize, shift/clamp everything that references its tiles.
@@ -819,19 +977,41 @@
       if (k.to && k.to.roomId === room.id) { k.to.x = clampX(k.to.x + dx); k.to.y = clampY(k.to.y + dy); }
     }
   }
+
+  // R2-04: commit a drag from a resize handle. Same non-destructive rules as the
+  // numeric resize (confirm before losing content, no undo entry if cancelled),
+  // plus a transform shift so the edge opposite the handle stays fixed in world.
+  function applyHandleResize(dr) {
+    const room = roomById(dr.roomId); if (!room) return;
+    const nw = dr.gw, nh = dr.gh, opts = { ax: dr.ax, ay: dr.ay };
+    const dry = D.resizeRoom(room, nw, nh, Object.assign({ dryRun: true }, opts));
+    if (dry.wouldDrop.length || dry.trimmedTiles || dry.trimmedWalls) {
+      if (!window.confirm(t('confirm.resizeLoss', { objects: dry.wouldDrop.length, tiles: dry.trimmedTiles, walls: dry.trimmedWalls }))) { setStatus(t('status.resizeCancelled')); return; }
+    }
+    pushHistory();
+    const res = D.resizeRoom(room, nw, nh, Object.assign({ force: true }, opts));
+    room.transform.x -= res.offset.dx; room.transform.y -= res.offset.dy;   // keep the anchored edge fixed
+    repairAfterResize(room, res.offset.dx, res.offset.dy, res.newW, res.newH);
+    app.selection = { kind: 'room', roomId: room.id, lx: Math.floor(res.newW / 2), ly: Math.floor(res.newH / 2), objectId: null };
+    updateInspector(); refreshLevelSelect(); refreshLinkList(); invalidate();
+    let msg = t('status.resized', { w: res.newW, h: res.newH });
+    if (res.trimmedTiles || res.trimmedWalls) msg += ' ' + t('status.resizeTrimmed', { tiles: res.trimmedTiles, walls: res.trimmedWalls });
+    if (res.dropped.length) msg += ' ' + t('status.droppedN', { n: res.dropped.length });
+    setStatus(msg);
+  }
   function addRoomEvent(room, kind) {
     pushHistory();
     room.movable = true;
-    const t = room.transform, ev = D.createRoomEvent(kind[0].toUpperCase() + kind.slice(1));
+    const tr = room.transform, ev = D.createRoomEvent(kind[0].toUpperCase() + kind.slice(1));
     ev.trigger = { type: 'time' }; ev.loop = true;
-    if (kind === 'shift') ev.action = { kind: 'shift', to: { x: t.x + 4, y: t.y }, duration: 2 };
+    if (kind === 'shift') ev.action = { kind: 'shift', to: { x: tr.x + 4, y: tr.y }, duration: 2 };
     else if (kind === 'rotate') ev.action = { kind: 'rotate', by: 90, duration: 2 };
     else if (kind === 'orbit') { const rc = R.roomCenterWorld(room); ev.action = { kind: 'orbit', center: { x: rc.x, y: rc.y - 5 }, radius: 5, period: 4, direction: 'cw', selfRotate: false }; }
     else if (kind === 'carousel') ev.action = { kind: 'carousel', interval: 1.8, loop: true, poses: [
-      { x: t.x + 4, y: t.y, rotation: t.rotation }, { x: t.x + 4, y: t.y + 4, rotation: t.rotation + 90 }, { x: t.x, y: t.y + 4, rotation: t.rotation + 180 }
+      { x: tr.x + 4, y: tr.y, rotation: tr.rotation }, { x: tr.x + 4, y: tr.y + 4, rotation: tr.rotation + 90 }, { x: tr.x, y: tr.y + 4, rotation: tr.rotation + 180 }
     ] };
     room.events.push(ev);
-    updateInspector(); setStatus(`Added ${kind} event. Drag the handle to aim it, hit Play to see it.`);
+    updateInspector(); setStatus(t('status.eventAdded', { kind: I.label('motionKind.' + kind, kind) }));
   }
   // Validate a motion event; returns a human warning string, or '' if fine.
   function eventIssue(ev) {
@@ -857,7 +1037,7 @@
   function testRoomEvent(room, id) {
     const ev = room.events.find(e => e.id === id); if (!ev) return;
     if (app.mode !== 'play') { setMode('play'); }
-    engine.fire(room, ev); setStatus(`Testing "${ev.name}".`);
+    engine.fire(room, ev); setStatus(t('status.eventTesting', { name: ev.name }));
   }
 
   function refreshLevelSelect() {
@@ -904,7 +1084,10 @@
       hiddenLayers: app.hiddenLayers,
       activeRoomId: app.selection ? app.selection.roomId : null,
       previewRoom: (app.mode === 'build' && app.selection) ? roomById(app.selection.roomId) : null,
-      showRoomOutlines: app.mode === 'build'
+      showRoomOutlines: app.mode === 'build',
+      // R2-04: show resize handles when a whole room is selected (Build)
+      resizeRoom: (app.mode === 'build' && app.selection && (app.selection.kind === 'room')) ? roomById(app.selection.roomId) : null,
+      resizeGhost: dragResize ? { x: dragResize.gx, y: dragResize.gy, w: dragResize.gw, h: dragResize.gh } : null
     });
     if (agents && agents.pawns.length) R.drawAgents(ctx, app.camera, lvl, agents.pawns, { selectedId: agents.selected && agents.selected.id, time: engine.time });
     hud.textContent = `${app.save.name} · ${lvl.name}  [${app.mode}·${app.tool}]\n` +
@@ -925,7 +1108,6 @@
   // language. Rebuilt on language change; wraps are cleared first (idempotent).
   function matLabel(m) { return I.label('mat.' + m.id, m.label); }
   function objLabel(def) { return I.label('obj.' + def.type, def.label); }
-  function wallShapeLabel(id, fallback) { return I.label('wall.' + id, fallback); }
   function layerLabel(id) { return I.label('layer.' + id, id); }
 
   function buildPalettes() {
@@ -937,14 +1119,17 @@
     // objects
     const oWrap = document.getElementById('objectPalette'); oWrap.innerHTML = '';
     for (const def of Object.values(D.OBJECT_DEFS)) oWrap.appendChild(chip(objLabel(def), () => { app.brush.object = def.type; markActive(oWrap, def.type); setTool('object'); }, def.type, app.brush.object === def.type));
-    // wall shapes
+    // wall kinds (block / diagonal / rounded) — R rotates the orientation
     const wWrap = document.getElementById('wallPalette'); wWrap.innerHTML = '';
-    [['solid', 'Solid'], ['diagA', 'Diag /'], ['diagB', 'Diag \\']].forEach(([id, label]) =>
-      wWrap.appendChild(chip(wallShapeLabel(id, label), () => { app.brush.wallShape = id; markActive(wWrap, id); setTool('wall'); }, id, app.brush.wallShape === id)));
+    D.WALL_KINDS.forEach(k =>
+      wWrap.appendChild(chip(I.label('wall.' + k, k), () => { app.brush.wallKind = k; markActive(wWrap, k); setTool('wall'); }, k, app.brush.wallKind === k)));
     // wall materials (hull vs glass/windows)
     const wmWrap = document.getElementById('wallMatPalette'); wmWrap.innerHTML = '';
     Object.values(D.MATERIALS).filter(m => m.kind === 'wall').forEach(m =>
       wmWrap.appendChild(chip(matLabel(m), () => { app.brush.wallMat = m.id; markActive(wmWrap, m.id); setTool('wall'); }, m.id, app.brush.wallMat === m.id)));
+    // room shape presets (R2-05)
+    const shWrap = document.getElementById('shapePalette');
+    if (shWrap) { shWrap.innerHTML = ''; D.ROOM_SHAPES.forEach(s => shWrap.appendChild(chip(I.label('shape.' + s, s), () => applyRoomShape(s), s, false))); }
     // layer visibility toggles
     const lWrap = document.getElementById('layerToggles'); lWrap.innerHTML = '';
     D.LAYERS.forEach(name => {
@@ -976,14 +1161,87 @@
     if (btn) btn.addEventListener('click', () => showHelp(true));
     if (close) close.addEventListener('click', () => { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {} });
     if (ov) ov.addEventListener('click', e => { if (e.target === ov) { showHelp(false); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e2) {} } });
+    // (first-run help is shown on first entry into Dev, not over the main menu)
+  }
+  function maybeShowFirstRunHelp() {
     let seen = false; try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
     if (!seen) showHelp(true);
   }
 
+  // ---- app shell: main menu + dev/game modes (R2-07) ----------------------
+  const AUTOSAVE_KEY = 'ugs.save';
+  function persistSave() {
+    try { if (app.save) localStorage.setItem(AUTOSAVE_KEY, S.serialize(app.save)); } catch (e) { /* storage off */ }
+  }
+  function hasAutosave() { try { return !!localStorage.getItem(AUTOSAVE_KEY); } catch (e) { return false; } }
+  function refreshContinue() {
+    const btn = document.getElementById('mmContinue'); if (btn) btn.disabled = !hasAutosave();
+  }
+  // menu | dev | game — toggles which chrome is visible and drives the sim.
+  function enterAppMode(mode) {
+    app.appMode = mode;
+    document.body.classList.toggle('mode-menu', mode === 'menu');
+    document.body.classList.toggle('mode-dev', mode === 'dev');
+    document.body.classList.toggle('mode-game', mode === 'game');
+    document.body.classList.toggle('mode-gamebuild', mode === 'gamebuild');
+    const chip = document.getElementById('modeChip');
+    if (chip) chip.textContent = mode === 'game' ? t('mode.game') : (mode === 'gamebuild' ? t('mode.gamebuild') : (mode === 'dev' ? t('mode.dev') : ''));
+    if (mode === 'menu') {
+      if (app.mode === 'play') setMode('build');
+      persistSave(); refreshContinue();
+    } else if (mode === 'dev') {
+      setMode('build'); setStatus(t('status.enterDev')); maybeShowFirstRunHelp();
+    } else if (mode === 'game') {
+      // player runtime: the sim runs and the pawn is controllable, but no dev toolbox
+      setMode('play'); setStatus(t('status.enterGame'));
+    } else if (mode === 'gamebuild') {
+      // paid player construction: build tools, no dev side panel; sim paused
+      setMode('build'); setTool('floor'); updateCredits(); setStatus(t('status.enterGameBuild'));
+    }
+    invalidate();
+  }
+  // R2-08: charge credits for a player-build action (Game Build only). Dev is
+  // free. Returns true if the action may proceed (and deducts), false if the
+  // player can't afford it.
+  function buildCharge(costKey) {
+    if (app.appMode !== 'gamebuild') return true;   // Dev never charges
+    const cost = (app.save.buildCosts && app.save.buildCosts[costKey]) || 0;
+    const have = (app.save.resources && app.save.resources.credits) || 0;
+    if (have < cost) { setStatus(t('status.noCredits', { need: cost, have })); return false; }
+    app.save.resources.credits = have - cost; updateCredits(); return true;
+  }
+  function updateCredits() {
+    const el = document.getElementById('creditsVal');
+    if (el) el.textContent = String((app.save && app.save.resources && app.save.resources.credits) || 0);
+  }
+  function setupShell() {
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    on('mmNew', () => { loadSave(blankStation(), t('status.newStation')); enterAppMode('dev'); });
+    on('mmDev', () => enterAppMode('dev'));
+    on('mmPlay', () => enterAppMode('game'));
+    on('mmContinue', () => {
+      try {
+        const raw = localStorage.getItem(AUTOSAVE_KEY); if (!raw) return;
+        const { save } = S.deserialize(raw); loadSave(save, t('status.loaded')); enterAppMode('dev');
+      } catch (e) { setStatus(t('status.importFailed', { err: e.message })); }
+    });
+    on('mmLoad', () => document.getElementById('fileInput').click());   // import, then stay in menu until loaded
+    on('menuBtn', () => enterAppMode('menu'));
+    on('gMenu', () => enterAppMode('menu'));
+    on('gPause', () => { app.clock.paused = !app.clock.paused; updatePlayBar(); updateGameBar(); });
+    on('gExpand', () => enterAppMode('gamebuild'));   // R2-08: paid player construction
+    on('bDone', () => enterAppMode('game'));
+    refreshContinue();
+  }
+  function updateGameBar() {
+    const pb = document.getElementById('gPause');
+    if (pb) pb.textContent = app.clock.paused ? '▶' : '❚❚';
+  }
+
   // ---- language wiring -----------------------------------------------------
   function setupLanguage() {
-    const sel = document.getElementById('langSelect');
-    if (sel) {
+    const sels = ['langSelect', 'mmLangSelect'].map(id => document.getElementById(id)).filter(Boolean);
+    for (const sel of sels) {
       sel.innerHTML = '';
       I.languages().forEach(code => {
         const o = document.createElement('option');
@@ -1003,7 +1261,9 @@
       refreshLinkList();
       updatePlayBar();
       syncToolContext(app.tool);
-      if (sel) sel.value = lang;
+      for (const s of sels) s.value = lang;
+      const chip = document.getElementById('modeChip');
+      if (chip && app.appMode !== 'menu') chip.textContent = app.appMode === 'game' ? t('mode.game') : t('mode.dev');
       setStatus(t('status.langChanged', { lang: t('lang.' + lang) }));
     });
     I.apply(document);   // paint the initial language onto the static markup
@@ -1020,6 +1280,7 @@
     canvas.addEventListener('pointermove', e => { onPointerMove(e); invalidate(); });
     canvas.addEventListener('pointerdown', e => { onPointerDown(e); invalidate(); });
     window.addEventListener('pointerup', () => { onPointerUp(); invalidate(); });
+    canvas.addEventListener('dblclick', e => { onDblClick(e); invalidate(); });
     canvas.addEventListener('pointerleave', () => { app.hover = null; invalidate(); });
     canvas.addEventListener('wheel', e => { onWheel(e); invalidate(); }, { passive: false });
     // catch-all: any UI click/change/key repaints once (render-on-demand net)
@@ -1031,6 +1292,12 @@
 
     window.addEventListener('keydown', e => {
       const k = e.key.toLowerCase();
+      // R2-01: hotkeys are ignored while the user is typing in a field, so
+      // e.g. renaming a room or editing a resize value never fires a tool.
+      if (isTypingTarget(e.target)) return;
+      // R2-03: camera projection (works in Build and Play)
+      if (k === 'e' && !e.ctrlKey && !e.metaKey) { cycleProjection(1); return; }
+      if (k === 'q' && !e.ctrlKey && !e.metaKey) { cycleProjection(-1); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelectedObject(); return; }
@@ -1038,14 +1305,22 @@
       if (k === 'escape') {
         const ov = document.getElementById('helpOverlay');
         if (ov && ov.classList.contains('on')) { showHelp(false); return; }
+        if (dragResize) { dragResize = null; invalidate(); return; }   // R2-04: cancel an in-progress resize
         app.selection = null; updateInspector(); return;
       }
       if (app.mode === 'play') {
         if (k === ' ') { e.preventDefault(); app.clock.paused = !app.clock.paused; updatePlayBar(); return; }
         if (k === '1' || k === '2' || k === '3') { app.clock.speed = +k; app.clock.paused = false; updatePlayBar(); return; }
+        return;   // no build hotkeys while simulating
       }
-      const toolKeys = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill', l: 'link' };
-      if (toolKeys[k] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[k]); return; }
+      if (e.ctrlKey || e.metaKey) return;
+      // R rotates the selected object, or the object brush's placement angle.
+      if (k === 'r') { rotateBrushOrPiece(); return; }
+      // R2-01 tool hotkeys: numbers 1–8 (doc map) + the original letters as aliases.
+      const NUM_TOOLS = { '1': 'select', '2': 'erase', '3': 'floor', '4': 'wall', '5': 'object', '6': 'entry', '7': 'fill', '8': 'link' };
+      const LETTER_TOOLS = { v: 'select', f: 'floor', g: 'wall', b: 'object', n: 'entry', x: 'erase', k: 'fill', l: 'link' };
+      const tool = NUM_TOOLS[e.key] || LETTER_TOOLS[k];
+      if (tool) { setTool(tool); return; }
       keys.add(k);
     });
     window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -1058,14 +1333,19 @@
     document.getElementById('redoBtn').addEventListener('click', redo);
     document.getElementById('newBtn').addEventListener('click', () => loadSave(blankStation(), t('status.newStation')));
     document.getElementById('exportBtn').addEventListener('click', () => {
-      try { setStatus('Exported ' + S.exportToFile(app.save)); } catch (err) { setStatus('Export failed: ' + err.message); }
+      try { setStatus(t('status.exported', { file: S.exportToFile(app.save) })); } catch (err) { setStatus(t('status.exportFailed', { err: err.message })); }
     });
     const fileInput = document.getElementById('fileInput');
     document.getElementById('importBtn').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', async e => {
       const file = e.target.files[0]; if (!file) return;
-      try { const { save, warnings } = await S.importFromFile(file); loadSave(save, `Imported "${save.name}"` + (warnings.length ? ` (${warnings.length} warnings)` : '')); if (warnings.length) console.warn(warnings); }
-      catch (err) { setStatus('Import failed: ' + err.message); } finally { fileInput.value = ''; }
+      try {
+        const { save, warnings } = await S.importFromFile(file);
+        loadSave(save, warnings.length ? t('status.importedWarnings', { name: save.name, n: warnings.length }) : t('status.imported', { name: save.name }));
+        if (warnings.length) console.warn(warnings);
+        if (app.appMode === 'menu') enterAppMode('dev');   // R2-07: loading from the menu enters Dev
+      }
+      catch (err) { setStatus(t('status.importFailed', { err: err.message })); } finally { fileInput.value = ''; }
     });
     levelSelect.addEventListener('change', e => { switchLevel(e.target.value); refreshLevelSelect(); });
 
@@ -1111,14 +1391,17 @@
 
     setupLanguage();
     setupHelp();
+    setupShell();
     buildPalettes();
     loadSave(blankStation(), t('status.emptyReady'));
-    setMode('build'); setTool('select');
+    setTool('select');
+    enterAppMode('menu');   // R2-07: start at the main menu, not straight into the editor
     requestAnimationFrame(frame);
 
     // debug/test hook (harmless): lets headless tests inspect live state
     window.UGS.editorApp = app;
     window.UGS._agents = agents;
+    window.UGS._engine = engine;   // debug/test hook: lets smoke tests read activeCount()
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

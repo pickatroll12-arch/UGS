@@ -6,8 +6,11 @@
 <title>UGS — Station Builder</title>
 <style>
   :root {
-    --bg: #0e0e10; --panel: rgba(20,20,24,0.96); --panel-solid: #16161a; --line: #3a3a41;
-    --line-bright: #6a6a72; --text: #ececf0; --muted: #9a9aa2; --accent: #fff;
+    /* R2-09: controlled sci-fi theme — deep hull blues + a cyan signal accent.
+       Kept high-contrast; no animated backgrounds, no legibility loss. */
+    --bg: #0a0c10; --panel: rgba(16,20,28,0.94); --panel-solid: #12161e; --line: #2c3340;
+    --line-bright: #4a5666; --text: #e8eef4; --muted: #8b95a6;
+    --accent: #62e0ef; --accent-ink: #06202a; --glow: rgba(98,224,239,0.22);
     --top-h: 48px; --rail-w: 74px; --side-w: 268px; --bottom-h: 96px;
   }
   * { box-sizing: border-box; }
@@ -21,7 +24,7 @@
   button, select, input { font: inherit; color: var(--text); background: #27272c;
     border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; cursor: pointer; }
   button:hover { border-color: var(--line-bright); background: #313137; }
-  button.active { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  button.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 700; }
   button.danger { color: #ffdada; border-color: #6b3c3c; }
   select { cursor: pointer; }
   input { cursor: text; }
@@ -49,7 +52,7 @@
   .modeswitch { display: flex; gap: 4px; padding: 3px; background: #1c1c20;
     border: 1px solid var(--line); border-radius: 9px; }
   .modeswitch button { padding: 5px 14px; border: 0; background: transparent; border-radius: 6px; }
-  .modeswitch button.active { background: var(--accent); color: #111; }
+  .modeswitch button.active { background: var(--accent); color: var(--accent-ink); }
   .langpick { display: flex; align-items: center; gap: 6px; }
   .langpick .ic { font-size: 14px; opacity: .8; }
   .langpick select { padding: 5px 8px; font-size: 12px; }
@@ -74,7 +77,7 @@
   .help-card h3 { margin: 14px 0 3px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #cfcfd6; }
   .help-card p { margin: 0; font-size: 12.5px; color: var(--text); line-height: 1.55; }
   .help-actions { margin-top: 20px; display: flex; justify-content: flex-end; }
-  .help-actions button { padding: 8px 18px; background: var(--accent); color: #111; font-weight: 700; border-color: var(--accent); }
+  .help-actions button { padding: 8px 18px; background: var(--accent); color: var(--accent-ink); font-weight: 700; border-color: var(--accent); }
   /* editing controls are inert while simulating */
   body.playing #toolrail,
   body.playing .editing-only { opacity: .4; pointer-events: none; filter: grayscale(1); }
@@ -85,7 +88,11 @@
     background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
   #toolrail button { display: flex; flex-direction: column; align-items: center; gap: 3px;
     padding: 8px 2px; font-size: 10px; border-radius: 8px; }
+  #toolrail button { position: relative; }
   #toolrail button .ic { font-size: 17px; line-height: 1; }
+  #toolrail button .rk { position: absolute; top: 3px; right: 4px; font-size: 8px; font-weight: 700;
+    color: var(--muted); opacity: .8; }
+  #toolrail button.active .rk { color: var(--accent-ink); }
   .rail-sep { height: 1px; background: var(--line); margin: 4px 2px; }
   #toolrail .rail-mini button { padding: 6px 2px; font-size: 9px; }
 
@@ -103,6 +110,10 @@
   details.sp-sect[open] > summary::before { transform: rotate(90deg); }
   #inspector { font-size: 12px; line-height: 1.5; color: var(--text); }
   #inspector .muted { color: var(--muted); }
+  #inspector .selkind { font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 7px; border-radius: 5px; margin-bottom: 8px; display: inline-block;
+    background: #26262c; border: 1px solid var(--line); color: var(--muted); }
+  #inspector .selkind-room { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
   #inspector .row { display: flex; justify-content: space-between; gap: 8px; }
   #inspector .row b { color: var(--muted); font-weight: 600; }
   #inspector hr { border: 0; border-top: 1px solid var(--line); margin: 7px 0; }
@@ -117,7 +128,7 @@
   .roomlist button { text-align: left; padding: 6px 9px; font-size: 12px; display: flex;
     justify-content: space-between; align-items: center; gap: 8px; }
   .roomlist button .rl-meta { font-size: 10px; color: var(--muted); }
-  .roomlist button.active .rl-meta { color: #333; }
+  .roomlist button.active .rl-meta { color: var(--accent-ink); }
   .linklist { display: flex; flex-direction: column; gap: 5px; }
   .linkrow { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 7px; }
   .linkrow.active { background: rgba(255,255,255,0.09); outline: 1px solid var(--line-bright); }
@@ -156,12 +167,83 @@
   #playBar .pb-hint { font-size: 10px; color: var(--muted); margin-left: 4px; max-width: 42vw; }
   body.playing #game { cursor: pointer; }
 
+  /* ── APP SHELL: main menu + dev/game modes (R2-07) ───────── */
+  #mainMenu { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+    background: radial-gradient(circle at 50% 28%, #17171e, #0b0b0e 70%); }
+  body.mode-menu #mainMenu { display: flex; }
+  .mm-title { font-size: 30px; font-weight: 800; letter-spacing: .12em; margin: 0; }
+  .mm-sub { font-size: 12px; color: var(--muted); margin: 6px 0 22px; }
+  .mm-btns { display: flex; flex-direction: column; gap: 8px; width: 264px; }
+  .mm-btns button { padding: 11px 14px; font-size: 14px; text-align: left; }
+  .mm-btns button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  .mm-btns button:disabled { opacity: .4; cursor: default; }
+  .mm-lang { margin-top: 18px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  .mm-lang select { padding: 5px 8px; font-size: 12px; }
+
+  /* menu mode hides the whole workspace */
+  body.mode-menu #topbar, body.mode-menu #toolrail, body.mode-menu #sidepanel,
+  body.mode-menu #bottombar, body.mode-menu #playBar, body.mode-menu #hud,
+  body.mode-menu #status, body.mode-menu #gameBar { display: none !important; }
+
+  /* game mode hides the dev toolbox + dev play bar */
+  body.mode-game #toolrail, body.mode-game #sidepanel, body.mode-game #bottombar,
+  body.mode-game #playBar { display: none !important; }
+  body.mode-game #topbar .tb-group, body.mode-game .modeswitch { display: none; }
+  #gameBar { position: fixed; z-index: 5; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 44px rgba(0,0,0,.4); }
+  body.mode-game #gameBar { display: flex; }
+  #gameBar strong { font-size: 11px; letter-spacing: .12em; color: #d8d8dd; }
+  #gameBar button { padding: 6px 10px; }
+  /* game-build mode: player construction suite (tool rail + palettes), no dev side panel */
+  body.mode-gamebuild #sidepanel, body.mode-gamebuild #playBar, body.mode-gamebuild #gameBar { display: none !important; }
+  body.mode-gamebuild #topbar .tb-group, body.mode-gamebuild .modeswitch { display: none; }
+  body.mode-gamebuild #bottombar { right: 0; }
+  #buildBar { position: fixed; z-index: 5; bottom: 14px; right: 14px; display: none;
+    align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 44px rgba(0,0,0,.4); }
+  body.mode-gamebuild #buildBar { display: flex; }
+  #buildBar strong { font-size: 11px; letter-spacing: .12em; color: #d8d8dd; }
+  #buildBar .bb-credits { font-size: 13px; font-weight: 700; color: #ffd24a; }
+  #buildBar button { padding: 6px 10px; }
+  .tb-menu { padding: 5px 10px; }
+  .modechip { font-size: 10px; font-weight: 800; letter-spacing: .12em; padding: 3px 8px;
+    border-radius: 5px; background: #26262c; border: 1px solid var(--line); color: var(--muted); }
+
+  /* ── R2-09 sci-fi accents (subtle; no legibility loss) ───── */
+  button.active { box-shadow: 0 0 12px var(--glow); }
+  #topbar, #bottombar { box-shadow: 0 0 18px rgba(0,0,0,0.35); }
+  #toolrail button.active, .modeswitch button.active { text-shadow: none; }
+  .modechip { color: var(--accent); border-color: rgba(98,224,239,0.38); background: rgba(98,224,239,0.08); }
+  .mm-title, .tb-logo { text-shadow: 0 0 18px var(--glow); }
+  .mm-btns button.primary, .help-actions button, #buildBar, #playBar, #gameBar { box-shadow: 0 0 16px var(--glow), 0 16px 44px rgba(0,0,0,0.4); }
+  #mainMenu, #helpOverlay.on, #buildBar, #gameBar, #playBar { animation: uiFade .18s ease-out; }
+  @keyframes uiFade { from { opacity: 0; } to { opacity: 1; } }
+  .sp-sect { border-bottom-color: rgba(98,224,239,0.10); }
+
   /* keep it usable on shorter/narrower screens */
   @media (max-width: 1180px) { :root { --side-w: 240px; --rail-w: 66px; } }
 </style>
 </head>
-<body>
+<body class="mode-menu">
 <canvas id="game"></canvas>
+
+<!-- ── MAIN MENU (R2-07) ─────────────────────────────────────── -->
+<div id="mainMenu">
+  <h1 class="mm-title" data-i18n="app.brand">UGS · STATION BUILDER</h1>
+  <p class="mm-sub" data-i18n="menu.subtitle">Space-station builder</p>
+  <div class="mm-btns">
+    <button id="mmContinue" data-i18n="menu.continue">Continue</button>
+    <button id="mmNew" class="primary" data-i18n="menu.new">New station</button>
+    <button id="mmLoad" data-i18n="menu.load">Load station…</button>
+    <button id="mmDev" data-i18n="menu.dev">Dev mode</button>
+    <button id="mmPlay" data-i18n="menu.play">Play</button>
+    <button id="mmOptions" disabled data-i18n="menu.options">Options</button>
+  </div>
+  <label class="mm-lang"><span class="ic">🌐</span><span data-i18n="lang.label">Language</span>
+    <select id="mmLangSelect" aria-label="Language"></select></label>
+</div>
 
 <!-- ── TOP BAR ───────────────────────────────────────────────── -->
 <header id="topbar">
@@ -169,6 +251,8 @@
     <span class="tb-logo" data-i18n="app.brand">UGS · STATION BUILDER</span>
     <span class="tb-sub" data-i18n="app.subtitle">Stage 1 · revised</span>
   </div>
+  <button id="menuBtn" class="tb-menu" data-i18n="topbar.menu">☰ Menu</button>
+  <span id="modeChip" class="modechip"></span>
   <div class="tb-group">
     <span class="tb-cap" data-i18n="topbar.deck">Deck</span>
     <select id="levelSelect"></select>
@@ -188,14 +272,14 @@
 
 <!-- ── LEFT TOOL RAIL ────────────────────────────────────────── -->
 <nav id="toolrail">
-  <button class="tool active" data-tool="select" data-i18n-attr="title:tool.select.hint"><span class="ic">▣</span><span data-i18n="tool.select">Select</span></button>
-  <button class="tool" data-tool="floor" data-i18n-attr="title:tool.floor.hint"><span class="ic">▦</span><span data-i18n="tool.floor">Floor</span></button>
-  <button class="tool" data-tool="wall" data-i18n-attr="title:tool.wall.hint"><span class="ic">▤</span><span data-i18n="tool.wall">Wall</span></button>
-  <button class="tool" data-tool="object" data-i18n-attr="title:tool.object.hint"><span class="ic">◈</span><span data-i18n="tool.object">Object</span></button>
-  <button class="tool" data-tool="entry" data-i18n-attr="title:tool.entry.hint"><span class="ic">⚑</span><span data-i18n="tool.entry">Entry</span></button>
-  <button class="tool" data-tool="erase" data-i18n-attr="title:tool.erase.hint"><span class="ic">⌫</span><span data-i18n="tool.erase">Erase</span></button>
-  <button class="tool" data-tool="fill" data-i18n-attr="title:tool.fill.hint"><span class="ic">▩</span><span data-i18n="tool.fill">Fill</span></button>
-  <button class="tool" data-tool="link" data-i18n-attr="title:tool.link.hint"><span class="ic">⛓</span><span data-i18n="tool.link">Link</span></button>
+  <button class="tool active" data-tool="select" data-key="1" data-i18n-attr="title:tool.select.hint"><span class="rk">1</span><span class="ic">▣</span><span data-i18n="tool.select">Select</span></button>
+  <button class="tool" data-tool="erase" data-key="2" data-i18n-attr="title:tool.erase.hint"><span class="rk">2</span><span class="ic">⌫</span><span data-i18n="tool.erase">Erase</span></button>
+  <button class="tool" data-tool="floor" data-key="3" data-i18n-attr="title:tool.floor.hint"><span class="rk">3</span><span class="ic">▦</span><span data-i18n="tool.floor">Floor</span></button>
+  <button class="tool" data-tool="wall" data-key="4" data-i18n-attr="title:tool.wall.hint"><span class="rk">4</span><span class="ic">▤</span><span data-i18n="tool.wall">Wall</span></button>
+  <button class="tool" data-tool="object" data-key="5" data-i18n-attr="title:tool.object.hint"><span class="rk">5</span><span class="ic">◈</span><span data-i18n="tool.object">Object</span></button>
+  <button class="tool" data-tool="entry" data-key="6" data-i18n-attr="title:tool.entry.hint"><span class="rk">6</span><span class="ic">⚑</span><span data-i18n="tool.entry">Entry</span></button>
+  <button class="tool" data-tool="fill" data-key="7" data-i18n-attr="title:tool.fill.hint"><span class="rk">7</span><span class="ic">▩</span><span data-i18n="tool.fill">Fill</span></button>
+  <button class="tool" data-tool="link" data-key="8" data-i18n-attr="title:tool.link.hint"><span class="rk">8</span><span class="ic">⛓</span><span data-i18n="tool.link">Link</span></button>
   <div class="rail-sep"></div>
   <div class="rail-mini" style="display:flex;flex-direction:column;gap:5px;">
     <button id="undoBtn" data-i18n-attr="title:action.undo"><span class="ic">↶</span><span data-i18n="action.undo">Undo</span></button>
@@ -232,6 +316,8 @@
       <button id="dupRoomBtn" data-i18n="rooms.duplicate">Duplicate</button>
       <button id="delRoomBtn" class="danger" data-i18n="rooms.delete">Delete</button>
     </div>
+    <p class="lbl" style="margin-top:10px;" data-i18n="rooms.shape">Shape</p>
+    <div id="shapePalette" class="chips"></div>
   </details>
 
   <details class="sp-sect">
@@ -254,9 +340,8 @@
       <button id="newBtn" data-i18n="action.new">New</button>
     </div>
     <p class="hint">
-      <span class="kbd">V</span> <span class="kbd">F</span> <span class="kbd">G</span>
-      <span class="kbd">B</span> <span class="kbd">N</span> <span class="kbd">X</span>
-      <span class="kbd">K</span> <span class="kbd">L</span> · <span class="kbd">Ctrl+Z/Y</span> · <span class="kbd">Del</span>
+      <span class="kbd">1</span>–<span class="kbd">8</span> tools · <span class="kbd">R</span> rotate · <span class="kbd">Q</span>/<span class="kbd">E</span> view ·
+      <span class="kbd">Ctrl+Z/Y</span> undo/redo · <span class="kbd">Del</span> delete · <span class="kbd">Esc</span> cancel
     </p>
   </details>
 </aside>
@@ -318,6 +403,21 @@
       <button id="helpClose" data-i18n="help.gotit">Got it</button>
     </div>
   </div>
+</div>
+
+<!-- ── GAME BAR (player runtime, R2-07) ──────────────────────── -->
+<div id="gameBar">
+  <strong data-i18n="mode.game">GAME</strong>
+  <button id="gPause">❚❚</button>
+  <button id="gExpand" data-i18n="game.expand">Expand station</button>
+  <button id="gMenu" data-i18n="game.menu">Menu</button>
+</div>
+
+<!-- ── GAME BUILD BAR (paid player construction, R2-08) ───────── -->
+<div id="buildBar">
+  <strong data-i18n="mode.gamebuild">BUILD</strong>
+  <span class="bb-credits"><span class="ic">◈</span> <span id="creditsVal">0</span></span>
+  <button id="bDone" data-i18n="gamebuild.done">Done</button>
 </div>
 
 <div id="hud"></div>

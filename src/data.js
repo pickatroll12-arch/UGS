@@ -25,7 +25,7 @@
 
   // Bump when the on-disk shape changes in a non-backward-compatible way.
   const FORMAT = 'ugs-station';
-  const FORMAT_VERSION = 1;
+  const FORMAT_VERSION = 2;   // v2: walls are pieces {kind,orientation,collision,material} (R2-06)
 
   // ---- small helpers ------------------------------------------------------
   let idSeq = 0;
@@ -55,7 +55,47 @@
   };
 
   // Wall shapes are geometry, independent of material.
+  // Legacy (format v1): a plain string 'solid' | 'diagA' | 'diagB'.
   const WALL_SHAPES = ['solid', 'diagA', 'diagB'];
+  // R2-06: a wall is now a piece — { kind, orientation, collision, material }.
+  //   kind        : 'block' | 'diagonal' | 'rounded'
+  //   orientation : 0..315 in 45° steps (which corner a diagonal/rounded cuts)
+  //   collision   : 'full' | 'partial'   (Phase 1 keeps 'full'; nav treats any
+  //                 wall as blocking until partial-collision nav lands)
+  //   material    : wall material id ('hull' | 'glass')
+  const WALL_KINDS = ['block', 'diagonal', 'rounded'];
+  // legacy string → piece
+  const LEGACY_WALL = {
+    solid: { kind: 'block', orientation: 0 },
+    diagA: { kind: 'diagonal', orientation: 0 },     // "/"
+    diagB: { kind: 'diagonal', orientation: 90 }     // "\"
+  };
+  function isWallKind(k) { return WALL_KINDS.indexOf(k) !== -1; }
+
+  function createWall(kind, orientation, material, collision) {
+    const k = isWallKind(kind) ? kind : 'block';
+    // A block fills the tile (full collision); diagonal/rounded pieces occupy
+    // only part of it, so they default to partial collision (nav lets a pawn
+    // pass the open side — R2-06 phase 2). An explicit value always wins.
+    const col = collision ? (collision === 'partial' ? 'partial' : 'full') : (k === 'block' ? 'full' : 'partial');
+    return { kind: k, orientation: snapAngle(orientation), collision: col, material: isMaterial(material) ? material : 'hull' };
+  }
+  // Coerce any stored/legacy wall value into a piece (or null). `legacyMat` is
+  // the old sibling tile.wallMaterial, folded into the piece when upgrading.
+  function normalizeWall(raw, legacyMat) {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      const L = LEGACY_WALL[raw]; if (!L) return null;
+      return createWall(L.kind, L.orientation, isMaterial(legacyMat) ? legacyMat : 'hull');   // collision defaults by kind
+    }
+    if (typeof raw === 'object') {
+      if (!isWallKind(raw.kind)) return null;
+      return createWall(raw.kind, raw.orientation, isMaterial(raw.material) ? raw.material : legacyMat, raw.collision);
+    }
+    return null;
+  }
+  // does a wall block movement? (Phase 1: any wall blocks; partial nav is Phase 2)
+  function wallBlocks(wall) { return !!wall; }
 
   // Build layers — used to toggle visibility and filter selection.
   const LAYERS = ['structural', 'decor', 'electrical', 'traversal'];
@@ -92,7 +132,7 @@
   function isFloor(id) { return id === 'void' || isMaterial(id); }
 
   function createTile(floor = 'deck') {
-    return { floor: isFloor(floor) ? floor : 'deck', wall: null, wallMaterial: null };
+    return { floor: isFloor(floor) ? floor : 'deck', wall: null };
   }
 
   // Authoring rotation step (degrees). Objects, rooms, and gizmo handles all
@@ -121,6 +161,30 @@
     };
   }
 
+  // R2-05: free-form room shapes. A cell is "outside" the room when its floor is
+  // 'void'; presets stamp such cut-outs into the bounding-box grid so a room can
+  // be a corridor, L, T or U without changing the storage model (the cell-set
+  // storage refactor is a later refinement). shapeMask(w,h,shape) returns a
+  // boolean grid [y][x] — true = inside the shape. Pure and testable.
+  const ROOM_SHAPES = ['rect', 'corridor', 'L', 'T', 'U'];
+  function shapeMask(w, h, shape) {
+    w = clamp(Math.round(num(w, 1)), 1, 64); h = clamp(Math.round(num(h, 1)), 1, 64);
+    const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+    const armW = Math.max(1, Math.ceil(w / 3)), barH = Math.max(1, Math.ceil(h / 3));
+    const inside = (x, y) => {
+      switch (shape) {
+        case 'corridor': return y === cy || (h > 1 && y === cy - 1);         // 2-tall horizontal band
+        case 'L': return !(x > cx && y < cy);                                // drop the top-right block
+        case 'T': return y < barH || x === cx || (w > 1 && x === cx - 1);    // top bar + centre stem
+        case 'U': return x < armW || x >= w - armW || y >= h - barH;         // two arms + bottom bar
+        case 'rect': default: return true;
+      }
+    };
+    const m = [];
+    for (let y = 0; y < h; y++) { const row = []; for (let x = 0; x < w; x++) row.push(inside(x, y)); m.push(row); }
+    return m;
+  }
+
   // Resize a room's tile grid, preserving overlapping content.
   //
   //   resizeRoom(room, newW, newH, opts) -> result
@@ -128,14 +192,18 @@
   //     opts.fill   : floor id for newly exposed tiles (default 'deck')
   //     opts.force  : when shrinking would drop objects, only actually drop
   //                   them if force===true; otherwise abort untouched.
+  //     opts.dryRun : assess only — never mutate the room. Returns the same
+  //                   result shape (wouldDrop / trimmedTiles / trimmedWalls /
+  //                   pivotClamped / offset) so the caller can preview a
+  //                   destructive resize and decide before committing.
   //
   // The function is pure w.r.t. the caller's decision-making: when it would
-  // lose objects and force is not set, it returns { ok:false, wouldDrop:[...] }
-  // and does NOT mutate the room, so the editor can warn/confirm first. On
-  // success it mutates the room (tiles, size, object coords, pivot) and returns
-  // the applied { dx, dy } offset so the caller can repair external references
-  // (level entry, links, selection). Tile trimming (floor/wall loss on shrink)
-  // is expected and only surfaced via `warnings`, never blocked.
+  // lose objects and force is not set (or dryRun is set), it does NOT mutate the
+  // room, so the editor can warn/confirm first WITHOUT pushing an undo entry. On
+  // a real commit it mutates the room (tiles, size, object coords, pivot) and
+  // returns the applied { dx, dy } offset plus structured counts of what was
+  // trimmed so the caller can report it (localized) and repair external
+  // references (level entry, links, selection).
   function resizeRoom(room, newW, newH, opts) {
     opts = opts || {};
     const anchor = opts.anchor || 'nw';
@@ -144,53 +212,58 @@
     newW = clamp(Math.round(num(newW, oldW)), 1, 64);
     newH = clamp(Math.round(num(newH, oldH)), 1, 64);
 
-    // offset mapping old (x,y) -> new (x+dx, y+dy)
-    let dx = 0, dy = 0;
-    if (anchor === 'se') { dx = newW - oldW; dy = newH - oldH; }
-    else if (anchor === 'center') { dx = Math.floor((newW - oldW) / 2); dy = Math.floor((newH - oldH) / 2); }
+    // offset mapping old (x,y) -> new (x+dx, y+dy). Anchor is per-axis: ax/ay in
+    // {'lo','mid','hi'} say which edge stays fixed on each axis. The string
+    // `anchor` (nw/center/se) is a shorthand; explicit opts.ax/opts.ay win. Edge
+    // and corner handles (R2-04) use the per-axis form (e.g. west edge = ax:'hi').
+    const axMap = { nw: 'lo', center: 'mid', se: 'hi' };
+    const ax = opts.ax || axMap[anchor] || 'lo';
+    const ay = opts.ay || axMap[anchor] || 'lo';
+    const off = (a, delta) => a === 'hi' ? delta : (a === 'mid' ? Math.floor(delta / 2) : 0);
+    const dx = off(ax, newW - oldW), dy = off(ay, newH - oldH);
 
-    const warnings = [];
     const inBounds = (x, y) => x >= 0 && y >= 0 && x < newW && y < newH;
 
-    // which objects would fall outside the new bounds?
+    // assess: objects that would fall outside, and floor/wall tiles trimmed
     const wouldDrop = room.objects.filter(o => !inBounds(o.x + dx, o.y + dy));
-    if (wouldDrop.length && !opts.force) {
-      return { ok: false, wouldDrop, dropped: [], offset: { dx, dy }, newW, newH,
-        warnings: [`${wouldDrop.length} object(s) fall outside the new size`] };
+    let trimmedTiles = 0, trimmedWalls = 0;
+    for (let y = 0; y < oldH; y++) {
+      for (let x = 0; x < oldW; x++) {
+        if (inBounds(x + dx, y + dy)) continue;
+        const src = room.tiles[y][x]; if (!src) continue;
+        if (src.wall) trimmedWalls++;
+        if (src.floor && src.floor !== 'void') trimmedTiles++;
+      }
     }
+    const pivotP = room.transform && room.transform.pivot;
+    const pivotClamped = !!pivotP && (clamp(num(pivotP.x) + dx, 0, newW) !== pivotP.x || clamp(num(pivotP.y) + dy, 0, newH) !== pivotP.y);
 
-    // build the new grid, copying overlapping tiles
-    let trimmed = 0;
+    const warnings = [];
+    if (trimmedTiles || trimmedWalls) warnings.push(`${trimmedTiles + trimmedWalls} tile(s) trimmed off the edge`);
+    if (pivotClamped) warnings.push('rotation pivot clamped to new bounds');
+
+    const assessment = { wouldDrop, dropped: [], offset: { dx, dy }, newW, newH, trimmedTiles, trimmedWalls, pivotClamped, warnings };
+
+    // abort untouched when it would lose objects (unless forced) or on a dry run
+    if (opts.dryRun) return Object.assign({ ok: !wouldDrop.length }, assessment);
+    if (wouldDrop.length && !opts.force) return Object.assign({ ok: false }, assessment);
+
+    // commit: mutate the room
     const grid = Array.from({ length: newH }, () => Array.from({ length: newW }, () => createTile(fill)));
     for (let y = 0; y < oldH; y++) {
       for (let x = 0; x < oldW; x++) {
         const nx = x + dx, ny = y + dy;
-        if (inBounds(nx, ny)) {
-          const src = room.tiles[y][x];
-          grid[ny][nx] = { floor: src.floor, wall: src.wall, wallMaterial: src.wallMaterial };
-        } else if (room.tiles[y][x] && (room.tiles[y][x].wall || room.tiles[y][x].floor !== 'void')) {
-          trimmed++;
-        }
+        if (inBounds(nx, ny)) { const s = room.tiles[y][x]; grid[ny][nx] = { floor: s.floor, wall: (s.wall && typeof s.wall === 'object') ? Object.assign({}, s.wall) : (s.wall || null) }; }
       }
     }
-    if (trimmed) warnings.push(`${trimmed} tile(s) trimmed off the edge`);
-
-    // commit: mutate the room
     room.tiles = grid;
     room.size = { w: newW, h: newH };
     const dropped = wouldDrop;
     if (dropped.length) room.objects = room.objects.filter(o => inBounds(o.x + dx, o.y + dy));
     for (const o of room.objects) { o.x += dx; o.y += dy; }
+    if (pivotP) room.transform.pivot = { x: clamp(num(pivotP.x) + dx, 0, newW), y: clamp(num(pivotP.y) + dy, 0, newH) };
 
-    // keep the rotation pivot inside the room
-    if (room.transform && room.transform.pivot) {
-      const px = clamp(num(room.transform.pivot.x) + dx, 0, newW);
-      const py = clamp(num(room.transform.pivot.y) + dy, 0, newH);
-      if (px !== room.transform.pivot.x || py !== room.transform.pivot.y) warnings.push('rotation pivot clamped to new bounds');
-      room.transform.pivot = { x: px, y: py };
-    }
-
-    return { ok: true, wouldDrop: [], dropped, offset: { dx, dy }, newW, newH, warnings };
+    return Object.assign({ ok: true }, assessment, { wouldDrop: [], dropped });
   }
 
   function createObjectInstance(type, x, y) {
@@ -262,6 +335,12 @@
   }
 
   // The SaveFile is the whole package: a graph of levels plus global data.
+  // R2-08: suggested player-build costs (credits). Dev mode never charges.
+  const DEFAULT_BUILD_COSTS = {
+    floorPaint: 1, floorMaterial: 1, wall: 2, object: 5, doorElevator: 10,
+    roomTile: 1, roomSmall: 20, deck: 100
+  };
+
   function createSaveFile(name = 'Untitled Station') {
     const level = createLevel('Deck 1');
     return {
@@ -277,9 +356,12 @@
       seed: (Math.random() * 0xffffffff) >>> 0,
       levels: [level],
       links: [],
-      // reserved for later stages (crew roster, resources, flags). Kept out of
-      // the way now but declared so the format doesn't churn later.
-      reserved: { crew: [], resources: {}, flags: {} },
+      // R2-08: player-build economy. Dev mode ignores it; Game Build charges it.
+      resources: { credits: 500 },
+      buildCosts: Object.assign({}, DEFAULT_BUILD_COSTS),
+      // reserved for later stages (crew roster, flags). Kept out of the way now
+      // but declared so the format doesn't churn later.
+      reserved: { crew: [], flags: {} },
       metadata: { createdBy: 'ugs-core', engine: FORMAT_VERSION }
     };
   }
@@ -300,6 +382,9 @@
     out.updatedAt = new Date().toISOString();
     if (isObj(input.reserved)) out.reserved = { ...out.reserved, ...input.reserved };
     if (isObj(input.metadata)) out.metadata = { ...out.metadata, ...input.metadata };
+    // R2-08 economy — default when missing, coerce credits to a finite number
+    if (isObj(input.resources) && Number.isFinite(Number(input.resources.credits))) out.resources = { credits: Math.max(0, Math.round(Number(input.resources.credits))) };
+    if (isObj(input.buildCosts)) out.buildCosts = { ...DEFAULT_BUILD_COSTS, ...input.buildCosts };
 
     const levels = Array.isArray(input.levels) ? input.levels : [];
     if (!levels.length) {
@@ -360,9 +445,8 @@
       for (let x = 0; x < w; x++) {
         const src = input.tiles && input.tiles[y] && input.tiles[y][x];
         const floor = src && isFloor(src.floor) ? src.floor : 'deck';
-        const wall = src && isWallShape(src.wall) ? src.wall : null;
-        const wallMat = src && isMaterial(src.wallMaterial) ? src.wallMaterial : (wall ? 'hull' : null);
-        room.tiles[y][x] = { floor, wall, wallMaterial: wallMat };
+        const wall = src ? normalizeWall(src.wall, src.wallMaterial) : null;
+        room.tiles[y][x] = { floor, wall };
       }
     }
 
@@ -424,8 +508,9 @@
 
   return {
     FORMAT, FORMAT_VERSION,
-    MATERIALS, WALL_SHAPES, LAYERS, OBJECT_DEFS,
-    isMaterial, isFloor, isObjectType, isWallShape, isLayer, objectBlocks,
+    MATERIALS, WALL_SHAPES, WALL_KINDS, LAYERS, OBJECT_DEFS, ROOM_SHAPES, shapeMask,
+    isMaterial, isFloor, isObjectType, isWallShape, isWallKind, isLayer, objectBlocks,
+    createWall, normalizeWall, wallBlocks,
     uid, clamp, snapAngle, ROT_STEP,
     createTile, createTransform, createRoom, resizeRoom, createObjectInstance,
     createRoomEvent, createLink, createLevel, createSaveFile,

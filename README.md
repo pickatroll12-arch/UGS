@@ -51,8 +51,22 @@ node src/engine.test.js
 node src/nav.test.js
 ```
 
-Current suites: **core 23 · data 24 · engine 15 · nav 13 = 75 tests.**
 The runner (`scripts/run-tests.js`) auto-discovers any new `src/*.test.js`.
+
+### Browser smoke tests
+
+A headless Playwright/Chromium pass exercises the real editor end to end (boot,
+i18n statuses, destructive-resize warning, and a full elevator round-trip that
+proves room motion survives deck transitions — incl. pause and speed 3):
+
+```
+npm install                                   # first time only (Playwright)
+npx playwright install --with-deps chromium   # first time only (browser)
+npm run smoke
+```
+
+In the managed dev environment Chromium is pre-installed and the runner finds
+Playwright automatically, so `npm run smoke` works without the install steps.
 
 ---
 

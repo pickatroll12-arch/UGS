@@ -30,12 +30,41 @@
     [1, 1, SQRT2], [1, -1, SQRT2], [-1, 1, SQRT2], [-1, -1, SQRT2]
   ];
 
-  // A room tile is walkable when its floor isn't void, it has no wall, and no
-  // blocking object sits on it. `blocks` decides object collision (door state).
+  // A wall blocks a whole tile only when it is a FULL block. A partial wall
+  // (diagonal / rounded, R2-06 phase 2) leaves the tile standable — the pawn may
+  // occupy the open side — so it does not make the tile unwalkable; instead it
+  // blocks crossing to its closed side (see crossBlocked).
+  function wallBlocksTile(wall) { return !!wall && wall.collision !== 'partial'; }
+
+  // The three movement directions a partial wall closes off, by orientation
+  // quadrant (0/90/180/270). Each entry is a set of "dx,dy" keys.
+  const BLOCKED_DIRS = [
+    ['1,0', '0,1', '1,1'],      // 0°   → E, S, SE closed
+    ['0,1', '-1,0', '-1,1'],    // 90°  → S, W, SW closed
+    ['-1,0', '0,-1', '-1,-1'],  // 180° → W, N, NW closed
+    ['0,-1', '1,0', '1,-1']     // 270° → N, E, NE closed
+  ].map(a => new Set(a));
+  function dirClosed(wall, dx, dy) {
+    if (!wall || wall.collision !== 'partial') return false;
+    const q = ((Math.round((wall.orientation || 0) / 90) % 4) + 4) % 4;
+    return BLOCKED_DIRS[q].has(dx + ',' + dy);
+  }
+  // Is moving from (cx,cy) to (cx+dx,cy+dy) blocked by a partial wall's closed
+  // side on either the tile we leave or the tile we enter?
+  function crossBlocked(room, cx, cy, dx, dy) {
+    const from = room.tiles[cy] && room.tiles[cy][cx];
+    const to = room.tiles[cy + dy] && room.tiles[cy + dy][cx + dx];
+    if (dirClosed(from && from.wall, dx, dy)) return true;
+    if (dirClosed(to && to.wall, -dx, -dy)) return true;
+    return false;
+  }
+
+  // A room tile is walkable when its floor isn't void, it isn't a full wall, and
+  // no blocking object sits on it. `blocks` decides object collision (door state).
   function tileWalkable(room, x, y, blocks) {
     if (x < 0 || y < 0 || x >= room.size.w || y >= room.size.h) return false;
     const t = room.tiles[y][x];
-    if (!t || t.floor === 'void' || t.wall) return false;
+    if (!t || t.floor === 'void' || wallBlocksTile(t.wall)) return false;
     for (const o of room.objects) if (o.x === x && o.y === y && blocks(o)) return false;
     return true;
   }
@@ -47,7 +76,7 @@
     for (let y = 0; y < room.size.h; y++) {
       for (let x = 0; x < room.size.w; x++) {
         const t = room.tiles[y][x];
-        if (!t || t.floor === 'void' || t.wall) g.set(x, y, 0);
+        if (!t || t.floor === 'void' || wallBlocksTile(t.wall)) g.set(x, y, 0);
       }
     }
     for (const o of room.objects) if (blocks(o)) g.set(o.x, o.y, 0);
@@ -139,6 +168,7 @@
         if (dx !== 0 && dy !== 0) {                     // don't cut wall corners
           if (g.data[idx(cx + dx, cy)] === 0 || g.data[idx(cx, cy + dy)] === 0) continue;
         }
+        if (crossBlocked(room, cx, cy, dx, dy)) continue;   // R2-06 phase 2: partial-wall closed side
         const ng = gScore[cur] + cost;
         if (ng < gScore[ni]) { gScore[ni] = ng; came[ni] = cur; heap.push(ni, ng + h2(nx, ny)); }
       }
@@ -146,5 +176,5 @@
     return null;   // no path
   }
 
-  return { tileWalkable, buildWalkGrid, nearestWalkable, findPath };
+  return { tileWalkable, buildWalkGrid, nearestWalkable, findPath, wallBlocksTile, dirClosed, crossBlocked };
 });

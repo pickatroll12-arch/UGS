@@ -117,6 +117,21 @@
     const systems = [];          // pluggable per-step systems (subsystems, AI, …)
     let running = false, simTime = 0, tick = 0;
 
+    // BUG-01 re-entrancy guard. A registered system (e.g. the agents system on
+    // 'pawn:arrived') can trigger a deck transition — engine.stop(old) +
+    // engine.start(new) — from INSIDE engine.update(): systems run first each
+    // tick, and their events are dispatched synchronously. If that transition
+    // mutated `runs` immediately, the still-in-flight update loop would iterate
+    // the freshly-created next-deck runtimes, fail to find their rooms in the
+    // OLD level, and delete them — leaving running=true but activeCount=0 and
+    // every orbit/shift/rotate frozen after travelling. Structural fix: while a
+    // tick is updating, defer start()/stop() into a queue and drain it only once
+    // the current loop has finished, so the transition applies cleanly between
+    // ticks and `runs` is never repopulated mid-iteration.
+    let updating = false;
+    const deferred = [];
+    function drainDeferred() { while (deferred.length) deferred.shift()(); }
+
     function emit(type, payload) { if (bus) bus.emit(type, payload); }
     function findRoom(level, id) { return level.rooms.find(r => r.id === id) || null; }
 
@@ -127,6 +142,7 @@
     }
 
     function start(level) {
+      if (updating) { deferred.push(() => start(level)); return; }   // BUG-01: defer re-entrant (re)start
       stop(level);
       base.clear(); runs.clear(); simTime = 0; tick = 0;
       for (const room of level.rooms) base.set(room.id, poseOfRoom(room));
@@ -140,6 +156,7 @@
     }
 
     function stop(level) {
+      if (updating) { deferred.push(() => stop(level)); return; }   // BUG-01: defer re-entrant stop
       if (level) for (const room of level.rooms) { const b = base.get(room.id); if (b) applyPose(room, b); }
       base.clear(); runs.clear(); running = false;
     }
@@ -158,11 +175,16 @@
     // of the render framerate.
     function update(level, dt) {
       if (!running || dt <= 0) return;
+      updating = true;
+      try {
       simTime += dt; tick++;
-      // pluggable systems run first (subsystems / AI in later stages)
+      // pluggable systems run first (subsystems / AI in later stages). A system
+      // may enqueue a deferred deck transition here (see the BUG-01 note above).
       for (const sys of systems) sys.step(level, dt, { time: simTime, tick, emit });
       for (const [id, rt] of runs) {
-        const room = findRoom(level, id); if (!room) { runs.delete(id); continue; }
+        // BUG-01: never delete a runtime whose room isn't in THIS level — it is
+        // not ours to remove (a deferred transition owns it). Just skip it.
+        const room = findRoom(level, id); if (!room) continue;
         if (rt.kind === 'orbit') {
           rt.t += dt;
           const theta = rt.theta0 + rt.dir * rt.omega * rt.t;
@@ -182,6 +204,10 @@
         }
         if (rt.done) { runs.delete(id); emit('motion:done', { roomId: id }); continue; }
         if (seg) applyPose(room, lerpPose(seg.from, seg.to, seg.dur > 0 ? rt.t / seg.dur : 1));
+      }
+      } finally {
+        updating = false;
+        drainDeferred();   // apply any deck transition queued during this tick
       }
     }
 
