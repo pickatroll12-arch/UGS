@@ -1,0 +1,15 @@
+{
+  "name": "ugs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UGS — isometric space-station builder and life-sim engine (HTML5/Canvas). Stage 1: map/level engine + Station Builder.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node scripts/run-tests.js",
+    "start": "node -e \"console.log('Open index.html directly in a browser (file://). No build step required.')\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

@@ -30,6 +30,9 @@
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chips button { padding: 5px 8px; font-size: 11px; }
+  .langpick { display: flex; align-items: center; gap: 6px; margin: 10px 0 2px; }
+  .langpick .ic { font-size: 13px; opacity: .8; }
+  .langpick select { flex: 1; padding: 5px 8px; font-size: 11px; }
   .tabbar { display: flex; gap: 5px; margin: 12px 0 4px; }
   .tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
     padding: 7px 4px; font-size: 10px; color: var(--muted); }
@@ -72,79 +75,84 @@
 <canvas id="game"></canvas>
 
 <aside class="panel">
-  <h1>UGS · STATION BUILDER</h1>
-  <p class="sub">Stage 1 · M6 — playable slice</p>
+  <h1 data-i18n="app.brand">UGS · STATION BUILDER</h1>
+  <p class="sub" data-i18n="app.subtitle">Stage 1 · revised — usable builder pass</p>
+
+  <label class="langpick">
+    <span class="ic">🌐</span>
+    <select id="langSelect" aria-label="Language"></select>
+  </label>
 
   <div class="grid2">
-    <button id="buildBtn" class="active">Build</button>
-    <button id="playBtn">Play</button>
+    <button id="buildBtn" class="active" data-i18n="mode.build">Build</button>
+    <button id="playBtn" data-i18n="mode.play">Play</button>
   </div>
   <select id="levelSelect" style="margin-top:8px;"></select>
 
   <!-- tabbed toolbox -->
   <div class="tabbar">
-    <button class="tab active" data-tab="build"><span class="ic">🧱</span>Build</button>
-    <button class="tab" data-tab="rooms"><span class="ic">🎞️</span>Rooms</button>
-    <button class="tab" data-tab="save"><span class="ic">💾</span>Save</button>
+    <button class="tab active" data-tab="build"><span class="ic">🧱</span><span data-i18n="tab.build">Build</span></button>
+    <button class="tab" data-tab="rooms"><span class="ic">🎞️</span><span data-i18n="tab.rooms">Rooms</span></button>
+    <button class="tab" data-tab="save"><span class="ic">💾</span><span data-i18n="tab.save">Save</span></button>
   </div>
 
   <div class="tabpanel" data-tabpanel="build">
     <div class="sect">
-      <p class="lbl">Tools</p>
+      <p class="lbl" data-i18n="section.tools">Tools</p>
       <div class="grid3">
-        <button class="tool active" data-tool="select">Select</button>
-        <button class="tool" data-tool="floor">Floor</button>
-        <button class="tool" data-tool="wall">Wall</button>
-        <button class="tool" data-tool="object">Object</button>
-        <button class="tool" data-tool="entry">Entry</button>
-        <button class="tool" data-tool="erase">Erase</button>
-        <button class="tool" data-tool="fill">Fill</button>
-        <button class="tool" data-tool="link">Link</button>
+        <button class="tool active" data-tool="select" data-i18n="tool.select" data-i18n-attr="title:tool.select.hint">Select</button>
+        <button class="tool" data-tool="floor" data-i18n="tool.floor" data-i18n-attr="title:tool.floor.hint">Floor</button>
+        <button class="tool" data-tool="wall" data-i18n="tool.wall" data-i18n-attr="title:tool.wall.hint">Wall</button>
+        <button class="tool" data-tool="object" data-i18n="tool.object" data-i18n-attr="title:tool.object.hint">Object</button>
+        <button class="tool" data-tool="entry" data-i18n="tool.entry" data-i18n-attr="title:tool.entry.hint">Entry</button>
+        <button class="tool" data-tool="erase" data-i18n="tool.erase" data-i18n-attr="title:tool.erase.hint">Erase</button>
+        <button class="tool" data-tool="fill" data-i18n="tool.fill" data-i18n-attr="title:tool.fill.hint">Fill</button>
+        <button class="tool" data-tool="link" data-i18n="tool.link" data-i18n-attr="title:tool.link.hint">Link</button>
       </div>
-      <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)">Select filter
+      <label style="display:block;margin-top:7px;font-size:11px;color:var(--muted)"><span data-i18n="filter.label">Select filter</span>
         <select id="selectFilter" style="margin-top:4px;">
-          <option value="all">All</option>
-          <option value="object">Objects only</option>
-          <option value="wall">Walls only</option>
-          <option value="floor">Floors only</option>
+          <option value="all" data-i18n="filter.all">All</option>
+          <option value="object" data-i18n="filter.object">Objects only</option>
+          <option value="wall" data-i18n="filter.wall">Walls only</option>
+          <option value="floor" data-i18n="filter.floor">Floors only</option>
         </select>
       </label>
     </div>
     <div class="sect">
-      <p class="lbl">Floor material</p>
+      <p class="lbl" data-i18n="palette.floorMat">Floor material</p>
       <div id="floorPalette" class="chips"></div>
     </div>
     <div class="sect">
-      <p class="lbl">Wall shape</p>
+      <p class="lbl" data-i18n="palette.wallShape">Wall shape</p>
       <div id="wallPalette" class="chips"></div>
-      <p class="lbl" style="margin-top:9px;">Wall material</p>
+      <p class="lbl" style="margin-top:9px;" data-i18n="palette.wallMat">Wall material</p>
       <div id="wallMatPalette" class="chips"></div>
     </div>
     <div class="sect">
-      <p class="lbl">Objects</p>
+      <p class="lbl" data-i18n="palette.objects">Objects</p>
       <div id="objectPalette" class="chips"></div>
     </div>
   </div>
 
   <div class="tabpanel" data-tabpanel="rooms" hidden>
     <div class="sect">
-      <p class="lbl">Decks (levels)</p>
-      <input id="levelName" type="text" style="width:100%;margin-bottom:6px;" placeholder="Deck name">
+      <p class="lbl" data-i18n="decks.title">Decks (levels)</p>
+      <input id="levelName" type="text" style="width:100%;margin-bottom:6px;" placeholder="Deck name" data-i18n-attr="placeholder:decks.namePlaceholder">
       <div class="grid2">
-        <button id="addLevelBtn">+ Add deck</button>
-        <button id="delLevelBtn" class="danger">Delete deck</button>
+        <button id="addLevelBtn" data-i18n="decks.add">+ Add deck</button>
+        <button id="delLevelBtn" class="danger" data-i18n="decks.delete">Delete deck</button>
       </div>
-      <p class="hint">Use the <b>Link</b> tool to connect decks: click a source tile
+      <p class="hint" data-i18n="decks.linkHint">Use the Link tool to connect decks: click a source tile
         (e.g. an elevator), switch deck, click the spawn. In Play, click the link to travel.</p>
     </div>
     <div class="sect">
-      <p class="lbl">Layers</p>
+      <p class="lbl" data-i18n="layers.title">Layers</p>
       <div id="layerToggles" class="chips"></div>
-      <button id="dupRoomBtn" style="margin-top:8px;width:100%;">Duplicate room</button>
+      <button id="dupRoomBtn" style="margin-top:8px;width:100%;" data-i18n="room.duplicate">Duplicate room</button>
     </div>
     <div class="sect">
-      <p class="lbl">Room motion</p>
-      <p class="hint">Select a room (Select tool) — its motion events appear in the
+      <p class="lbl" data-i18n="motion.title">Room motion</p>
+      <p class="hint" data-i18n="motion.hint">Select a room (Select tool) — its motion events appear in the
         Inspector below. Add Shift / Rotate / Orbit / Carousel, then drag the
         coloured handle on the map to aim it. Hit Play to watch.</p>
     </div>
@@ -152,18 +160,18 @@
 
   <div class="tabpanel" data-tabpanel="save" hidden>
     <div class="sect">
-      <p class="lbl">History</p>
+      <p class="lbl" data-i18n="history.title">History</p>
       <div class="grid2">
-        <button id="undoBtn">Undo</button>
-        <button id="redoBtn">Redo</button>
+        <button id="undoBtn" data-i18n="action.undo">Undo</button>
+        <button id="redoBtn" data-i18n="action.redo">Redo</button>
       </div>
     </div>
     <div class="sect">
-      <p class="lbl">Package</p>
+      <p class="lbl" data-i18n="package.title">Package</p>
       <div class="grid3">
-        <button id="exportBtn">Export</button>
-        <button id="importBtn">Import</button>
-        <button id="newBtn">New</button>
+        <button id="exportBtn" data-i18n="action.export">Export</button>
+        <button id="importBtn" data-i18n="action.import">Import</button>
+        <button id="newBtn" data-i18n="action.new">New</button>
       </div>
       <p class="hint">
         <span class="kbd">V</span>select <span class="kbd">F</span>floor <span class="kbd">G</span>wall
@@ -174,27 +182,28 @@
   </div>
 
   <div class="sect">
-    <p class="lbl">Inspector</p>
-    <div id="inspector"><span class="muted">Nothing selected.</span></div>
+    <p class="lbl" data-i18n="inspector.title">Inspector</p>
+    <div id="inspector"><span class="muted" data-i18n="inspector.empty">Nothing selected.</span></div>
   </div>
 </aside>
 
 <div id="playBar">
-  <strong>PLAY</strong>
-  <button id="pauseBtn">❚❚ Pause</button>
+  <strong data-i18n="play.title">PLAY</strong>
+  <button id="pauseBtn" data-i18n="play.pause">❚❚ Pause</button>
   <button id="speed1" class="active">1×</button>
   <button id="speed2">2×</button>
   <button id="speed3">3×</button>
-  <span class="pb-hint">Click a floor tile to walk the pawn · a door to open it · an elevator to change deck · Space pause · 1/2/3 speed</span>
+  <span class="pb-hint" data-i18n="play.hint">Click a floor tile to walk the pawn · a door to open it · an elevator to change deck · Space pause · 1/2/3 speed</span>
 </div>
 
 <div id="hud"></div>
-<div id="status">Loading…</div>
+<div id="status" data-i18n="status.loading">Loading…</div>
 
 <input id="fileInput" type="file" accept="application/json,.json" hidden>
 
 <!-- classic scripts, load order = dependency order; all hang off window.UGS -->
 <script src="src/core.js"></script>
+<script src="src/i18n.js"></script>
 <script src="src/data.js"></script>
 <script src="src/save.js"></script>
 <script src="src/render.js"></script>

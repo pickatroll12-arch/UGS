@@ -114,48 +114,23 @@ browser-only editor features grow.
 
 ## 4. Confirmed issues and documentation drift
 
-### 4.1 Nav test count mismatch
+### 4.1 Nav test count mismatch — ✅ RESOLVED (S1-R0)
 
-`ROADMAP.md` and the M6 commit message describe 14 nav tests, but the current
-`src/nav.test.js` reports 13 passing tests.
+`ROADMAP.md` referenced 14 nav tests; the suite reports 13. ROADMAP now reads
+13, and lists the grand total (75) run via `npm test`.
 
-Action:
+### 4.2 README is still a placeholder — ✅ RESOLVED (S1-R0)
 
-- Either update the documentation to 13, or add the missing intended test.
-- Keep the roadmap's test counts synchronized with actual suites.
+`README.md` now documents how to open the app, how to run the tests
+(`npm test` + per-suite commands), the project structure, the architecture
+rules, and links to `ROADMAP.md`, `AGENTIC_REVIEW.md`, and `CURRENT_OBJECTIVE.md`.
 
-Priority: low, but it is a useful documentation-hygiene fix.
+### 4.3 No package/test runner — ✅ RESOLVED (S1-R0)
 
-### 4.2 README is still a placeholder
-
-`README.md` currently contains only the project name and a short placeholder.
-A new contributor cannot understand how to run or test UGS from the README.
-
-Action:
-
-- Add a concise project overview.
-- Document `index.html` usage.
-- Document the four Node test commands.
-- Link to `ROADMAP.md` and this review file.
-
-Priority: medium.
-
-### 4.3 No package/test runner
-
-There is no `package.json`, `npm test` command, lint configuration, or CI.
-Tests currently have to be run manually and individually.
-
-Action:
-
-- Add a minimal `package.json` with a `test` script.
-- Optionally add a tiny test runner that executes:
-  - `src/core.test.js`
-  - `src/data.test.js`
-  - `src/engine.test.js`
-  - `src/nav.test.js`
-- Add GitHub Actions once the test command exists.
-
-Priority: high before Stage 2 grows.
+Added `package.json` with `npm test` → `scripts/run-tests.js`, an aggregate
+runner that auto-discovers every `src/*.test.js` suite (currently core, data,
+engine, i18n, nav) and reports a grand total, exiting non-zero on any failure.
+Added `.github/workflows/ci.yml` running `npm test` on push/PR (Node 22).
 
 ---
 

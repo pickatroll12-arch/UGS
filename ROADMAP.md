@@ -161,7 +161,7 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
   abrir, y **caminar al ascensor cambia de deck** (transición vía `pawn:arrived`
   en el EventBus). El pawn está en coords room-local, así que **viaja montado en
   salas que se mueven** (valida el sistema de transforms de punta a punta).
-  Render de pawns con figura/orientación/breadcrumbs. `src/nav.test.js` (14) +
+  Render de pawns con figura/orientación/breadcrumbs. `src/nav.test.js` (13) +
   integración headless (spawn, caminar, transición de deck, montar sala móvil).
   Sin errores.
 
@@ -172,8 +172,8 @@ El editor y el motor que cargan/guardan mapas. Es la base de todo.
 M1 datos+save · M2 render+shell · M3(+) herramientas · M4 salas móviles ·
 M5 links & multi-mapa · M6 slice jugable — todos sobre el **heavy-core**
 (RNG sembrado, EventBus, fixed-timestep determinista, Grid2D, culling +
-render-on-demand). Suites: core 23 · data 24 · engine 15 · nav 14. Base lista
-para la Etapa 2 (tripulación con roles: el Capitán + 3 NPC).
+render-on-demand). Suites: core 23 · data 24 · engine 15 · nav 13 (75 en total,
+`npm test`). Base lista para la Etapa 2 (tripulación con roles: el Capitán + 3 NPC).
 
 ---
 

@@ -660,3 +660,25 @@ The next objective is therefore not “more features.” It is:
 
 > Make the existing engine understandable, resizeable, bilingual, and safe to
 > use before adding autonomous complexity.
+
+---
+
+## 11. Progress log
+
+- **S1-R0 — Baseline & safety net — ✅ done.** `package.json` + `npm test`
+  running an auto-discovering aggregate runner (`scripts/run-tests.js`); CI
+  workflow; rewritten `README.md`; ROADMAP nav-count fix. All suites green.
+- **Owner decision — default station — ✅ done.** App start and `New` now
+  produce one deck, one empty room (floor + ring walls + entry) — no seeded
+  objects, decks, motion, or links.
+- **S1-R1 — Localization foundation — ✅ done.** `src/i18n.js` (en/es
+  dictionaries, `t()` with interpolation, English fallback, visible ⟦marker⟧
+  for missing keys, `data-i18n` / `data-i18n-attr` DOM binding, `localStorage`
+  persistence, browser-language default). Language selector in the panel;
+  static markup, palettes, inspector, status, and play bar all switch language
+  live without reload. Materials/objects/layers/wall-shapes translate **by id**,
+  so the save format stays language-neutral. `src/i18n.test.js` (19 tests,
+  incl. en/es key parity). Rotation-step decision (owner: segmented/360°)
+  deferred to S1-R7.
+- **Next: S1-R2 — Editor layout redesign** (top bar · tool rail · right
+  inspector · bottom bar; usable at ~1280×720).
