@@ -454,7 +454,7 @@
 
   function selectRoom(room) {
     if (!room) return;
-    app.selection = { roomId: room.id, lx: Math.floor(room.size.w / 2), ly: Math.floor(room.size.h / 2), objectId: null };
+    app.selection = { kind: 'room', roomId: room.id, lx: Math.floor(room.size.w / 2), ly: Math.floor(room.size.h / 2), objectId: null };
     updateInspector(); invalidate();   // updateInspector refreshes the room list
   }
 
@@ -598,6 +598,7 @@
   function onPointerDown(e) {
     if (e.button !== 0) return;
     updateMouse(e); mouse.down = true; dragged = false;
+    mouse.alt = e.altKey;            // R2-02: Alt forces tile selection under an object
     mouse.lastX = e.clientX; mouse.lastY = e.clientY;
     lastPaintKey = ''; strokeChanged = false;
     painting = panning = false; movingObj = null; dragHandle = null;
@@ -619,7 +620,7 @@
     if (app.tool === 'floor' || app.tool === 'wall' || app.tool === 'erase') {
       pushHistory(); painting = true;
       if (hit) strokeChanged = applyPaint(hit) || strokeChanged;
-    } else if (app.tool === 'select' && hit && hit.object) {
+    } else if (app.tool === 'select' && hit && hit.object && !e.altKey) {
       movingObj = { roomId: hit.roomId, objectId: hit.object.id };
       pushHistory();
     } else {
@@ -673,7 +674,7 @@
         const occupied = room.objects.some(o => o.id !== movingObj.objectId && o.x === hit.lx && o.y === hit.ly);
         if (tile && tile.floor !== 'void' && !tile.wall && !occupied) {
           const obj = room.objects.find(o => o.id === movingObj.objectId);
-          if (obj && (obj.x !== hit.lx || obj.y !== hit.ly)) { obj.x = hit.lx; obj.y = hit.ly; strokeChanged = true; app.selection = { roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id }; }
+          if (obj && (obj.x !== hit.lx || obj.y !== hit.ly)) { obj.x = hit.lx; obj.y = hit.ly; strokeChanged = true; app.selection = { kind: 'object', roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id }; }
         }
       }
       return;
@@ -700,7 +701,7 @@
           discardHistory();
           const room = roomById(movingObj.roomId);
           const obj = room && room.objects.find(o => o.id === movingObj.objectId);
-          if (obj) app.selection = { roomId: room.id, lx: obj.x, ly: obj.y, objectId: obj.id };
+          if (obj) app.selection = { kind: 'object', roomId: room.id, lx: obj.x, ly: obj.y, objectId: obj.id };
         }
         updateInspector();
       } else if (painting) {
@@ -713,13 +714,25 @@
         else if (app.tool === 'entry') { if (hit) setEntry(hit); }
         else if (app.tool === 'fill') { if (hit) floodFill(hit); }
         else if (app.tool === 'link') { if (hit) handleLinkClick(hit); }
-        else { // select (default)
-          app.selection = hit ? { roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: hit.object ? hit.object.id : null } : null;
+        else { // select (default): single click → object (priority) or tile; Alt forces tile
+          if (!hit) app.selection = null;
+          else if (mouse.alt || !hit.object) app.selection = { kind: 'tile', roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: null };
+          else app.selection = { kind: 'object', roomId: hit.roomId, lx: hit.lx, ly: hit.ly, objectId: hit.object.id };
           updateInspector();
         }
       }
     }
     mouse.down = false; painting = panning = false; movingObj = null; dragHandle = null; dragged = false;
+  }
+
+  // R2-02: double-click selects the whole room (Select tool, Build only).
+  function onDblClick(e) {
+    if (app.mode !== 'build' || app.tool !== 'select') return;
+    updateMouse(e);
+    const hit = R.pickTopmost(app.camera, activeLevel(), mouse.x, mouse.y, { hiddenLayers: app.hiddenLayers });
+    if (!hit) return;
+    const room = roomById(hit.roomId); if (!room) return;
+    selectRoom(room);   // sets a room-kind selection centred on the room
   }
 
   function onWheel(e) {
@@ -751,8 +764,10 @@
     if (!room) { inspector.innerHTML = '<span class="muted">—</span>'; return; }
     const obj = app.selection.objectId ? room.objects.find(o => o.id === app.selection.objectId) : null;
     const tile = room.tiles[app.selection.ly] && room.tiles[app.selection.ly][app.selection.lx];
+    const kind = app.selection.kind || (obj ? 'object' : 'tile');   // R2-02 selection kind
 
-    let h = `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
+    let h = `<div class="selkind selkind-${kind}">${esc(t('insp.kind.' + kind))}</div>`;
+    h += `<div class="row"><b>${esc(t('insp.room'))}</b><span>${esc(room.name)}</span></div>`;
     h += `<div class="row"><b>${esc(t('insp.transform'))}</b><span>@${fmt(room.transform.x)},${fmt(room.transform.y)} · ${fmt(room.transform.rotation)}°</span></div>`;
     h += `<div class="row"><b>${esc(t('insp.size'))}</b><span>${room.size.w} × ${room.size.h}</span></div>`;
     h += `<div class="resize">`
@@ -766,10 +781,12 @@
       + `</select>`
       + `<button data-act="resize">${esc(t('insp.applySize'))}</button>`
       + `</div>`;
-    h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
-    if (tile) {
-      h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
-      h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall, tile.wall)) : esc(t('val.none'))}</span></div>`;
+    if (kind !== 'room') {
+      h += `<div class="row"><b>${esc(t('insp.localTile'))}</b><span>${app.selection.lx}, ${app.selection.ly}</span></div>`;
+      if (tile) {
+        h += `<div class="row"><b>${esc(t('insp.floor'))}</b><span>${esc(floorLabel(tile.floor))}</span></div>`;
+        h += `<div class="row"><b>${esc(t('insp.wall'))}</b><span>${tile.wall ? esc(I.label('wall.' + tile.wall, tile.wall)) : esc(t('val.none'))}</span></div>`;
+      }
     }
     if (obj) {
       const def = D.OBJECT_DEFS[obj.type];
@@ -1075,6 +1092,7 @@
     canvas.addEventListener('pointermove', e => { onPointerMove(e); invalidate(); });
     canvas.addEventListener('pointerdown', e => { onPointerDown(e); invalidate(); });
     window.addEventListener('pointerup', () => { onPointerUp(); invalidate(); });
+    canvas.addEventListener('dblclick', e => { onDblClick(e); invalidate(); });
     canvas.addEventListener('pointerleave', () => { app.hover = null; invalidate(); });
     canvas.addEventListener('wheel', e => { onWheel(e); invalidate(); }, { passive: false });
     // catch-all: any UI click/change/key repaints once (render-on-demand net)

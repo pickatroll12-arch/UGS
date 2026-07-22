@@ -117,6 +117,25 @@ const run = async () => {
   ck('paint tools use a custom svg cursor', /svg/.test(curFloor) && /svg/.test(curWall));
   await page.keyboard.press('1');
 
+  // ── 3c. selection model (R2-02): click object / dblclick room / alt+click ─
+  const sm = await page.evaluate(() => {
+    const app = window.UGS.editorApp, D = window.UGS.data, R = window.UGS.render;
+    const room = app.save.levels[0].rooms[0];
+    const o = D.createObjectInstance('console', 5, 4); room.objects.push(o);
+    const c1 = R.tileCenterWorld(room, 5, 4), c2 = R.tileCenterWorld(room, 3, 3);
+    const s1 = R.worldToScreen(app.camera, c1.x, c1.y), s2 = R.worldToScreen(app.camera, c2.x, c2.y);
+    return { obj: s1, empty: s2 };
+  });
+  const selKind = () => page.evaluate(() => (window.UGS.editorApp.selection || {}).kind || null);
+  await page.mouse.click(sm.obj.x, sm.obj.y); await page.waitForTimeout(60);
+  ck('select: single click selects the object', (await selKind()) === 'object');
+  await page.keyboard.down('Alt'); await page.mouse.click(sm.obj.x, sm.obj.y); await page.keyboard.up('Alt'); await page.waitForTimeout(60);
+  ck('select: Alt+click forces the tile under an object', (await selKind()) === 'tile');
+  await page.mouse.dblclick(sm.empty.x, sm.empty.y); await page.waitForTimeout(80);
+  ck('select: double-click selects the whole room', (await selKind()) === 'room');
+  // clean the object back out so later sections start tidy
+  await page.evaluate(() => { const r = window.UGS.editorApp.save.levels[0].rooms[0]; r.objects = r.objects.filter(o => !(o.x === 5 && o.y === 4)); window.UGS.editorApp.selection = null; });
+
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);
   await page.waitForFunction(() => window.UGS.editorApp.save.levels.length === 2, { timeout: 5000 });

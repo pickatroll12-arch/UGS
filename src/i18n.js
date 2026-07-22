@@ -67,7 +67,7 @@
       'tool.link': 'Link',
 
       // tool hints (bottom line / tooltips)
-      'tool.select.hint': 'Click a tile, object, wall, or room to inspect and edit it.',
+      'tool.select.hint': 'Click selects an object (or the tile); double-click selects the whole room; Alt+click forces the tile under an object.',
       'tool.floor.hint': 'Paint floor tiles with the selected material.',
       'tool.wall.hint': 'Raise walls with the selected shape and material. Diagonal shapes are visual — they still block the whole tile.',
       'tool.object.hint': 'Place the selected object. Some are interactive in Play.',
@@ -225,6 +225,9 @@
 
       // inspector — field labels
       'insp.empty': 'Nothing selected. Click a tile or object.',
+      'insp.kind.room': 'Room selected',
+      'insp.kind.tile': 'Tile selected',
+      'insp.kind.object': 'Object selected',
       'insp.room': 'Room',
       'insp.transform': 'Transform',
       'insp.localTile': 'Local tile',
@@ -342,7 +345,7 @@
       'tool.fill': 'Rellenar',
       'tool.link': 'Enlace',
 
-      'tool.select.hint': 'Haz clic en un tile, objeto, pared o sala para inspeccionar y editar.',
+      'tool.select.hint': 'Clic selecciona un objeto (o el tile); doble-clic selecciona toda la sala; Alt+clic fuerza el tile bajo un objeto.',
       'tool.floor.hint': 'Pinta tiles de piso con el material seleccionado.',
       'tool.wall.hint': 'Levanta paredes con la forma y material elegidos. Las formas diagonales son visuales — igual bloquean todo el tile.',
       'tool.object.hint': 'Coloca el objeto seleccionado. Algunos son interactivos al Jugar.',
@@ -484,6 +487,9 @@
       'layer.traversal': 'Tránsito',
 
       'insp.empty': 'Nada seleccionado. Haz clic en un tile u objeto.',
+      'insp.kind.room': 'Sala seleccionada',
+      'insp.kind.tile': 'Tile seleccionado',
+      'insp.kind.object': 'Objeto seleccionado',
       'insp.room': 'Sala',
       'insp.transform': 'Transform',
       'insp.localTile': 'Tile local',
