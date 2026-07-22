@@ -73,12 +73,12 @@
   function requireBuild() { if (app.mode === 'play') { setStatus(t('status.editInBuild')); return false; } return true; }
   function undo() {
     if (!requireBuild()) return;
-    if (!undoStack.length) return setStatus('Nothing to undo.');
+    if (!undoStack.length) return setStatus(t('status.nothingUndo'));
     redoStack.push(clone(app.save)); app.save = undoStack.pop(); afterRestore('Undo.');
   }
   function redo() {
     if (!requireBuild()) return;
-    if (!redoStack.length) return setStatus('Nothing to redo.');
+    if (!redoStack.length) return setStatus(t('status.nothingRedo'));
     undoStack.push(clone(app.save)); app.save = redoStack.pop(); afterRestore('Redo.');
   }
   function afterRestore(msg) {
@@ -113,7 +113,7 @@
     app.save = save; app.activeLevelId = save.startLevelId || save.levels[0].id;
     app.selection = null; undoStack.length = 0; redoStack.length = 0;
     R.centerOn(app.camera, activeLevel(), canvas.clientWidth, canvas.clientHeight);
-    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); setStatus(msg || 'Loaded.');
+    refreshLevelSelect(); updateInspector(); refreshRoomList(); refreshLinkList(); setStatus(msg || t('status.loaded'));
   }
   function setMode(mode) {
     if (mode === app.mode) return;
@@ -195,24 +195,24 @@
   }
 
   function placeObject(hit) {
-    const room = roomById(hit.roomId); if (!room) return setStatus('Place on a room tile.');
+    const room = roomById(hit.roomId); if (!room) return setStatus(t('status.placeOnRoom'));
     const tile = room.tiles[hit.ly][hit.lx];
-    if (!tile || tile.floor === 'void' || tile.wall) return setStatus('Object needs an empty floor tile.');
-    if (room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) return setStatus('Tile already has an object.');
+    if (!tile || tile.floor === 'void' || tile.wall) return setStatus(t('status.objectNeedsFloor'));
+    if (room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) return setStatus(t('status.tileHasObject'));
     pushHistory();
     const obj = D.createObjectInstance(app.brush.object, hit.lx, hit.ly);
     room.objects.push(obj);
     app.selection = { roomId: room.id, lx: hit.lx, ly: hit.ly, objectId: obj.id };
-    updateInspector(); setStatus(`${obj.name} placed.`);
+    updateInspector(); setStatus(t('status.objectPlaced', { name: I.label('obj.' + obj.type, obj.name) }));
   }
 
   function setEntry(hit) {
     const room = roomById(hit.roomId); if (!room) return;
     const tile = room.tiles[hit.ly][hit.lx];
-    if (!tile || tile.floor === 'void' || tile.wall) return setStatus('Entry must be a walkable tile.');
+    if (!tile || tile.floor === 'void' || tile.wall) return setStatus(t('status.entryWalkable'));
     pushHistory();
     activeLevel().entry = { roomId: room.id, x: hit.lx, y: hit.ly };
-    setStatus(`Entry set to ${hit.lx},${hit.ly}.`);
+    setStatus(t('status.entrySet', { x: hit.lx, y: hit.ly }));
   }
 
   // ---- levels (decks) -----------------------------------------------------
@@ -223,11 +223,11 @@
     const lvl = D.createLevel('Deck ' + (app.save.levels.length + 1));
     app.save.levels.push(lvl);
     switchLevel(lvl.id); refreshLevelSelect();
-    setStatus(`Added ${lvl.name}.`);
+    setStatus(t('status.deckAdded', { name: lvl.name }));
   }
   function deleteLevel() {
     if (!requireBuild()) return;
-    if (app.save.levels.length <= 1) return setStatus('Cannot delete the last deck.');
+    if (app.save.levels.length <= 1) return setStatus(t('status.cantDeleteLastDeck'));
     pushHistory();
     const id = app.activeLevelId;
     app.save.levels = app.save.levels.filter(l => l.id !== id);
@@ -235,7 +235,7 @@
     app.selectedLinkId = null;   // BUG-03: a selected link may have just been dropped
     if (app.save.startLevelId === id) app.save.startLevelId = app.save.levels[0].id;
     switchLevel(app.save.levels[0].id); refreshLevelSelect();
-    setStatus('Deck deleted.');
+    setStatus(t('status.deckDeleted'));
   }
   function renameLevel(name) {
     const lvl = activeLevel(); if (!lvl) return;
@@ -261,25 +261,24 @@
     }
     return null;
   }
-  function linkStartTool() { app.pendingLink = null; setStatus('Link: click a source tile (e.g. an elevator). Then switch deck and click the spawn.'); }
+  function linkStartTool() { app.pendingLink = null; setStatus(t('status.linkStart')); }
   function handleLinkClick(hit) {
     if (!app.pendingLink) {
       app.pendingLink = { levelId: app.activeLevelId, roomId: hit.roomId, lx: hit.lx, ly: hit.ly };
-      setStatus(`Source set on ${levelName(app.activeLevelId)} @${hit.lx},${hit.ly}. Switch to the target deck and click the spawn.`);
+      setStatus(t('status.linkSource', { deck: levelName(app.activeLevelId), x: hit.lx, y: hit.ly }));
       return;
     }
     if (app.pendingLink.levelId === app.activeLevelId && app.pendingLink.roomId === hit.roomId && app.pendingLink.lx === hit.lx && app.pendingLink.ly === hit.ly) {
-      return setStatus('Pick a spawn on a different deck (or another tile).');
+      return setStatus(t('status.linkPickOther'));
     }
     pushHistory();
     const link = D.createLink(app.pendingLink.levelId, app.activeLevelId);
     link.from = { levelId: app.pendingLink.levelId, roomId: app.pendingLink.roomId, x: app.pendingLink.lx, y: app.pendingLink.ly };
     link.to = { levelId: app.activeLevelId, roomId: hit.roomId, x: hit.lx, y: hit.ly };
     app.save.links.push(link);
-    const msg = `Linked ${levelName(link.from.levelId)} → ${levelName(link.to.levelId)} (${link.mode}).`;
     app.pendingLink = null;
     refreshLinkList();
-    setStatus(msg);
+    setStatus(t('status.linked', { from: levelName(link.from.levelId), to: levelName(link.to.levelId), mode: t('mode.' + (link.mode === 'preload' ? 'preload' : 'stream')) }));
   }
   // marker list for the active level (both endpoints that live here + pending)
   function linkMarkers() {
@@ -318,20 +317,20 @@
     const s = R.worldToScreen({ x: 0, y: 0, zoom: app.camera.zoom }, c.x, c.y);
     app.camera.x = canvas.clientWidth / 2 - s.x; app.camera.y = canvas.clientHeight / 2 - s.y;
     refreshLevelSelect(); invalidate();
-    setStatus(`${match.link.kind} → ${levelName(target.id)} · ${match.link.mode === 'stream' ? 'streamed' : 'preloaded'}`);
+    setStatus(t('status.traveled', { kind: I.label('linkKind.' + (match.link.kind || 'custom'), match.link.kind), deck: levelName(target.id), mode: t('mode.' + (match.link.mode === 'preload' ? 'preload' : 'stream')) }));
   }
   // Play-mode click: toggle a door, else order the pawn to walk there.
   function playClick(hit) {
     if (!hit) return;
     if (hit.object && D.OBJECT_DEFS[hit.object.type].openable) {
       hit.object.open = !hit.object.open;
-      setStatus(`${hit.object.name} ${hit.object.open ? 'opened' : 'closed'}.`); return;
+      setStatus(t(hit.object.open ? 'status.objectOpened' : 'status.objectClosed', { name: I.label('obj.' + hit.object.type, hit.object.name) })); return;
     }
     const pawn = agents && agents.selected; if (!pawn) return;
-    if (hit.roomId !== pawn.roomId) { setStatus('The pawn can\'t path to another room yet — use a link.'); return; }
+    if (hit.roomId !== pawn.roomId) { setStatus(t('status.pawnNoCrossRoom')); return; }
     const room = roomById(pawn.roomId);
-    if (agents.order(pawn, room, hit.lx, hit.ly)) setStatus(`Moving to ${hit.lx},${hit.ly}.`);
-    else setStatus('No path there.');
+    if (agents.order(pawn, room, hit.lx, hit.ly)) setStatus(t('status.pawnMoving', { x: hit.lx, y: hit.ly }));
+    else setStatus(t('status.noPath'));
   }
 
   function deleteSelectedObject() {
@@ -339,7 +338,7 @@
     const room = roomById(app.selection.roomId); if (!room) return;
     pushHistory();
     room.objects = room.objects.filter(o => o.id !== app.selection.objectId);
-    app.selection.objectId = null; updateInspector(); setStatus('Object deleted.');
+    app.selection.objectId = null; updateInspector(); setStatus(t('status.objectDeleted'));
   }
   function rotateSelectedObject() {
     if (!app.selection || !app.selection.objectId) return;
@@ -353,19 +352,19 @@
   function floodFill(hit) {
     const room = roomById(hit.roomId); if (!room) return;
     const from = room.tiles[hit.ly][hit.lx].floor, to = app.brush.floor;
-    if (from === to) return setStatus('Already that floor.');
+    if (from === to) return setStatus(t('status.alreadyFloor'));
     pushHistory();
     const stack = [[hit.lx, hit.ly]]; const seen = new Set(); let n = 0;
     while (stack.length) {
       const [x, y] = stack.pop();
       if (x < 0 || y < 0 || x >= room.size.w || y >= room.size.h) continue;
       const k = x + ',' + y; if (seen.has(k)) continue; seen.add(k);
-      const t = room.tiles[y][x];
-      if (t.wall || t.floor !== from) continue;   // barrier / different region
-      t.floor = to; n++;
+      const ti = room.tiles[y][x];
+      if (ti.wall || ti.floor !== from) continue;   // barrier / different region
+      ti.floor = to; n++;
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
     }
-    if (!n) discardHistory(); else setStatus(`Filled ${n} tiles.`);
+    if (!n) discardHistory(); else setStatus(t('status.filled', { n }));
   }
 
   function duplicateSelectedObject() {
@@ -378,15 +377,15 @@
     for (const [dx, dy] of spots) {
       const nx = src.x + dx, ny = src.y + dy;
       if (nx < 0 || ny < 0 || nx >= room.size.w || ny >= room.size.h) continue;
-      const t = room.tiles[ny][nx];
-      if (t.floor !== 'void' && !t.wall && !room.objects.some(o => o.x === nx && o.y === ny)) { tx = nx; ty = ny; found = true; break; }
+      const ti = room.tiles[ny][nx];
+      if (ti.floor !== 'void' && !ti.wall && !room.objects.some(o => o.x === nx && o.y === ny)) { tx = nx; ty = ny; found = true; break; }
     }
-    if (!found) return setStatus('No free tile to duplicate into.');
+    if (!found) return setStatus(t('status.noFreeTile'));
     pushHistory();
     const copy = clone(src); copy.id = D.uid('obj'); copy.x = tx; copy.y = ty;
     room.objects.push(copy);
     app.selection = { roomId: room.id, lx: tx, ly: ty, objectId: copy.id };
-    updateInspector(); setStatus(`${copy.name} duplicated.`);
+    updateInspector(); setStatus(t('status.objectDuplicated', { name: I.label('obj.' + copy.type, copy.name) }));
   }
 
   function duplicateActiveRoom() {
@@ -400,7 +399,7 @@
     copy.transform = D.createTransform(src.transform.x + src.size.w + 2, src.transform.y, src.transform.rotation);
     activeLevel().rooms.push(copy);
     selectRoom(copy);
-    setStatus(`Room "${src.name}" duplicated.`);
+    setStatus(t('status.roomDuplicated', { name: src.name }));
   }
 
   // ---- room list & room-level actions (S1-R4) -----------------------------
@@ -513,7 +512,7 @@
     // jump to the source deck so at least one highlighted endpoint is on screen
     if (k.from.levelId !== app.activeLevelId) switchLevel(k.from.levelId);
     refreshLinkList(); invalidate();
-    setStatus(`${t('linkKind.' + (k.kind || 'custom'))}: ${levelName(k.from.levelId)} → ${levelName(k.to.levelId)} · ${t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream'))}`);
+    setStatus(t('status.linkSelected', { kind: I.label('linkKind.' + (k.kind || 'custom'), k.kind), from: levelName(k.from.levelId), to: levelName(k.to.levelId), mode: t('mode.' + (k.mode === 'preload' ? 'preload' : 'stream')) }));
   }
   function deleteLink(id) {
     if (!requireBuild()) return;
@@ -550,7 +549,7 @@
     const room = roomById(app.selection.roomId); if (!room) return false;
     const obj = room.objects.find(o => o.id === app.selection.objectId); if (!obj) return false;
     if (!D.OBJECT_DEFS[obj.type].openable) return false;
-    obj.open = !obj.open; updateInspector(); setStatus(`${obj.name} ${obj.open ? 'opened' : 'closed'}.`); return true;
+    obj.open = !obj.open; updateInspector(); setStatus(t(obj.open ? 'status.objectOpened' : 'status.objectClosed', { name: I.label('obj.' + obj.type, obj.name) })); return true;
   }
 
   // ---- input --------------------------------------------------------------
@@ -838,16 +837,16 @@
   function addRoomEvent(room, kind) {
     pushHistory();
     room.movable = true;
-    const t = room.transform, ev = D.createRoomEvent(kind[0].toUpperCase() + kind.slice(1));
+    const tr = room.transform, ev = D.createRoomEvent(kind[0].toUpperCase() + kind.slice(1));
     ev.trigger = { type: 'time' }; ev.loop = true;
-    if (kind === 'shift') ev.action = { kind: 'shift', to: { x: t.x + 4, y: t.y }, duration: 2 };
+    if (kind === 'shift') ev.action = { kind: 'shift', to: { x: tr.x + 4, y: tr.y }, duration: 2 };
     else if (kind === 'rotate') ev.action = { kind: 'rotate', by: 90, duration: 2 };
     else if (kind === 'orbit') { const rc = R.roomCenterWorld(room); ev.action = { kind: 'orbit', center: { x: rc.x, y: rc.y - 5 }, radius: 5, period: 4, direction: 'cw', selfRotate: false }; }
     else if (kind === 'carousel') ev.action = { kind: 'carousel', interval: 1.8, loop: true, poses: [
-      { x: t.x + 4, y: t.y, rotation: t.rotation }, { x: t.x + 4, y: t.y + 4, rotation: t.rotation + 90 }, { x: t.x, y: t.y + 4, rotation: t.rotation + 180 }
+      { x: tr.x + 4, y: tr.y, rotation: tr.rotation }, { x: tr.x + 4, y: tr.y + 4, rotation: tr.rotation + 90 }, { x: tr.x, y: tr.y + 4, rotation: tr.rotation + 180 }
     ] };
     room.events.push(ev);
-    updateInspector(); setStatus(`Added ${kind} event. Drag the handle to aim it, hit Play to see it.`);
+    updateInspector(); setStatus(t('status.eventAdded', { kind: I.label('motionKind.' + kind, kind) }));
   }
   // Validate a motion event; returns a human warning string, or '' if fine.
   function eventIssue(ev) {
@@ -873,7 +872,7 @@
   function testRoomEvent(room, id) {
     const ev = room.events.find(e => e.id === id); if (!ev) return;
     if (app.mode !== 'play') { setMode('play'); }
-    engine.fire(room, ev); setStatus(`Testing "${ev.name}".`);
+    engine.fire(room, ev); setStatus(t('status.eventTesting', { name: ev.name }));
   }
 
   function refreshLevelSelect() {
@@ -1074,14 +1073,18 @@
     document.getElementById('redoBtn').addEventListener('click', redo);
     document.getElementById('newBtn').addEventListener('click', () => loadSave(blankStation(), t('status.newStation')));
     document.getElementById('exportBtn').addEventListener('click', () => {
-      try { setStatus('Exported ' + S.exportToFile(app.save)); } catch (err) { setStatus('Export failed: ' + err.message); }
+      try { setStatus(t('status.exported', { file: S.exportToFile(app.save) })); } catch (err) { setStatus(t('status.exportFailed', { err: err.message })); }
     });
     const fileInput = document.getElementById('fileInput');
     document.getElementById('importBtn').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', async e => {
       const file = e.target.files[0]; if (!file) return;
-      try { const { save, warnings } = await S.importFromFile(file); loadSave(save, `Imported "${save.name}"` + (warnings.length ? ` (${warnings.length} warnings)` : '')); if (warnings.length) console.warn(warnings); }
-      catch (err) { setStatus('Import failed: ' + err.message); } finally { fileInput.value = ''; }
+      try {
+        const { save, warnings } = await S.importFromFile(file);
+        loadSave(save, warnings.length ? t('status.importedWarnings', { name: save.name, n: warnings.length }) : t('status.imported', { name: save.name }));
+        if (warnings.length) console.warn(warnings);
+      }
+      catch (err) { setStatus(t('status.importFailed', { err: err.message })); } finally { fileInput.value = ''; }
     });
     levelSelect.addEventListener('change', e => { switchLevel(e.target.value); refreshLevelSelect(); });
 
