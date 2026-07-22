@@ -131,6 +131,10 @@
     document.getElementById('buildBtn').classList.toggle('active', mode === 'build');
     document.getElementById('playBtn').classList.toggle('active', mode === 'play');
     document.body.classList.toggle('playing', mode === 'play');
+    // BUG-02: the top-bar deck selector is disabled in Play. Changing the active
+    // deck manually would leave the pawn stranded on the previous deck; during
+    // Play the deck may only change through in-world travel (links / elevators).
+    if (levelSelect) levelSelect.disabled = mode === 'play';
     updatePlayBar();
     updateInspector();
     setStatus(t(mode === 'play' ? 'status.playMode' : 'status.buildMode'));
