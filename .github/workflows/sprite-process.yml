@@ -1,0 +1,135 @@
+name: Sprite processing helper
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image tooling
+        run: python -m pip install --disable-pip-version-check pillow numpy opencv-python-headless
+      - name: Extract largest character component
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import cv2
+          import numpy as np
+          from PIL import Image, ImageDraw
+
+          ROOT = Path('.')
+          OUT = ROOT / '.sprite-output'
+          OUT.mkdir(parents=True, exist_ok=True)
+          sources = [
+              ('Sprites/Placeholders/Player_front.png', 'pawn_front.png', 'Front'),
+              ('Sprites/Placeholders/Player_side.png', 'pawn_side.png', 'Side'),
+              ('Sprites/Placeholders/player_backside.png', 'pawn_back.png', 'Back'),
+          ]
+          metadata = []
+          rendered = []
+
+          for source, target, label in sources:
+              image = Image.open(ROOT / source).convert('RGBA')
+              rgba = np.asarray(image).copy()
+              rgb = rgba[:, :, :3].astype(np.float32)
+              h, w = rgb.shape[:2]
+
+              # Estimate the flat studio background from four corner patches.
+              patch = max(8, min(w, h) // 64)
+              corners = np.concatenate([
+                  rgb[:patch, :patch].reshape(-1, 3),
+                  rgb[:patch, -patch:].reshape(-1, 3),
+                  rgb[-patch:, :patch].reshape(-1, 3),
+                  rgb[-patch:, -patch:].reshape(-1, 3),
+              ], axis=0)
+              bg = np.median(corners, axis=0)
+              distance = np.linalg.norm(rgb - bg, axis=2)
+
+              # Build a coarse foreground mask, then choose the component that is
+              # both large and tall. This rejects the floor shadow, label and sparkle.
+              coarse = (distance > 24).astype(np.uint8)
+              count, labels, stats, _ = cv2.connectedComponentsWithStats(coarse, 8)
+              candidates = []
+              for idx in range(1, count):
+                  x, y, cw, ch, area = [int(v) for v in stats[idx]]
+                  if area < 500 or cw < 8 or ch < 8:
+                      continue
+                  touches_border = x == 0 or y == 0 or x + cw >= w or y + ch >= h
+                  if touches_border:
+                      continue
+                  score = area * (ch / h) ** 1.5
+                  candidates.append((score, idx, x, y, cw, ch, area))
+              if not candidates:
+                  raise RuntimeError(f'No character component found in {source}')
+              _, chosen, x, y, cw, ch, area = max(candidates)
+
+              component = (labels == chosen).astype(np.uint8)
+              keep = cv2.dilate(component, np.ones((7, 7), np.uint8), iterations=1).astype(bool)
+
+              # Preserve soft antialiasing while making the sampled grey background
+              # transparent. Pixels outside the chosen component are discarded.
+              soft_alpha = np.clip((distance - 10) / 34 * 255, 0, 255).astype(np.uint8)
+              alpha = np.minimum(rgba[:, :, 3], soft_alpha)
+              alpha[~keep] = 0
+              rgba[:, :, 3] = alpha
+
+              ys, xs = np.where(alpha > 4)
+              if len(xs) == 0:
+                  raise RuntimeError(f'Empty alpha result for {source}')
+              pad = max(8, int(max(cw, ch) * 0.025))
+              left = max(0, int(xs.min()) - pad)
+              top = max(0, int(ys.min()) - pad)
+              right = min(w, int(xs.max()) + pad + 1)
+              bottom = min(h, int(ys.max()) + pad + 1)
+
+              cropped = Image.fromarray(rgba, 'RGBA').crop((left, top, right, bottom))
+              target_h = 128
+              target_w = max(1, round(cropped.width * target_h / cropped.height))
+              resized = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
+              resized.save(OUT / target, optimize=True)
+              rendered.append((label, resized))
+              metadata.append({
+                  'source': source,
+                  'target': target,
+                  'sourceSize': [w, h],
+                  'backgroundRGB': [round(float(v), 2) for v in bg],
+                  'componentBox': [x, y, cw, ch],
+                  'componentArea': area,
+                  'cropBox': [left, top, right, bottom],
+                  'outputSize': [target_w, target_h],
+              })
+
+          # Human-review contact sheet on a checkerboard background.
+          cell_w, cell_h = 220, 210
+          preview = Image.new('RGB', (cell_w * len(rendered), cell_h), '#ededed')
+          draw = ImageDraw.Draw(preview)
+          for i, (label, sprite) in enumerate(rendered):
+              ox = i * cell_w
+              tile = 16
+              for yy in range(0, cell_h, tile):
+                  for xx in range(0, cell_w, tile):
+                      if ((xx // tile) + (yy // tile)) % 2:
+                          draw.rectangle((ox + xx, yy, ox + xx + tile - 1, yy + tile - 1), fill='#d5d5d5')
+              px = ox + (cell_w - sprite.width) // 2
+              py = 165 - sprite.height
+              preview.paste(sprite, (px, py), sprite)
+              draw.text((ox + cell_w // 2, 184), label, fill='#111111', anchor='mm')
+          preview.save(OUT / 'sprite_preview.png', optimize=True)
+          (OUT / 'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+          print(json.dumps(metadata, indent=2))
+          PY
+      - name: Upload processed sprites for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprite-01-processed
+          path: .sprite-output
+          if-no-files-found: error
