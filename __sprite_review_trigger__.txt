@@ -1,1 +1,1 @@
-Trigger the already-defined SPRITE-01 review workflow. Remove before merge.
+Trigger the SPRITE-01 rector handoff workflow. Remove before merge.
