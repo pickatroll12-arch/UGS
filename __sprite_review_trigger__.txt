@@ -1,1 +1,1 @@
-Trigger the SPRITE-01 rector handoff workflow. Remove before merge.
+Trigger SPRITE-01 rector handoff now. Remove before merge.
