@@ -10,6 +10,25 @@ Reviewed against `main` at commit `607e1ba` — M6 playable slice.
 
 ## 1. Working agreement
 
+### Agent roster (updated)
+
+| Agent | Role |
+|---|---|
+| **Claude** | Primary implementation agent. |
+| **Kimi** | Secondary implementation lead (quota fallback) + Rector: reviews every merged pass, diagnoses bugs, writes revision docs. |
+| **Codex** | Supporting implementation agent. Takes scoped task briefs (see §12). Same rules as everyone: architecture first, tests with each change, no unrequested refactors. |
+
+Coordination rules:
+
+- One agent works one brief at a time; do not touch files owned by another
+  agent's in-flight brief without checking the revision docs first.
+- `Feedback humano` is read-only for all agents (human channel).
+- Revision docs (`SECOND_REVISION.md`, `THIRD_REVISION.md`, …) are the
+  contract of what was changed and what must not regress — read them before
+  modifying walls/collision, projections, or mode UI.
+- `npm test` (164 checks) and `npm run smoke` (44 checks) must stay green.
+  New behavior ships with its own regression test.
+
 ### Claude's turn
 
 Claude remains the primary implementation agent. During Claude-led sessions,
@@ -469,4 +488,62 @@ The next implementation should therefore prioritize:
 5. Background simulation contract
 
 Graphics and texture polish should remain deferred until those systems are
-stable.
+stable — with one sanctioned exception: the pawn placeholder figure, which the
+owner has now provided real sprite art for (see §12, task SPRITE-01).
+
+---
+
+## 12. Task briefs for Codex
+
+### SPRITE-01 — Implement the pawn sprite (assigned to Codex)
+
+**Mission:** replace the placeholder pawn figure with the owner's sprite art
+from the newly uploaded folder `Sprites/Placeholders/`:
+
+```text
+Sprites/Placeholders/Player_front.png      (2048×2048, RGBA)
+Sprites/Placeholders/Player_side.png       (2048×2048, RGBA)
+Sprites/Placeholders/player_backside.png   (2048×2048, RGBA)
+```
+
+**What these files actually are (verified):** single static renders of an
+armored soldier, one pose per file — NOT animation sheets. Each has an opaque
+grey background, a baked-in floor shadow ellipse, a baked-in "Soldado" text
+label at the bottom, and a small sparkle artifact at the bottom-right.
+
+**Required work:**
+
+1. **Preprocess into web-ready assets** (commit the derivatives, keep the
+   originals untouched):
+   - Crop to the character bounding box (drop the baked shadow, the "Soldado"
+     label and the sparkle).
+   - Make the grey background transparent.
+   - Downscale to a sane game size (the pawn renders ~34px tall at zoom 1;
+     a sprite of ~96–128px tall covers zoom levels crisply). Do NOT ship
+     5 MB PNGs to the browser.
+   - Suggested output: `Sprites/Placeholders/processed/pawn_front.png`,
+     `pawn_side.png`, `pawn_back.png` (small, transparent).
+2. **Wire into the renderer** (`src/render.js`, `drawPawnFigure`):
+   - Load the three processed images once (async, cached); until they are
+     ready — and forever if they fail to load — keep drawing the current
+     placeholder figure. The placeholder is the fallback, not deleted.
+   - Direction selection: the pawn's `facing` angle picks the sprite —
+     front for south-ish, back for north-ish, side for east/west with the
+     side image **mirrored horizontally** for one of them. Iso diagonals map
+     to the nearest of the four.
+   - Draw anchored at the feet (tile centre), scaled by `cam.zoom`. Keep the
+     selection ring and keep the existing shadow under the sprite.
+   - Top-down view (`drawPawnFigureFlat`): keep the current disc — sprites
+     stay an iso-view feature for now.
+3. **Hard constraints:**
+   - Renderer stays isolated from game logic: no sim/data/nav changes. The
+     sprite is a pure presentation concern.
+   - No layout shifts in `index.html`; no new dependencies; classic-script
+     style like the rest of `src/`.
+   - `npm test` and `npm run smoke` stay green. Add one smoke check: the
+     sprite `<img>` assets referenced by the renderer actually load (HTTP 200
+     via the Pages path / file URL).
+
+**Acceptance:** in iso views the pawn renders as the armored soldier, changes
+sprite with facing (front/back/side+mirror), scaled with zoom, selected ring
+intact; broken/missing asset → placeholder, never a blank pawn.
