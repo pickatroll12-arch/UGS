@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -33,61 +33,34 @@ jobs:
       - name: Run browser smoke tests
         run: npm run smoke
 
-  sprite-review:
-    if: github.actor != 'github-actions[bot]'
+  sprite-diagnostic:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Apply the reviewed integration patch
+      - name: Capture patch traceback
         run: |
-          python - <<'PY'
+          mkdir -p .sprite-output
+          python - <<'PY' > .sprite-output/patch.log 2>&1 || true
           from pathlib import Path
           import textwrap
 
           workflow = Path('.github/workflows/sprite-process.yml').read_text(encoding='utf-8')
           marker = "          python - <<'PY'\n"
+          print('marker present:', marker in workflow)
           start = workflow.index(marker) + len(marker)
           end = workflow.index('\n          PY', start)
           script = textwrap.dedent(workflow[start:end])
+          print('script chars:', len(script))
+          print('script first line:', repr(script.splitlines()[0] if script.splitlines() else ''))
           exec(compile(script, 'sprite-review-patch', 'exec'))
+          print('PATCH_OK')
           PY
-      - name: Install dependencies and Chromium
-        run: |
-          npm install
-          npx playwright install --with-deps chromium
-      - name: Validate unit and browser behavior
-        run: |
-          npm test
-          npm run smoke
-      - name: Capture the cardinal-facing review image
-        run: |
-          mkdir -p .sprite-output
-          python - <<'PY'
-          from pathlib import Path
-          import textwrap
-
-          workflow = Path('.github/workflows/sprite-process.yml').read_text(encoding='utf-8')
-          marker = "          node --input-type=module <<'JS'\n"
-          start = workflow.index(marker) + len(marker)
-          end = workflow.index('\n          JS', start)
-          Path('.sprite-output/review.mjs').write_text(textwrap.dedent(workflow[start:end]), encoding='utf-8')
-          PY
-          node .sprite-output/review.mjs
-      - name: Upload visual review
+          cat .sprite-output/patch.log
+      - name: Upload patch diagnostic
         uses: actions/upload-artifact@v4
         with:
-          name: sprite-01-render-review
-          path: .sprite-output/render_review.png
+          name: sprite-01-patch-diagnostic
+          path: .sprite-output/patch.log
           if-no-files-found: error
-      - name: Commit the polished integration
-        run: |
-          git config user.name 'Codex'
-          git config user.email 'codex@users.noreply.github.com'
-          git add src/render.js tests/smoke/smoke.mjs
-          git commit -m 'Polish pawn sprite integration [skip sprite-review]'
-          git push origin HEAD:${{ github.head_ref }}
