@@ -726,3 +726,73 @@ terminado y verde.
 nuevo aviso del owner.**
 
 — Kimi (Rector)
+
+---
+
+## 13.2 Handoff de implementación — Codex → Kimi K3
+
+> **Estado de Codex: IMPLEMENTADO EN RAMA; pendiente de revisión rector/build tester/owner.**
+> Alcance ejecutado bajo el `GO` limitado de §13.1. Stage 2 continúa en `NO-GO`.
+
+### Observación
+
+`SPRITE-01` está implementado en la rama `codex/sprite-01` y presentado en el
+PR borrador #18. No se modificaron datos, simulación, navegación, editor,
+guardado ni `Feedback humano`.
+
+### Evidencia
+
+- Los tres PNG originales del owner permanecen intactos.
+- Se añadieron derivados web transparentes y recortados:
+  `pawn_front.png` (82×128), `pawn_side.png` (63×128) y
+  `pawn_back.png` (84×128).
+- Se eliminaron el fondo gris, la sombra horneada, el texto `Soldado` y el
+  artefacto inferior; el renderer conserva su propia sombra.
+- `src/render.js` carga los tres assets una sola vez, conserva el placeholder
+  vectorial durante la carga o ante error y solicita un único repintado al
+  terminar, respetando el render-on-demand.
+- La pose usa la dirección mundial: sur→frente, norte→espalda,
+  este/oeste→lateral, con espejo horizontal para oeste.
+- `topDown` conserva el disco de REV3; los sprites solo aparecen en las dos
+  vistas isométricas.
+- Se mantienen anillo de selección, bob de movimiento, escala por zoom y
+  anclaje a los pies.
+- `tests/smoke/smoke.mjs` comprueba la carga real de los tres PNG.
+- `npm test` y `npm run smoke` pasaron en la ejecución CI #31 del PR #18.
+- La revisión visual automatizada confirmó las cuatro orientaciones cardinales,
+  el espejo oeste, la sombra y el anillo de selección.
+
+### Riesgo
+
+Los assets son poses estáticas, no hojas de animación. La revisión automatizada
+valida el renderer aislado, pero el build tester aún debe confirmar tamaño,
+legibilidad y sensación dentro del flujo jugable real.
+
+### Recomendación
+
+Revisar el PR #18 y realizar una pasada humana breve en `isoTilted` e
+`isoFlat`: movimiento, selección y varios niveles de zoom. También conviene
+simular un asset ausente para confirmar visualmente el fallback. Este brief no
+autoriza Stage 2.
+
+### Archivos afectados
+
+- `Sprites/Placeholders/processed/pawn_front.png`
+- `Sprites/Placeholders/processed/pawn_side.png`
+- `Sprites/Placeholders/processed/pawn_back.png`
+- `src/render.js`
+- `tests/smoke/smoke.mjs`
+- `AGENTIC_REVIEW.md` (solo este handoff)
+
+### Pruebas necesarias / ejecutadas
+
+- `npm test` — PASS.
+- `npm run smoke` — PASS, incluida la carga de los tres PNG.
+- Revisión visual cardinal — PASS.
+- Revisión manual del build tester — PENDIENTE.
+
+### Decisión pendiente
+
+Kimi: emitir `GO` o `NO-GO` para pasar el PR #18 a revisión/merge después de
+la validación humana. Codex no iniciará otro brief mientras esta decisión siga
+abierta.
