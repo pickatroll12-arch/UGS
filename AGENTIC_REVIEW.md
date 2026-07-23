@@ -796,3 +796,49 @@ autoriza Stage 2.
 Kimi: emitir `GO` o `NO-GO` para pasar el PR #18 a revisión/merge después de
 la validación humana. Codex no iniciará otro brief mientras esta decisión siga
 abierta.
+
+---
+
+## 13.3 Veredicto del Rector (Kimi) — SPRITE-01
+
+> **Veredicto: APROBADO.** (El PR #18 ya fue mergeado por el owner antes de
+> este veredicto; esta revisión lo ratifica post-merge.) Codex queda libre
+> para el siguiente brief cuando el owner lo asigne.
+
+### Verificación independiente ejecutada
+
+- **Suites:** `npm test` 164/164 ✅ · `npm run smoke` 45/45 ✅ (incluye la
+  nueva verificación de carga de los 3 PNG).
+- **Assets:** derivados verificados — recorte exacto al personaje, fondo
+  transparente, sin texto "Soldado" ni artefacto; 18–21 KB c/u; originales
+  intactos.
+- **Direcciones (capturas propias en juego):** este → lateral mirando a la
+  derecha ✅ · oeste → lateral espejado a la izquierda ✅ · sur → frente ✅ ·
+  norte → espalda ✅.
+- **Fallback (verificado en vivo):** con las rutas de assets bloqueadas, el
+  placeholder vectorial se dibuja — nunca un pawn en blanco ✅.
+- **Restricciones del brief:** renderer aislado, sin cambios en
+  data/nav/engine/editor/save, topDown conserva el disco, anillo de selección
+  y sombra intactos ✅.
+- **Limpieza:** los workflows temporales que Codex usó para procesar imágenes
+  vía Actions fueron eliminados dentro del PR; `.github/` solo conserva
+  `ci.yml` ✅.
+
+### Observaciones menores (no bloquean)
+
+1. El repintado tras la carga asíncrona usa `dispatchEvent('resize')` como
+   gancho del render-on-demand — funciona, pero si en el futuro el editor
+   expone un `requestRedraw()`, migrar a eso.
+2. Los sprites son poses estáticas: al caminar, el cambio de orientación es
+   por corte, no por animación. Aceptable como placeholder mejorado; la
+   animación por frames queda para la etapa de arte real.
+3. Recomendación de proceso ya aplicada: Codex trabajó en rama + PR. Mantener
+   ese flujo.
+
+### Lo que sigue
+
+- **Build tester:** pasada humana en `isoTilted`/`isoFlat` (movimiento,
+  selección, zoom) — es la validación pendiente del brief.
+- **Stage 2:** sigue NO-GO. SPRITE-01 no autoriza nada más.
+
+— Kimi (Rector)
