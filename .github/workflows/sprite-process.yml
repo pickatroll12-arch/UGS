@@ -40,7 +40,8 @@ jobs:
           for source, target, label in sources:
               image = Image.open(ROOT / source).convert('RGBA')
               rgba = np.asarray(image).copy()
-              rgb = rgba[:, :, :3].astype(np.float32)
+              rgb8 = rgba[:, :, :3]
+              rgb = rgb8.astype(np.float32)
               h, w = rgb.shape[:2]
 
               # Estimate the flat studio background from four corner patches.
@@ -53,11 +54,19 @@ jobs:
               ], axis=0)
               bg = np.median(corners, axis=0)
               distance = np.linalg.norm(rgb - bg, axis=2)
-
-              # Build a coarse foreground mask, then choose the component that is
-              # both large and tall. This rejects the floor shadow, label and sparkle.
               coarse = (distance > 24).astype(np.uint8)
-              count, labels, stats, _ = cv2.connectedComponentsWithStats(coarse, 8)
+
+              # The baked floor shadow is a dark, low-saturation shape in the lower
+              # half. Suppress those pixels only while finding the character seed;
+              # neutral armour edges are recovered from the original image afterward.
+              hsv = cv2.cvtColor(rgb8, cv2.COLOR_RGB2HSV)
+              yy = np.arange(h, dtype=np.int32)[:, None]
+              shadow_like = (yy > int(h * 0.55)) & (hsv[:, :, 1] < 45) & (hsv[:, :, 2] < 120)
+              seed = coarse.copy()
+              seed[shadow_like] = 0
+              seed = cv2.morphologyEx(seed, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=1)
+
+              count, labels, stats, _ = cv2.connectedComponentsWithStats(seed, 8)
               candidates = []
               for idx in range(1, count):
                   x, y, cw, ch, area = [int(v) for v in stats[idx]]
@@ -66,17 +75,18 @@ jobs:
                   touches_border = x == 0 or y == 0 or x + cw >= w or y + ch >= h
                   if touches_border:
                       continue
-                  score = area * (ch / h) ** 1.5
+                  score = area * (ch / h) ** 1.7
                   candidates.append((score, idx, x, y, cw, ch, area))
               if not candidates:
                   raise RuntimeError(f'No character component found in {source}')
               _, chosen, x, y, cw, ch, area = max(candidates)
 
               component = (labels == chosen).astype(np.uint8)
-              keep = cv2.dilate(component, np.ones((7, 7), np.uint8), iterations=1).astype(bool)
+              # Recover anti-aliased and neutral outline pixels close to the seed,
+              # without reaching the broad shadow or detached label/artifact.
+              keep = cv2.dilate(component, np.ones((25, 25), np.uint8), iterations=1).astype(bool)
+              keep &= coarse.astype(bool)
 
-              # Preserve soft antialiasing while making the sampled grey background
-              # transparent. Pixels outside the chosen component are discarded.
               soft_alpha = np.clip((distance - 10) / 34 * 255, 0, 255).astype(np.uint8)
               alpha = np.minimum(rgba[:, :, 3], soft_alpha)
               alpha[~keep] = 0
@@ -108,17 +118,16 @@ jobs:
                   'outputSize': [target_w, target_h],
               })
 
-          # Human-review contact sheet on a checkerboard background.
           cell_w, cell_h = 220, 210
           preview = Image.new('RGB', (cell_w * len(rendered), cell_h), '#ededed')
           draw = ImageDraw.Draw(preview)
           for i, (label, sprite) in enumerate(rendered):
               ox = i * cell_w
               tile = 16
-              for yy in range(0, cell_h, tile):
-                  for xx in range(0, cell_w, tile):
-                      if ((xx // tile) + (yy // tile)) % 2:
-                          draw.rectangle((ox + xx, yy, ox + xx + tile - 1, yy + tile - 1), fill='#d5d5d5')
+              for py0 in range(0, cell_h, tile):
+                  for px0 in range(0, cell_w, tile):
+                      if ((px0 // tile) + (py0 // tile)) % 2:
+                          draw.rectangle((ox + px0, py0, ox + px0 + tile - 1, py0 + tile - 1), fill='#d5d5d5')
               px = ox + (cell_w - sprite.width) // 2
               py = 165 - sprite.height
               preview.paste(sprite, (px, py), sprite)
