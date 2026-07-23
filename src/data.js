@@ -60,8 +60,9 @@
   // R2-06: a wall is now a piece — { kind, orientation, collision, material }.
   //   kind        : 'block' | 'diagonal' | 'rounded'
   //   orientation : 0..315 in 45° steps (which corner a diagonal/rounded cuts)
-  //   collision   : 'full' | 'partial'   (Phase 1 keeps 'full'; nav treats any
-  //                 wall as blocking until partial-collision nav lands)
+  //   collision   : 'full' | 'partial'   (REV3: default 'full' for ALL kinds —
+  //                 diagonal/rounded block their whole tile until sub-tile pawn
+  //                 positions land in Stage 2; 'partial' is opt-in per piece)
   //   material    : wall material id ('hull' | 'glass')
   const WALL_KINDS = ['block', 'diagonal', 'rounded'];
   // legacy string → piece
@@ -74,10 +75,14 @@
 
   function createWall(kind, orientation, material, collision) {
     const k = isWallKind(kind) ? kind : 'block';
-    // A block fills the tile (full collision); diagonal/rounded pieces occupy
-    // only part of it, so they default to partial collision (nav lets a pawn
-    // pass the open side — R2-06 phase 2). An explicit value always wins.
-    const col = collision ? (collision === 'partial' ? 'partial' : 'full') : (k === 'block' ? 'full' : 'partial');
+    // REV3 (human feedback): EVERY wall kind defaults to FULL collision — the
+    // pawn cannot enter a diagonal/rounded wall's tile at all. Partial collision
+    // (walkable tile, closed side blocked — R2-06 phase 2 nav, still fully
+    // supported) confused players: the pawn stands at the tile centre, i.e.
+    // visually INSIDE the drawn wall, which reads as "walking through it".
+    // Real partial collision needs sub-tile pawn positions — Stage 2 work.
+    // Until then, an explicit 'partial' value still wins for future content.
+    const col = collision ? (collision === 'partial' ? 'partial' : 'full') : 'full';
     return { kind: k, orientation: snapAngle(orientation), collision: col, material: isMaterial(material) ? material : 'hull' };
   }
   // Coerce any stored/legacy wall value into a piece (or null). `legacyMat` is

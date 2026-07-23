@@ -38,20 +38,30 @@
   };
 
   // ---- projection ---------------------------------------------------------
-  // R2-03: the camera carries a projection that only changes the iso tile
-  // HEIGHT — a steeper "tilted" view vs a flatter, more top-down one. Tile width
-  // is constant, so the same diamond math (world<->screen, picking, draw order)
-  // works for both projections; no second render path.
-  const PROJECTIONS = { isoTilted: 32, isoFlat: 52 };
-  const PROJECTION_IDS = ['isoTilted', 'isoFlat'];
+  // R2-03: the camera carries a projection. The two iso projections only change
+  // the iso tile HEIGHT (steeper "tilted" vs flatter view). REV3 (human
+  // feedback) adds `topDown`: a TRUE plan view — axis-aligned square cells, no
+  // tilt at all, as requested ("vista desde arriba, mapa plano sin ningun tipo
+  // de inclinacion"). topDown uses its own world<->screen branch; every draw
+  // still routes through worldToScreen, so room transforms, picking and camera
+  // anchoring keep working unchanged.
+  const PROJECTIONS = { isoTilted: 32, isoFlat: 52, topDown: 64 };
+  const PROJECTION_IDS = ['isoTilted', 'isoFlat', 'topDown'];
+  function isTopDown(cam) { return !!(cam && cam.projection === 'topDown'); }
   function projH(cam) { return (cam && PROJECTIONS[cam.projection]) || TILE_H; }
 
   function worldToScreen(cam, wx, wy) {
+    if (isTopDown(cam)) {
+      return { x: wx * TILE_W * cam.zoom + cam.x, y: wy * TILE_W * cam.zoom + cam.y };
+    }
     const sx = (wx - wy) * (TILE_W / 2);
     const sy = (wx + wy) * (projH(cam) / 2);
     return { x: sx * cam.zoom + cam.x, y: sy * cam.zoom + cam.y };
   }
   function screenToWorld(cam, px, py) {
+    if (isTopDown(cam)) {
+      return { x: (px - cam.x) / (TILE_W * cam.zoom), y: (py - cam.y) / (TILE_W * cam.zoom) };
+    }
     const sx = (px - cam.x) / cam.zoom;
     const sy = (py - cam.y) / cam.zoom;
     const th = projH(cam);
@@ -151,16 +161,26 @@
       }
     }
     ents.sort((a, b) => b.depth - a.depth);   // front-most first
+    const td = isTopDown(cam);
     for (const e of ents) {
       const s = e.s;
       let hit = false;
       if (e.kind === 'wall') {
-        // hexagonal silhouette of a raised diamond block
-        const poly = [
-          { x: s.x, y: s.y - hh - H }, { x: s.x + hw, y: s.y - H }, { x: s.x + hw, y: s.y },
-          { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }, { x: s.x - hw, y: s.y - H }
-        ];
-        hit = pointInPoly(px, py, poly);
+        if (td) {
+          // plan view: walls are flat footprints — hit-test the ground polygon
+          const wall = (e.room.tiles[e.ly] && e.room.tiles[e.ly][e.lx] && e.room.tiles[e.ly][e.lx].wall) || {};
+          hit = pointInPoly(px, py, wallPolygon(s, hw, hh, wall.kind || 'block', wall.orientation || 0, true));
+        } else {
+          // hexagonal silhouette of a raised diamond block
+          const poly = [
+            { x: s.x, y: s.y - hh - H }, { x: s.x + hw, y: s.y - H }, { x: s.x + hw, y: s.y },
+            { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }, { x: s.x - hw, y: s.y - H }
+          ];
+          hit = pointInPoly(px, py, poly);
+        }
+      } else if (td) {
+        // plan view: objects are flat pads (see drawObjectFlat)
+        hit = px >= s.x - 20 * z && px <= s.x + 20 * z && py >= s.y - 20 * z && py <= s.y + 20 * z;
       } else {
         // bounding box matched to the object art's actual height, so FLAT objects
         // (elevator pad, ramp) don't grab the tile drawn behind them while TALL
@@ -190,6 +210,22 @@
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
     ctx.restore();
+  }
+
+  function squareAt(ctx, s, hw, hh, fill, stroke, alpha) {
+    ctx.save();
+    if (alpha != null) ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.rect(s.x - hw, s.y - hh, hw * 2, hh * 2);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+    ctx.restore();
+  }
+
+  // REV3: one tile primitive per projection — diamond in iso, square in topDown.
+  function tileAt(ctx, cam, s, hw, hh, fill, stroke, alpha) {
+    if (isTopDown(cam)) squareAt(ctx, s, hw, hh, fill, stroke, alpha);
+    else diamondAt(ctx, s, hw, hh, fill, stroke, alpha);
   }
 
   function shade(hex, amt) {
@@ -248,8 +284,13 @@
     ctx.closePath(); ctx.fill();
   }
   // Ground-plane polygon for a wall piece, in screen space around centre s.
-  function wallPolygon(s, hw, hh, kind, orientation) {
-    const C = [{ x: s.x, y: s.y - hh }, { x: s.x + hw, y: s.y }, { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }]; // T,R,B,L
+  // REV3: in topDown the cell is an axis-aligned square, so the piece corners
+  // are the SQUARE corners (TL,TR,BR,BL) instead of the iso diamond's (T,R,B,L)
+  // — same index order, so orientation semantics carry over unchanged.
+  function wallPolygon(s, hw, hh, kind, orientation, topDown) {
+    const C = topDown
+      ? [{ x: s.x - hw, y: s.y - hh }, { x: s.x + hw, y: s.y - hh }, { x: s.x + hw, y: s.y + hh }, { x: s.x - hw, y: s.y + hh }]
+      : [{ x: s.x, y: s.y - hh }, { x: s.x + hw, y: s.y }, { x: s.x, y: s.y + hh }, { x: s.x - hw, y: s.y }]; // T,R,B,L
     if (kind === 'block') return C;
     const i = (Math.round(((orientation % 360) + 360) % 360 / 90)) % 4;   // 0..3
     const tri = [C[i], C[(i + 1) % 4], C[(i + 2) % 4]];
@@ -259,6 +300,17 @@
     const mid = { x: (tri[0].x + tri[2].x) / 2, y: (tri[0].y + tri[2].y) / 2 };
     const inner = { x: mid.x + (opp.x - mid.x) * 0.55, y: mid.y + (opp.y - mid.y) * 0.55 };
     return [tri[0], tri[1], tri[2], inner];
+  }
+
+  // REV3: flat wall rendering for the top-down plan view — no vertical
+  // extrusion, just the ground footprint filled and stroked.
+  function flatWallAt(ctx, pts, fillCol, lineCol) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = fillCol; ctx.fill();
+    ctx.strokeStyle = lineCol; ctx.lineWidth = 1; ctx.stroke();
   }
 
   // ---- object art (flat placeholders, swapped for sprites later) ----------
@@ -388,9 +440,9 @@
     for (const f of floors) {
       const mat = data.MATERIALS[f.tile.floor] || data.MATERIALS.deck;
       const s = worldToScreen(cam, f.wx, f.wy);
-      diamondAt(ctx, s, hw, hh, mat.color, mat.line);
+      tileAt(ctx, cam, s, hw, hh, mat.color, mat.line);
       if (mat.raised) {   // catwalk: inset plate to read as a raised walkway
-        diamondAt(ctx, { x: s.x, y: s.y }, hw * 0.62, hh * 0.62, null, mat.line);
+        tileAt(ctx, cam, { x: s.x, y: s.y }, hw * 0.62, hh * 0.62, null, mat.line);
       }
     }
 
@@ -443,22 +495,62 @@
       }
     }
     ents.sort((a, b) => a.depth - b.depth);
+    const td = isTopDown(cam);
     for (const e of ents) {
       const s = worldToScreen(cam, e.wx, e.wy);
       if (e.kind === 'wall') {
         const wall = e.tile.wall || {};
         const mat = data.MATERIALS[wall.material] || data.MATERIALS[e.tile.wallMaterial] || data.MATERIALS.hull;
-        const pts = wallPolygon(s, hw, hh, wall.kind || 'block', wall.orientation || 0);
-        if (mat.glass) {
+        const pts = wallPolygon(s, hw, hh, wall.kind || 'block', wall.orientation || 0, td);
+        if (td) {
+          // plan view: walls are flat footprints, not raised blocks (REV3)
+          ctx.save();
+          if (mat.glass) ctx.globalAlpha = 0.55;
+          flatWallAt(ctx, pts, shade(mat.color, 22), mat.color);
+          ctx.restore();
+        } else if (mat.glass) {
           ctx.save(); ctx.globalAlpha = 0.5;
           extrudeAt(ctx, pts, WALL_H * 0.82 * cam.zoom, shade(mat.color, 30), mat.color);
           ctx.restore();
         } else {
           extrudeAt(ctx, pts, WALL_H * cam.zoom, shade(mat.color, 22), mat.color);
         }
+      } else if (td) {
+        drawObjectFlat(ctx, s, cam.zoom, e.obj, e.sel);
       } else {
         drawObject(ctx, s, cam.zoom, e.obj, e.sel);
       }
+    }
+  }
+
+  // REV3: plan-view object marker — a flat inset pad coloured per type, with a
+  // rotation tick, an interactive dot and a selection ring. Upright iso art
+  // would lie sideways on a plan; these placeholders stay readable instead.
+  const OBJ_TOPDOWN_COLORS = {
+    console: '#5d5d66', crate: '#4c4c53', light: '#e8e8ec', plant: '#6d8a62',
+    elevator: '#8a8a93', miner: '#4a4a52', pillar: '#54545c',
+    door: '#50505a', airlock: '#4a5560', stairs: '#4c4c55', ladder: '#6a6a72', ramp: '#46464e'
+  };
+  function drawObjectFlat(ctx, s, zoom, obj, selected) {
+    const z = zoom, a = 20 * z;   // pad half-size (inset inside the 32*z cell)
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    if (selected) {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([6 * z, 4 * z]);
+      ctx.beginPath(); ctx.arc(0, 0, 26 * z, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.rotate((obj.rotation || 0) * Math.PI / 180);
+    const open = (obj.type === 'door' || obj.type === 'airlock') && obj.open;
+    ctx.fillStyle = open ? '#2c3a34' : (OBJ_TOPDOWN_COLORS[obj.type] || '#55555c');
+    ctx.strokeStyle = 'rgba(230,230,238,0.75)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.rect(-a, -a, a * 2, a * 2); ctx.fill(); ctx.stroke();
+    // rotation tick toward local +X
+    ctx.strokeStyle = 'rgba(240,240,245,0.9)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(a * 0.8, 0); ctx.stroke();
+    ctx.restore();
+    if (obj.interactive) {
+      ctx.fillStyle = '#f4f4f5';
+      ctx.beginPath(); ctx.arc(s.x + a, s.y - a, 3.5 * z, 0, Math.PI * 2); ctx.fill();
     }
   }
 
@@ -467,7 +559,7 @@
     if (!room) return;
     if (ref.lx < 0 || ref.ly < 0 || ref.lx >= room.size.w || ref.ly >= room.size.h) return;
     const c = tileCenterWorld(room, ref.lx, ref.ly);
-    diamondAt(ctx, worldToScreen(cam, c.x, c.y), hw, hh, fill, stroke);
+    tileAt(ctx, cam, worldToScreen(cam, c.x, c.y), hw, hh, fill, stroke);
   }
 
   // Link markers: source/spawn endpoints of the level graph on THIS level.
@@ -547,7 +639,7 @@
     return Math.hypot(rc.x - a.center.x, rc.y - a.center.y);
   }
 
-  // Preview the motion path/direction of a room's events (Build mode aid), plus
+  // Preview the motion path/direction of a room's events (Build aid), plus
   // the room move/rotate gizmo.
   function drawRoomMotion(ctx, cam, room) {
     if (!room) return;
@@ -741,13 +833,37 @@
       ctx.restore();
     }
 
+    const td = isTopDown(cam);
     for (const e of list) {
       const s = worldToScreen(cam, e.wx, e.wy);
-      // facing: local dir -> world (room rotation) -> iso screen angle
+      // facing: local dir -> world (room rotation) -> screen angle
       const wd = rotatePoint(e.p.facingLocal.x, e.p.facingLocal.y, e.room.transform.rotation, { x: 0, y: 0 });
-      const facing = Math.atan2((wd.x + wd.y) * (projH(cam) / TILE_W), wd.x - wd.y);
-      drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
+      const facing = td
+        ? Math.atan2(wd.y, wd.x)                                        // plan: x right, y down
+        : Math.atan2((wd.x + wd.y) * (projH(cam) / TILE_W), wd.x - wd.y); // iso diamond angle
+      if (td) drawPawnFigureFlat(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
+      else drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
     }
+  }
+
+  // REV3: plan-view pawn — a disc with a heading tick (upright figure would lie
+  // sideways on a plan view).
+  function drawPawnFigureFlat(ctx, s, z, pawn, facing, selected, time) {
+    const pulse = pawn.moving ? 1 + Math.sin(time * 11) * 0.06 : 1;
+    ctx.save();
+    ctx.globalAlpha = 0.30; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(s.x + 2 * z, s.y + 2 * z, 13 * z, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    if (selected) {
+      ctx.strokeStyle = '#f2f2f4'; ctx.lineWidth = 1.6 * z; ctx.setLineDash([6 * z, 4 * z]);
+      ctx.beginPath(); ctx.arc(s.x, s.y, 18 * z, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.beginPath(); ctx.arc(s.x, s.y, 12 * z * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = '#dcdcde'; ctx.fill(); ctx.strokeStyle = '#8a8a92'; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.strokeStyle = '#2a2a2e'; ctx.lineWidth = 2.4 * z;
+    ctx.beginPath(); ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + Math.cos(facing) * 12 * z, s.y + Math.sin(facing) * 12 * z); ctx.stroke();
+    ctx.restore();
   }
 
   function drawPawnFigure(ctx, s, z, pawn, facing, selected, time) {
@@ -791,7 +907,7 @@
   }
 
   return {
-    TILE_W, TILE_H, WALL_H, OBJ_H, PROJECTION_IDS, projH,
+    TILE_W, TILE_H, WALL_H, OBJ_H, PROJECTION_IDS, projH, isTopDown,
     worldToScreen, screenToWorld,
     rotatePoint, localToWorld, worldToLocal, tileCenterWorld, roomCenterWorld,
     pick, pickTopmost, drawLevel, drawObject, drawRoomMotion, motionHandles, resizeHandles, drawLinkMarkers, drawAgents, centerOn, shade
