@@ -37,6 +37,41 @@
     pillar: 44, door: 40, airlock: 40, stairs: 22, ladder: 36, ramp: 12
   };
 
+  // SPRITE-01: presentation-only pawn art. Browser images load once and
+// remain optional; Node tests and failed assets keep the vector placeholder.
+const PAWN_SPRITE_PATHS = {
+  front: 'Sprites/Placeholders/processed/pawn_front.png',
+  side: 'Sprites/Placeholders/processed/pawn_side.png',
+  back: 'Sprites/Placeholders/processed/pawn_back.png'
+};
+const pawnSpriteSlots = {
+  front: { image: null, failed: false },
+  side: { image: null, failed: false },
+  back: { image: null, failed: false }
+};
+let pawnSpriteLoadStarted = false;
+function ensurePawnSprites() {
+  if (pawnSpriteLoadStarted || typeof Image === 'undefined') return;
+  pawnSpriteLoadStarted = true;
+  for (const key of Object.keys(PAWN_SPRITE_PATHS)) {
+    const slot = pawnSpriteSlots[key];
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => { slot.image = image; };
+    image.onerror = () => { slot.failed = true; slot.image = null; };
+    image.src = PAWN_SPRITE_PATHS[key];
+  }
+}
+function pawnSpriteForFacing(facing) {
+  ensurePawnSprites();
+  const dx = Math.cos(facing), dy = Math.sin(facing);
+  let key = 'side', mirror = false;
+  if (Math.abs(dy) >= Math.abs(dx)) key = dy >= 0 ? 'front' : 'back';
+  else mirror = dx < 0;
+  return { image: pawnSpriteSlots[key].image, mirror };
+}
+ensurePawnSprites();
+
   // ---- projection ---------------------------------------------------------
   // R2-03: the camera carries a projection. The two iso projections only change
   // the iso tile HEIGHT (steeper "tilted" vs flatter view). REV3 (human
@@ -866,29 +901,42 @@
     ctx.restore();
   }
 
-  function drawPawnFigure(ctx, s, z, pawn, facing, selected, time) {
-    const bob = pawn.moving ? Math.sin(time * 11) * 1.6 * z : 0;
-    ctx.save();
-    // shadow
-    ctx.globalAlpha = 0.34; ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, 11 * z, 5.5 * z, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    if (selected) {
-      ctx.strokeStyle = '#f2f2f4'; ctx.lineWidth = 1.6 * z; ctx.setLineDash([6 * z, 4 * z]);
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, 15 * z, 7.5 * z, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    }
-    const fx = Math.cos(facing), fy = Math.sin(facing) * 0.6;
-    const bodyH = 34 * z;
-    // body
-    ctx.beginPath(); ctx.ellipse(s.x, s.y - bodyH * 0.45 + bob, 9 * z, bodyH * 0.5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#dcdcde'; ctx.fill(); ctx.strokeStyle = '#8a8a92'; ctx.lineWidth = 1.4; ctx.stroke();
-    // head
-    const hy = s.y - bodyH + bob;
-    ctx.beginPath(); ctx.arc(s.x, hy, 7 * z, 0, Math.PI * 2); ctx.fillStyle = '#ededf0'; ctx.fill(); ctx.stroke();
-    // facing nub
-    ctx.beginPath(); ctx.arc(s.x + fx * 6 * z, hy + fy * 6 * z, 2 * z, 0, Math.PI * 2); ctx.fillStyle = '#2a2a2e'; ctx.fill();
-    ctx.restore();
+  function drawPawnPlaceholder(ctx, s, z, facing, bob) {
+  const fx = Math.cos(facing), fy = Math.sin(facing) * 0.6;
+  const bodyH = 34 * z;
+  ctx.beginPath(); ctx.ellipse(s.x, s.y - bodyH * 0.45 + bob, 9 * z, bodyH * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#dcdcde'; ctx.fill(); ctx.strokeStyle = '#8a8a92'; ctx.lineWidth = 1.4; ctx.stroke();
+  const hy = s.y - bodyH + bob;
+  ctx.beginPath(); ctx.arc(s.x, hy, 7 * z, 0, Math.PI * 2); ctx.fillStyle = '#ededf0'; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(s.x + fx * 6 * z, hy + fy * 6 * z, 2 * z, 0, Math.PI * 2); ctx.fillStyle = '#2a2a2e'; ctx.fill();
+}
+
+function drawPawnFigure(ctx, s, z, pawn, facing, selected, time) {
+  const bob = pawn.moving ? Math.sin(time * 11) * 1.6 * z : 0;
+  ctx.save();
+  ctx.globalAlpha = 0.34; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(s.x, s.y, 11 * z, 5.5 * z, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  if (selected) {
+    ctx.strokeStyle = '#f2f2f4'; ctx.lineWidth = 1.6 * z; ctx.setLineDash([6 * z, 4 * z]);
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, 15 * z, 7.5 * z, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   }
+  const sprite = pawnSpriteForFacing(facing);
+  if (sprite.image) {
+    const drawH = 42 * z;
+    const naturalW = sprite.image.naturalWidth || sprite.image.width || 1;
+    const naturalH = sprite.image.naturalHeight || sprite.image.height || 1;
+    const drawW = drawH * naturalW / naturalH;
+    ctx.save();
+    ctx.translate(s.x, s.y + bob);
+    if (sprite.mirror) ctx.scale(-1, 1);
+    ctx.drawImage(sprite.image, -drawW / 2, -drawH, drawW, drawH);
+    ctx.restore();
+  } else {
+    drawPawnPlaceholder(ctx, s, z, facing, bob);
+  }
+  ctx.restore();
+}
 
   // centre a camera on a level's overall footprint at a given viewport size
   function centerOn(cam, level, viewW, viewH) {
