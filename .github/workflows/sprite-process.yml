@@ -21,7 +21,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           render_path = Path('src/render.js')
           render = render_path.read_text(encoding='utf-8')
@@ -43,7 +42,7 @@ jobs:
           function settlePawnSpriteLoad() {
             pawnSpriteLoadsPending--;
             // The editor renders on demand. A resize event is already its supported
-            // presentation invalidation path, so repaint once all sprite requests settle.
+            // presentation invalidation path, so repaint once all requests settle.
             if (pawnSpriteLoadsPending === 0 && typeof window !== 'undefined') {
               window.dispatchEvent(new Event('resize'));
             }
@@ -69,31 +68,20 @@ jobs:
             return { image: pawnSpriteSlots[key].image, mirror };
           }
           ensurePawnSprites();'''
+          start = render.index('  // SPRITE-01: presentation-only pawn art.')
+          end = render.index('\n\n  // ---- projection', start)
+          render = render[:start] + loader + render[end:]
 
-          render, count = re.subn(
-              r"  // SPRITE-01: presentation-only pawn art\..*?ensurePawnSprites\(\);",
-              loader,
-              render,
-              count=1,
-              flags=re.S,
-          )
-          if count != 1:
-              raise RuntimeError(f'Expected one sprite loader block, got {count}')
-
-          old_direction = '''      const facing = td
-                ? Math.atan2(wd.y, wd.x)                                        // plan: x right, y down
-                : Math.atan2((wd.x + wd.y) * (projH(cam) / TILE_W), wd.x - wd.y); // iso diamond angle
-              if (td) drawPawnFigureFlat(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
-              else drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);'''
-          new_direction = '''      const spriteFacing = Math.atan2(wd.y, wd.x);                   // world: south/front, north/back
+          direction = '''      const spriteFacing = Math.atan2(wd.y, wd.x);                   // world: south/front, north/back
               const facing = td
                 ? spriteFacing                                                // plan: x right, y down
                 : Math.atan2((wd.x + wd.y) * (projH(cam) / TILE_W), wd.x - wd.y); // iso screen angle
               if (td) drawPawnFigureFlat(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);
               else drawPawnFigure(ctx, s, z, e.p, facing, spriteFacing, e.p.id === opts.selectedId, opts.time || 0);'''
-          if old_direction not in render:
-              raise RuntimeError('drawAgents direction block not found')
-          render = render.replace(old_direction, new_direction, 1)
+          start = render.index('      const facing = td', render.index('  function drawAgents'))
+          old_last = '      else drawPawnFigure(ctx, s, z, e.p, facing, e.p.id === opts.selectedId, opts.time || 0);'
+          end = render.index(old_last, start) + len(old_last)
+          render = render[:start] + direction + render[end:]
 
           pawn_functions = '''  function drawPawnPlaceholder(ctx, s, z, facing, bob) {
             const fx = Math.cos(facing), fy = Math.sin(facing) * 0.6;
@@ -131,16 +119,11 @@ jobs:
               drawPawnPlaceholder(ctx, s, z, facing, bob);
             }
             ctx.restore();
-          }'''
-          render, count = re.subn(
-              r"  function drawPawnPlaceholder\(ctx, s, z, facing, bob\) \{.*?(?=\n  // centre a camera)",
-              pawn_functions + '\n',
-              render,
-              count=1,
-              flags=re.S,
-          )
-          if count != 1:
-              raise RuntimeError(f'Expected one pawn function block, got {count}')
+          }
+'''
+          start = render.index('  function drawPawnPlaceholder')
+          end = render.index('  // centre a camera', start)
+          render = render[:start] + pawn_functions + '\n' + render[end:]
           render_path.write_text(render, encoding='utf-8')
 
           smoke_path = Path('tests/smoke/smoke.mjs')
@@ -162,15 +145,9 @@ jobs:
           ck('sprites: processed pawn assets load', spriteAssets.every(asset => asset.ok), spriteAssets);
 
           '''
-          smoke, count = re.subn(
-              r"  // SPRITE-01: all renderer sprite assets.*?(?=  // ── 1\. boot:)",
-              smoke_block,
-              smoke,
-              count=1,
-              flags=re.S,
-          )
-          if count != 1:
-              raise RuntimeError(f'Expected one sprite smoke block, got {count}')
+          start = smoke.index('  // SPRITE-01: all renderer sprite assets')
+          end = smoke.index('  // ── 1. boot:', start)
+          smoke = smoke[:start] + smoke_block + smoke[end:]
           smoke_path.write_text(smoke, encoding='utf-8')
           PY
       - name: Install dependencies and Chromium
@@ -200,22 +177,15 @@ jobs:
               const image = new Image(); image.onload = resolve; image.onerror = reject; image.src = src;
             })));
             await new Promise(resolve => setTimeout(resolve, 100));
-
             document.body.innerHTML = '';
-            document.body.style.margin = '0';
-            document.body.style.background = '#171920';
+            document.body.style.margin = '0'; document.body.style.background = '#171920';
             const canvas = document.createElement('canvas');
             canvas.id = 'sprite-review'; canvas.width = 900; canvas.height = 460;
             document.body.appendChild(canvas);
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#242832'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             const R = window.UGS.render;
-            const room = {
-              id: 'review-room', size: { w: 6, h: 5 },
-              transform: { x: 0, y: 0, rotation: 0, pivot: { x: 0, y: 0 } },
-              objects: [], events: []
-            };
+            const room = { id: 'review-room', size: { w: 6, h: 5 }, transform: { x: 0, y: 0, rotation: 0, pivot: { x: 0, y: 0 } }, objects: [], events: [] };
             const level = { id: 'review-level', rooms: [room] };
             const defs = [
               ['East / side', 1, 0, { x: 1, y: 0 }],
@@ -223,10 +193,7 @@ jobs:
               ['South / front', 1, 3, { x: 0, y: 1 }],
               ['North / back', 3, 3, { x: 0, y: -1 }],
             ];
-            const pawns = defs.map(([label, x, y, facingLocal], i) => ({
-              id: `pawn-${i}`, levelId: level.id, roomId: room.id,
-              x, y, facingLocal, path: [], moving: false, label
-            }));
+            const pawns = defs.map(([label, x, y, facingLocal], i) => ({ id: `pawn-${i}`, levelId: level.id, roomId: room.id, x, y, facingLocal, path: [], moving: false, label }));
             const cam = { x: 430, y: 75, zoom: 2, projection: 'isoTilted' };
             R.drawAgents(ctx, cam, level, pawns, { showPaths: false, selectedId: 'pawn-2', time: 0 });
             ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#f1f3f7';
