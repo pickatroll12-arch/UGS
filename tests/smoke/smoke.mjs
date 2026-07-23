@@ -50,20 +50,20 @@ const run = async () => {
   await page.waitForTimeout(300);
 
   // SPRITE-01: all renderer sprite assets must resolve from file:// and Pages.
-    const spriteAssets = await page.evaluate(async () => {
-      const paths = [
-        'Sprites/Placeholders/processed/pawn_front.png',
-        'Sprites/Placeholders/processed/pawn_side.png',
-        'Sprites/Placeholders/processed/pawn_back.png',
-      ];
-      return Promise.all(paths.map(src => new Promise(resolve => {
-        const image = new Image();
-        image.onload = () => resolve({ src, ok: image.naturalWidth > 0 && image.naturalHeight > 0, width: image.naturalWidth, height: image.naturalHeight });
-        image.onerror = () => resolve({ src, ok: false, width: 0, height: 0 });
-        image.src = new URL(src, document.baseURI).href;
-      })));
-    });
-    ck('sprites: processed pawn assets load', spriteAssets.every(asset => asset.ok), spriteAssets);
+  const spriteAssets = await page.evaluate(async () => {
+    const paths = [
+      'Sprites/Placeholders/processed/pawn_front.png',
+      'Sprites/Placeholders/processed/pawn_side.png',
+      'Sprites/Placeholders/processed/pawn_back.png',
+    ];
+    return Promise.all(paths.map(src => new Promise(resolve => {
+      const image = new Image();
+      image.onload = () => resolve({ src, ok: image.naturalWidth > 0 && image.naturalHeight > 0, width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => resolve({ src, ok: false, width: 0, height: 0 });
+      image.src = new URL(src, document.baseURI).href;
+    })));
+  });
+  ck('sprites: processed pawn assets load', spriteAssets.every(asset => asset.ok), spriteAssets);
 
   // ── 1. boot: main menu, default station in memory (R2-07) ────────────────
   const boot = await page.evaluate(() => {
