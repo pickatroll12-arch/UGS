@@ -84,9 +84,11 @@ function wall(r, x, y) { r.tiles[y][x] = { floor: 'deck', wall: 'solid', wallMat
 }
 
 // --- partial-wall (diagonal) collision: walkable tile, closed side blocks (R2-06 ph2) ---
+// REV3: partial collision is now OPT-IN (4th arg) — the default for every wall
+// kind is full, so a default diagonal blocks its whole tile (human feedback).
 {
   const r = room(3, 3);
-  r.tiles[1][1].wall = data.createWall('diagonal', 0, 'hull');   // partial, closes E/S/SE
+  r.tiles[1][1].wall = data.createWall('diagonal', 0, 'hull', 'partial');   // opt-in partial, closes E/S/SE
   const g = nav.buildWalkGrid(r, data.objectBlocks);
   ck('partial wall keeps its tile walkable', g.get(1, 1) === 1);
   ck('dirClosed: east closed at orient 0', nav.dirClosed(r.tiles[1][1].wall, 1, 0) === true);
@@ -97,12 +99,16 @@ function wall(r, x, y) { r.tiles[y][x] = { floor: 'deck', wall: 'solid', wallMat
   const r2 = room(3, 3);
   r2.tiles[1][1].wall = data.createWall('block', 0, 'hull');     // full block
   ck('a full block tile is NOT walkable', nav.buildWalkGrid(r2, data.objectBlocks).get(1, 1) === 0);
+
+  const r3 = room(3, 3);
+  r3.tiles[1][1].wall = data.createWall('diagonal', 0, 'hull');  // REV3: default diagonal → full
+  ck('REV3: a default diagonal wall tile is NOT walkable', nav.buildWalkGrid(r3, data.objectBlocks).get(1, 1) === 0);
 }
 // a partial wall that closes the only 1-wide corridor blocks the path
 {
   const r = room(3, 5);
   for (let y = 0; y < 5; y++) { wall(r, 0, y); wall(r, 2, y); }        // walls either side → column 1 corridor
-  r.tiles[2][1].wall = data.createWall('diagonal', 180, 'hull');       // closes W/N/NW → can't be entered from the north
+  r.tiles[2][1].wall = data.createWall('diagonal', 180, 'hull', 'partial'); // closes W/N/NW → can't be entered from the north
   const p = nav.findPath(r, 1, 0, 1, 4, data.objectBlocks);
   ck('partial wall closing the only corridor blocks the path', p === null);
 }

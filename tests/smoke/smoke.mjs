@@ -141,6 +141,26 @@ const run = async () => {
   ck('projection: E/Q switch and back', proj0 === 'isoTilted' && proj1 === 'isoFlat' && proj2 === 'isoTilted', { proj0, proj1, proj2 });
   ck('projection: picking round-trips in the flat view', pickRoundTrips);
 
+  // ── 3b''. REV3: Q/E now also reaches the TRUE top-down plan view ──────────
+  await page.keyboard.press('e'); await page.keyboard.press('e'); await page.waitForTimeout(80);
+  const projTD = await page.evaluate(() => window.UGS.editorApp.camera.projection);
+  const tdChecks = await page.evaluate(() => {
+    const app = window.UGS.editorApp, R = window.UGS.render;
+    // plan view: axis-aligned square cells — world x maps straight to screen x
+    const a = R.worldToScreen({ x: 0, y: 0, zoom: 1, projection: 'topDown' }, 2, 3);
+    const squareCells = a.x === 2 * R.TILE_W && a.y === 3 * R.TILE_W;
+    // picking round-trips in the plan view too
+    const c = R.tileCenterWorld(app.save.levels[0].rooms[0], 5, 4);
+    const s = R.worldToScreen(app.camera, c.x, c.y);
+    const w = R.screenToWorld(app.camera, s.x, s.y);
+    const roundTrips = Math.abs(w.x - c.x) < 0.02 && Math.abs(w.y - c.y) < 0.02;
+    return { squareCells, roundTrips };
+  });
+  ck('REV3 projection: E reaches the top-down plan view', projTD === 'topDown', { projTD });
+  ck('REV3 projection: top-down uses square axis-aligned cells', tdChecks.squareCells, tdChecks);
+  ck('REV3 projection: picking round-trips in the plan view', tdChecks.roundTrips, tdChecks);
+  await page.keyboard.press('q'); await page.keyboard.press('q'); await page.waitForTimeout(60);   // back to isoTilted
+
   // ── 3c. selection model (R2-02): click object / dblclick room / alt+click ─
   const sm = await page.evaluate(() => {
     const app = window.UGS.editorApp, D = window.UGS.data, R = window.UGS.render;
@@ -199,16 +219,23 @@ const run = async () => {
   await page.click('#shapePalette button:nth-child(1)');   // restore Rectangle
   await page.evaluate(() => { window.UGS.editorApp.selection = null; });
 
-  // ── 3e. partial-wall nav (R2-06 ph2): open side passable, closed side not ─
+  // ── 3e. wall collision (REV3): default diagonal blocks its whole tile; ────
+  //      opt-in partial keeps the R2-06 ph2 nav behaviour ────────────────────
   const pw = await page.evaluate(() => {
     const D = window.UGS.data, N = window.UGS.nav;
     const mk = (w, h) => { const r = D.createRoom('t', w, h); r.tiles = Array.from({ length: h }, () => Array.from({ length: w }, () => D.createTile('deck'))); return r; };
+    const rFull = mk(3, 3);
+    rFull.tiles[1][1].wall = D.createWall('diagonal', 0, 'hull');              // REV3 default → full
     const r = mk(3, 3);
-    r.tiles[1][1].wall = D.createWall('diagonal', 0, 'hull');   // partial, closes E/S/SE
+    r.tiles[1][1].wall = D.createWall('diagonal', 0, 'hull', 'partial');       // opt-in partial, closes E/S/SE
     const grid = N.buildWalkGrid(r, D.objectBlocks);
-    return { walkable: grid.get(1, 1) === 1, eastBlocked: N.crossBlocked(r, 1, 1, 1, 0), westOpen: !N.crossBlocked(r, 1, 1, -1, 0) };
+    return {
+      defaultFullBlocked: N.buildWalkGrid(rFull, D.objectBlocks).get(1, 1) === 0,
+      walkable: grid.get(1, 1) === 1, eastBlocked: N.crossBlocked(r, 1, 1, 1, 0), westOpen: !N.crossBlocked(r, 1, 1, -1, 0)
+    };
   });
-  ck('partial wall: tile walkable, closed side blocked, open side passable', pw.walkable && pw.eastBlocked && pw.westOpen, pw);
+  ck('REV3: default diagonal wall blocks its whole tile', pw.defaultFullBlocked, pw);
+  ck('partial wall (opt-in): tile walkable, closed side blocked, open side passable', pw.walkable && pw.eastBlocked && pw.westOpen, pw);
 
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);
@@ -307,6 +334,24 @@ const run = async () => {
     running: window.UGS._engine.isRunning(),
   }));
   ck('shell: Play enters Game mode (dev toolbox hidden, game bar shown, sim running)', game.mode === 'game' && game.railHidden && game.sideHidden && game.gameBar && game.running, game);
+
+  // ── 7b'. REV3: the "Simulating" chip is dev-only language ────────────────
+  const chipHiddenInGame = await page.evaluate(() => {
+    const el = document.getElementById('simChip');
+    return getComputedStyle(el).display === 'none';
+  });
+  ck('REV3: "Simulating" chip hidden in Game mode', chipHiddenInGame);
+  await page.click('#gMenu'); await page.waitForTimeout(120);
+  await page.click('#mmDev'); await page.waitForTimeout(150);
+  await page.click('#playBtn'); await page.waitForTimeout(150);
+  const chipShownInDevPlay = await page.evaluate(() => {
+    const el = document.getElementById('simChip');
+    return getComputedStyle(el).display !== 'none';
+  });
+  ck('REV3: "Simulating" chip still shown in Dev test-play', chipShownInDevPlay);
+  await page.click('#menuBtn'); await page.waitForTimeout(120);
+
+  await page.click('#mmPlay'); await page.waitForTimeout(200);   // back into Game mode for the next section
   await page.click('#gMenu'); await page.waitForTimeout(120);
   ck('shell: Game "Menu" returns to the main menu', await page.evaluate(() => window.UGS.editorApp.appMode === 'menu'));
 
