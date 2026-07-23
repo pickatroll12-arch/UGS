@@ -5,19 +5,21 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   process:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install image tooling
         run: python -m pip install --disable-pip-version-check pillow numpy opencv-python-headless
-      - name: Extract largest character component
+      - name: Extract web-ready character sprites
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -27,8 +29,10 @@ jobs:
           from PIL import Image, ImageDraw
 
           ROOT = Path('.')
-          OUT = ROOT / '.sprite-output'
+          OUT = ROOT / 'Sprites/Placeholders/processed'
+          REVIEW = ROOT / '.sprite-output'
           OUT.mkdir(parents=True, exist_ok=True)
+          REVIEW.mkdir(parents=True, exist_ok=True)
           sources = [
               ('Sprites/Placeholders/Player_front.png', 'pawn_front.png', 'Front'),
               ('Sprites/Placeholders/Player_side.png', 'pawn_side.png', 'Side'),
@@ -43,8 +47,6 @@ jobs:
               rgb8 = rgba[:, :, :3]
               rgb = rgb8.astype(np.float32)
               h, w = rgb.shape[:2]
-
-              # Estimate the flat studio background from four corner patches.
               patch = max(8, min(w, h) // 64)
               corners = np.concatenate([
                   rgb[:patch, :patch].reshape(-1, 3),
@@ -56,9 +58,6 @@ jobs:
               distance = np.linalg.norm(rgb - bg, axis=2)
               coarse = (distance > 24).astype(np.uint8)
 
-              # The baked floor shadow is a dark, low-saturation shape in the lower
-              # half. Suppress those pixels only while finding the character seed;
-              # neutral armour edges are recovered from the original image afterward.
               hsv = cv2.cvtColor(rgb8, cv2.COLOR_RGB2HSV)
               yy = np.arange(h, dtype=np.int32)[:, None]
               shadow_like = (yy > int(h * 0.55)) & (hsv[:, :, 1] < 45) & (hsv[:, :, 2] < 120)
@@ -82,11 +81,8 @@ jobs:
               _, chosen, x, y, cw, ch, area = max(candidates)
 
               component = (labels == chosen).astype(np.uint8)
-              # Recover anti-aliased and neutral outline pixels close to the seed,
-              # without reaching the broad shadow or detached label/artifact.
               keep = cv2.dilate(component, np.ones((25, 25), np.uint8), iterations=1).astype(bool)
               keep &= coarse.astype(bool)
-
               soft_alpha = np.clip((distance - 10) / 34 * 255, 0, 255).astype(np.uint8)
               alpha = np.minimum(rgba[:, :, 3], soft_alpha)
               alpha[~keep] = 0
@@ -100,12 +96,12 @@ jobs:
               top = max(0, int(ys.min()) - pad)
               right = min(w, int(xs.max()) + pad + 1)
               bottom = min(h, int(ys.max()) + pad + 1)
-
               cropped = Image.fromarray(rgba, 'RGBA').crop((left, top, right, bottom))
               target_h = 128
               target_w = max(1, round(cropped.width * target_h / cropped.height))
               resized = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
               resized.save(OUT / target, optimize=True)
+              resized.save(REVIEW / target, optimize=True)
               rendered.append((label, resized))
               metadata.append({
                   'source': source,
@@ -132,10 +128,130 @@ jobs:
               py = 165 - sprite.height
               preview.paste(sprite, (px, py), sprite)
               draw.text((ox + cell_w // 2, 184), label, fill='#111111', anchor='mm')
-          preview.save(OUT / 'sprite_preview.png', optimize=True)
-          (OUT / 'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
-          print(json.dumps(metadata, indent=2))
+          preview.save(REVIEW / 'sprite_preview.png', optimize=True)
+          (REVIEW / 'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
           PY
+      - name: Patch renderer and smoke coverage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          render_path = Path('src/render.js')
+          render = render_path.read_text(encoding='utf-8')
+          loader = r'''  // SPRITE-01: presentation-only pawn art. Browser images load once and
+          // remain optional; Node tests and failed assets keep the vector placeholder.
+          const PAWN_SPRITE_PATHS = {
+            front: 'Sprites/Placeholders/processed/pawn_front.png',
+            side: 'Sprites/Placeholders/processed/pawn_side.png',
+            back: 'Sprites/Placeholders/processed/pawn_back.png'
+          };
+          const pawnSpriteSlots = {
+            front: { image: null, failed: false },
+            side: { image: null, failed: false },
+            back: { image: null, failed: false }
+          };
+          let pawnSpriteLoadStarted = false;
+          function ensurePawnSprites() {
+            if (pawnSpriteLoadStarted || typeof Image === 'undefined') return;
+            pawnSpriteLoadStarted = true;
+            for (const key of Object.keys(PAWN_SPRITE_PATHS)) {
+              const slot = pawnSpriteSlots[key];
+              const image = new Image();
+              image.decoding = 'async';
+              image.onload = () => { slot.image = image; };
+              image.onerror = () => { slot.failed = true; slot.image = null; };
+              image.src = PAWN_SPRITE_PATHS[key];
+            }
+          }
+          function pawnSpriteForFacing(facing) {
+            ensurePawnSprites();
+            const dx = Math.cos(facing), dy = Math.sin(facing);
+            let key = 'side', mirror = false;
+            if (Math.abs(dy) >= Math.abs(dx)) key = dy >= 0 ? 'front' : 'back';
+            else mirror = dx < 0;
+            return { image: pawnSpriteSlots[key].image, mirror };
+          }
+          ensurePawnSprites();'''
+          if 'const PAWN_SPRITE_PATHS' not in render:
+              marker = '  // ---- projection ---------------------------------------------------------'
+              if marker not in render:
+                  raise RuntimeError('Projection marker not found in render.js')
+              render = render.replace(marker, loader + '\n\n' + marker, 1)
+
+          pawn_functions = r'''  function drawPawnPlaceholder(ctx, s, z, facing, bob) {
+            const fx = Math.cos(facing), fy = Math.sin(facing) * 0.6;
+            const bodyH = 34 * z;
+            ctx.beginPath(); ctx.ellipse(s.x, s.y - bodyH * 0.45 + bob, 9 * z, bodyH * 0.5, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#dcdcde'; ctx.fill(); ctx.strokeStyle = '#8a8a92'; ctx.lineWidth = 1.4; ctx.stroke();
+            const hy = s.y - bodyH + bob;
+            ctx.beginPath(); ctx.arc(s.x, hy, 7 * z, 0, Math.PI * 2); ctx.fillStyle = '#ededf0'; ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(s.x + fx * 6 * z, hy + fy * 6 * z, 2 * z, 0, Math.PI * 2); ctx.fillStyle = '#2a2a2e'; ctx.fill();
+          }
+
+          function drawPawnFigure(ctx, s, z, pawn, facing, selected, time) {
+            const bob = pawn.moving ? Math.sin(time * 11) * 1.6 * z : 0;
+            ctx.save();
+            ctx.globalAlpha = 0.34; ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.ellipse(s.x, s.y, 11 * z, 5.5 * z, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1;
+            if (selected) {
+              ctx.strokeStyle = '#f2f2f4'; ctx.lineWidth = 1.6 * z; ctx.setLineDash([6 * z, 4 * z]);
+              ctx.beginPath(); ctx.ellipse(s.x, s.y, 15 * z, 7.5 * z, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+            }
+            const sprite = pawnSpriteForFacing(facing);
+            if (sprite.image) {
+              const drawH = 42 * z;
+              const naturalW = sprite.image.naturalWidth || sprite.image.width || 1;
+              const naturalH = sprite.image.naturalHeight || sprite.image.height || 1;
+              const drawW = drawH * naturalW / naturalH;
+              ctx.save();
+              ctx.translate(s.x, s.y + bob);
+              if (sprite.mirror) ctx.scale(-1, 1);
+              ctx.drawImage(sprite.image, -drawW / 2, -drawH, drawW, drawH);
+              ctx.restore();
+            } else {
+              drawPawnPlaceholder(ctx, s, z, facing, bob);
+            }
+            ctx.restore();
+          }'''
+          pattern = re.compile(r"  function drawPawnFigure\(ctx, s, z, pawn, facing, selected, time\) \{.*?\n  \}\n\n  // centre a camera", re.S)
+          render, count = pattern.subn(lambda _: pawn_functions + '\n\n  // centre a camera', render, count=1)
+          if count != 1:
+              raise RuntimeError(f'Expected one drawPawnFigure replacement, got {count}')
+          render_path.write_text(render, encoding='utf-8')
+
+          smoke_path = Path('tests/smoke/smoke.mjs')
+          smoke = smoke_path.read_text(encoding='utf-8')
+          if "sprites: processed pawn assets load" not in smoke:
+              marker = '  // ── 1. boot: main menu, default station in memory (R2-07) ────────────────'
+              addition = r'''  // SPRITE-01: all renderer sprite assets must resolve from file:// and Pages.
+              const spriteAssets = await page.evaluate(async () => {
+                const paths = [
+                  'Sprites/Placeholders/processed/pawn_front.png',
+                  'Sprites/Placeholders/processed/pawn_side.png',
+                  'Sprites/Placeholders/processed/pawn_back.png',
+                ];
+                return Promise.all(paths.map(src => new Promise(resolve => {
+                  const image = new Image();
+                  image.onload = () => resolve({ src, ok: image.naturalWidth > 0 && image.naturalHeight > 0, width: image.naturalWidth, height: image.naturalHeight });
+                  image.onerror = () => resolve({ src, ok: false, width: 0, height: 0 });
+                  image.src = new URL(src, document.baseURI).href;
+                })));
+              });
+              ck('sprites: processed pawn assets load', spriteAssets.every(asset => asset.ok), spriteAssets);
+
+          '''
+              if marker not in smoke:
+                  raise RuntimeError('Boot marker not found in smoke.mjs')
+              smoke = smoke.replace(marker, addition + marker, 1)
+              smoke_path.write_text(smoke, encoding='utf-8')
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run unit tests before committing
+        run: npm test
       - name: Upload processed sprites for review
         uses: actions/upload-artifact@v4
         with:
@@ -143,3 +259,17 @@ jobs:
           path: .sprite-output
           include-hidden-files: true
           if-no-files-found: error
+      - name: Commit generated assets and integration
+        run: |
+          git config user.name 'Codex'
+          git config user.email 'codex@users.noreply.github.com'
+          git add Sprites/Placeholders/processed/pawn_front.png \
+                  Sprites/Placeholders/processed/pawn_side.png \
+                  Sprites/Placeholders/processed/pawn_back.png \
+                  src/render.js tests/smoke/smoke.mjs
+          if git diff --cached --quiet; then
+            echo 'No integration changes to commit.'
+          else
+            git commit -m 'Integrate pawn sprites [skip sprite-helper]'
+            git push origin HEAD:${{ github.head_ref }}
+          fi
