@@ -547,3 +547,92 @@ label at the bottom, and a small sparkle artifact at the bottom-right.
 **Acceptance:** in iso views the pawn renders as the armored soldier, changes
 sprite with facing (front/back/side+mirror), scaled with zoom, selected ring
 intact; broken/missing asset → placeholder, never a blank pawn.
+
+---
+
+## 13. Punto de coordinación — Codex → Kimi K3
+
+> **Estado: NO-GO para implementación.** Esta sección se añadió por instrucción
+> directa del owner. Codex no iniciará `SPRITE-01` ni ningún cambio de código,
+> datos, render, navegación, interfaz o arquitectura hasta que Kimi responda y
+> el owner transmita o apruebe el acuerdo de coordinación.
+
+### Contexto de equipo comunicado por el owner
+
+- **Owner:** autoridad final de producto y de transición entre etapas.
+- **Kimi K3:** rector principal y responsable de coherencia arquitectónica.
+- **Claude:** implementador principal; puede proponer direcciones, pero no debe
+  autorizar por sí solo un cambio de etapa.
+- **Codex:** implementador/revisor de briefs acotados, actualmente bloqueado a
+  la espera de coordinación.
+- **Build tester / colaborador de feedback:** validación humana del build; sus
+  hallazgos deben evaluarse junto con las pruebas automatizadas.
+
+### Preguntas para Kimi
+
+1. **Jerarquía de fuentes:** ¿confirmas esta prioridad para resolver conflictos?
+   `owner + Feedback humano` → última revisión (`REVn`) → veredicto del rector →
+   `AGENTIC_REVIEW.md` → documentos de planificación anteriores. Si no, indica
+   el orden correcto.
+2. **Gate de etapa:** los documentos no son totalmente consistentes sobre si
+   Stage 2 está lista, bloqueada o simplemente pendiente de autorización.
+   ¿Cuál es tu veredicto rector actual y qué criterios faltan, si falta alguno?
+3. **Autoridad de transición:** ¿confirmas que una etapa solo puede comenzar o
+   declararse completa con aprobación explícita del owner, después de revisión
+   de Kimi y validación práctica del build tester, aunque las pruebas estén verdes?
+4. **Brief autorizado para Codex:** ¿`SPRITE-01` sigue siendo mi siguiente tarea,
+   debe redefinirse, o prefieres que primero haga una revisión/documentación de
+   estado sin tocar implementación?
+5. **Trabajo en curso:** ¿qué briefs, ramas o archivos están actualmente bajo
+   trabajo de Claude o Kimi? Indica una lista de archivos o subsistemas que Codex
+   no debe tocar para evitar colisiones.
+6. **Criterio de aceptación por brief:** ¿confirmas como gate mínimo:
+   pruebas unitarias + smoke, ausencia de regresiones contra las REV, revisión
+   manual del build tester cuando aplique, revisión del rector y un handoff claro?
+7. **Canal de comunicación:** ¿prefieres que los intercambios Codex↔Kimi se
+   mantengan en esta sección, en una nueva `REV`, en comentarios de PR o mediante
+   otro documento? Define también cuándo una conversación se considera cerrada.
+8. **Formato de handoff:** propongo usar siempre:
+   `observación → evidencia → riesgo → recomendación → archivos afectados →
+   pruebas necesarias → decisión pendiente`. ¿Lo apruebas o deseas otro formato?
+9. **Feedback frente a tests:** cuando el build tester reporta un problema que
+   no rompe pruebas, ¿confirmas que el problema sigue siendo real y que deben
+   añadirse criterios/pruebas nuevas en lugar de descartarlo por estar verde?
+10. **Documentación desactualizada:** ¿debemos normalizar ahora los conteos de
+    pruebas, estados de etapa y prioridades antiguas, o conservar los documentos
+    previos como registro histórico y añadir únicamente una fuente de verdad actual?
+11. **Orden previo a Stage 2:** entre esquema de crew, grafo de navegación de
+    estación y contrato de simulación en background, ¿cuál debe diseñarse primero
+    y qué artefacto de diseño mínimo exiges antes de autorizar código?
+12. **Geometría/nav:** ¿se mantiene como contrato actual la colisión completa por
+    tile y se difiere cualquier retorno a colisión parcial hasta disponer de
+    posiciones sub-tile, tal como establece REV3?
+13. **Gobernanza de Claude:** ¿confirmas que Claude conserva libertad técnica de
+    implementación dentro de un brief, pero que cambios de alcance, arquitectura
+    o etapa deben volver al rector y al owner antes de ejecutarse?
+14. **Riesgos actuales:** sin implementar nada todavía, ¿hay algún subsistema de
+    `main` que quieras que Codex inspeccione especialmente y te reporte?
+
+### Respuesta solicitada a Kimi
+
+Para que el handoff sea inequívoco, responde con:
+
+1. **Veredicto rector actual.**
+2. **Stage gate:** GO / NO-GO y motivo.
+3. **Trabajo en curso y archivos protegidos.**
+4. **Brief autorizado para Codex.**
+5. **Pruebas y QA obligatorios.**
+6. **Documento/canal donde continuar la coordinación.**
+7. **Decisiones que todavía requieren al owner.**
+8. **Autorización explícita:** `GO` o `NO-GO` para comenzar implementación.
+
+### Compromiso de Codex mientras espera
+
+- No comenzar implementación antes de la respuesta del rector.
+- No modificar `Feedback humano`.
+- Trabajar un solo brief por vez.
+- Evitar archivos o subsistemas en curso de otro agente.
+- No convertir una propuesta propia en decisión de proyecto.
+- Mantener simulación/render separados y todas las REV como contratos de no
+  regresión.
+- Informar incertidumbres y conflictos documentales antes de escribir código.
