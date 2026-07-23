@@ -399,6 +399,23 @@
 
     out.levels = levels.map((lvl, li) => normalizeLevel(lvl, li, warnings));
 
+    // REV3.1 migration: saves written before the full-collision default can
+    // carry walls with an explicit collision:'partial'. Loading them as-is
+    // re-introduces the exact "pawn walks into the wall" bug (human feedback
+    // round 2). Coerce every stored partial wall to full; the partial nav
+    // machinery stays available for runtime use, not for stored Stage-1 maps.
+    let partialCoerced = 0;
+    for (const lvl of out.levels) {
+      for (const room of lvl.rooms) {
+        for (const row of room.tiles) {
+          for (const t of row) {
+            if (t && t.wall && t.wall.collision === 'partial') { t.wall.collision = 'full'; partialCoerced++; }
+          }
+        }
+      }
+    }
+    if (partialCoerced) warnings.push(`${partialCoerced} partial-collision wall(s) upgraded to full collision (REV3.1).`);
+
     // links: keep only those whose endpoints resolve to real levels
     const levelIds = new Set(out.levels.map(l => l.id));
     const rawLinks = Array.isArray(input.links) ? input.links : [];
