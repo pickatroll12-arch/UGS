@@ -236,6 +236,20 @@ check('wallBlocks true for any wall, false for null', data.wallBlocks(data.creat
   check('migration drops legacy wallMaterial field', up.levels[0].rooms[0].tiles[0][0].wallMaterial === undefined);
 }
 
+// 8b. REV3.1: stored partial walls migrate to full collision on load
+{
+  const withPartial = {
+    format: data.FORMAT, formatVersion: 2, name: 'P', startLevelId: 'L1',
+    levels: [{ id: 'L1', name: 'D', entry: { roomId: 'R1', x: 0, y: 0 }, rooms: [{ id: 'R1', size: { w: 2, h: 1 }, transform: { x: 0, y: 0, rotation: 0 }, objects: [], events: [],
+      tiles: [[{ floor: 'deck', wall: { kind: 'diagonal', orientation: 0, collision: 'partial', material: 'hull' } }, { floor: 'deck', wall: { kind: 'rounded', orientation: 90, collision: 'partial', material: 'hull' } }]] }] }],
+    links: []
+  };
+  const { save: mig, warnings: mw } = save.deserialize(JSON.stringify(withPartial));
+  const m0 = mig.levels[0].rooms[0].tiles[0][0].wall, m1 = mig.levels[0].rooms[0].tiles[0][1].wall;
+  check('REV3.1: stored partial walls become full on load', m0.collision === 'full' && m1.collision === 'full');
+  check('REV3.1: migration reports the upgrade as a warning', mw.some(w => /partial-collision/i.test(w)));
+}
+
 // 9. build economy (R2-08)
 check('new save has credits + build costs', s.resources.credits === 500 && s.buildCosts.wall === 2 && s.buildCosts.deck === 100);
 {

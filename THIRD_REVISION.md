@@ -85,14 +85,21 @@ Game mode). The chip is dev vocabulary leaking into the game fiction.
 
 ## Verification status
 
-- `npm test` — **162 passed, 0 failed** (6 suites).
+- `npm test` — **164 passed, 0 failed** (6 suites).
 - `npm run smoke` — **44 passed, 0 failed** (incl. all BUG-01 elevator
   round-trips and the 8 new REV3 checks).
 - Visual check: plan view renders square cells, flat diagonal/block walls,
   object pads with rotation ticks, pawn disc with heading.
+- REV3.1 verified against the human's own TEST map: 18 stored partial walls
+  migrate to full on import; all 18 tiles report blocked in nav.
 
 ## Notes for Claude
 
+- **REV3.1 (second feedback round):** REV3 changed the *default*, but saves
+  authored before it store `collision: 'partial'` explicitly — importing such
+  a map re-introduced the walk-through-walls bug. `normalizeSave()` now coerces
+  every stored partial wall to `'full'` and reports the count as a warning.
+  Guard: `src/data.test.js` "REV3.1: stored partial walls become full on load".
 - Do **not** re-enable partial-by-default wall collision without sub-tile pawn
   positions — that's the exact bug the human reported.
 - `Feedback humano` is read-only for agents. New human feedback arriving there
