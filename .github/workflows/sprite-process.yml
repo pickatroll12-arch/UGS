@@ -132,4 +132,5 @@ jobs:
         with:
           name: sprite-01-processed
           path: .sprite-output
+          include-hidden-files: true
           if-no-files-found: error
