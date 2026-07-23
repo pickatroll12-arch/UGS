@@ -91,7 +91,7 @@
       // tool hints (bottom line / tooltips)
       'tool.select.hint': 'Click selects an object (or the tile); double-click selects the whole room; Alt+click forces the tile under an object.',
       'tool.floor.hint': 'Paint floor tiles with the selected material.',
-      'tool.wall.hint': 'Raise walls with the selected kind and material. Blocks fill the tile; diagonal/rounded pieces block only their closed side (pawns pass the open side). Press R to rotate the piece.',
+      'tool.wall.hint': 'Raise walls with the selected kind and material. Every wall kind blocks its whole tile (partial-collision pieces are a later stage). Press R to rotate the piece.',
       'tool.object.hint': 'Place the selected object. Some are interactive in Play.',
       'tool.entry.hint': 'Set the deck spawn point where the pawn appears in Play.',
       'tool.erase.hint': 'Remove the topmost thing under the cursor (object, then wall, then floor).',
@@ -348,6 +348,7 @@
       'status.projection': 'View: {name}.',
       'proj.isoTilted': 'Isometric (tilted)',
       'proj.isoFlat': 'Isometric (flat)',
+      'proj.topDown': 'Top-down (plan)',
       'confirm.deleteRoom': 'Delete room "{name}" and everything in it? This also removes any links attached to it.',
       // shared values
       'val.none': 'none',
@@ -404,7 +405,7 @@
 
       'tool.select.hint': 'Clic selecciona un objeto (o el tile); doble-clic selecciona toda la sala; Alt+clic fuerza el tile bajo un objeto.',
       'tool.floor.hint': 'Pinta tiles de piso con el material seleccionado.',
-      'tool.wall.hint': 'Levanta paredes con el tipo y material elegidos. El bloque llena el tile; diagonal/redondeada bloquean solo su lado cerrado (el pawn pasa por el lado abierto). Pulsa R para rotar la pieza.',
+      'tool.wall.hint': 'Levanta paredes con el tipo y material elegidos. Toda pared bloquea su tile completo (las piezas de colisión parcial son de una etapa posterior). Pulsa R para rotar la pieza.',
       'tool.object.hint': 'Coloca el objeto seleccionado. Algunos son interactivos al Jugar.',
       'tool.entry.hint': 'Fija el punto de aparición del pawn en el deck al Jugar.',
       'tool.erase.hint': 'Quita lo que esté encima del cursor (objeto, luego pared, luego piso).',
@@ -643,6 +644,7 @@
       'status.projection': 'Vista: {name}.',
       'proj.isoTilted': 'Isométrica (inclinada)',
       'proj.isoFlat': 'Isométrica (plana)',
+      'proj.topDown': 'Cenital (plano)',
       'confirm.deleteRoom': '¿Borrar la sala "{name}" y todo lo que contiene? También elimina los enlaces asociados.',
       'val.none': 'ninguno',
       'val.interactive': 'interactivo',

@@ -59,7 +59,10 @@
   #simChip { display: none; font-size: 11px; font-weight: 800; letter-spacing: .1em;
     color: #ffd24a; padding: 4px 9px; border: 1px solid #6b5a2a; border-radius: 20px;
     background: rgba(255,210,74,0.08); animation: simpulse 1.6s ease-in-out infinite; }
-  body.playing #simChip { display: inline-block; }
+  /* REV3 (human feedback): the "Simulating" chip is DEV language — show it only
+     in Dev mode's test play. In Game mode the sim IS the game, so the chip is
+     hidden to keep the fiction (the sim itself still runs, verified by smoke). */
+  body.mode-dev.playing #simChip { display: inline-block; }
   @keyframes simpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
   .iconbtn { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-weight: 800;
     display: flex; align-items: center; justify-content: center; }
