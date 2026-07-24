@@ -44,17 +44,36 @@ function mkRoom(w = 6, h = 6) { return D.createRoom('R', w, h); }
   check('rutas deterministas', JSON.stringify(a) === JSON.stringify(b));
 }
 
-// ---- render math: proyección cenital + yaw ---------------------------------
+// ---- render math: proyección ¾ dimétrica (contrato C4) ----------------------
 {
   const cam = { x: 100, y: 50, zoom: 1, rot: 0 };
-  const s = R.worldToScreen(cam, 2, 3);
-  check('cenital: celdas cuadradas', s.x === 100 + 2 * R.TILE && s.y === 50 + 3 * R.TILE);
+  const s = R.worldToScreen(cam, 2, 3, 0);
+  check('¾: eje X sin compresión', s.x === 100 + 2 * R.TILE);
+  check('¾: eje Y comprimido por TILT', Math.abs(s.y - (50 + 3 * R.TILE * R.TILT)) < 1e-9);
+  check('¾: la altura z sube en pantalla', R.worldToScreen(cam, 0, 0, 1).y === 50 - R.TILE);
   cam.rot = Math.PI / 6;
-  const w = R.screenToWorld(cam, ...(() => { const p = R.worldToScreen(cam, 2.5, -1.5); return [p.x, p.y]; })());
+  const w = R.screenToWorld(cam, ...(() => { const p = R.worldToScreen(cam, 2.5, -1.5, 0); return [p.x, p.y]; })());
   check('yaw: screenToWorld invierte worldToScreen', Math.abs(w.x - 2.5) < 1e-9 && Math.abs(w.y + 1.5) < 1e-9);
-  const s0 = R.worldToScreen({ ...cam, rot: 0 }, 2.5, -1.5);
-  const s1 = R.worldToScreen(cam, 2.5, -1.5);
+  const s0 = R.worldToScreen({ ...cam, rot: 0 }, 2.5, -1.5, 0);
+  const s1 = R.worldToScreen(cam, 2.5, -1.5, 0);
   check('yaw: la rotación mueve el punto en pantalla', Math.hypot(s1.x - s0.x, s1.y - s0.y) > 1);
+}
+{
+  // a 45° (diamante Xenonauts) las caras +x e +y miran a la cámara; -x/-y no
+  const r = Math.PI / 4;
+  check('C4: cara este visible a 45°', R.faceVisible(1, 0, r));
+  check('C4: cara sur visible a 45°', R.faceVisible(0, 1, r));
+  check('C4: cara oeste oculta a 45°', !R.faceVisible(-1, 0, r));
+  check('C4: cara norte oculta a 45°', !R.faceVisible(0, -1, r));
+  // tras girar 90° se invierten
+  check('C4: girar 90° oculta la cara sur', !R.faceVisible(0, 1, r + Math.PI / 2) || R.faceVisible(1, 0, r + Math.PI / 2));
+}
+{
+  // fade de oclusión: una pared delante del PCJ (hacia la cámara) se desvanece
+  const cam = { x: 0, y: 0, zoom: 1, rot: 0 };
+  check('C4: pared delante del PCJ → fade', R.wallFadesPawn(cam, { x: 5, y: 6 }, { x: 5, y: 5 }));
+  check('C4: pared detrás del PCJ → sin fade', !R.wallFadesPawn(cam, { x: 5, y: 4 }, { x: 5, y: 5 }));
+  check('C4: pared lejos lateral → sin fade', !R.wallFadesPawn(cam, { x: 9, y: 6 }, { x: 5, y: 5 }));
 }
 {
   const room = D.createRoom('R', 4, 4);
