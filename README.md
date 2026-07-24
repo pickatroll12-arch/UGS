@@ -25,7 +25,7 @@ src/
     nav.js            A* click→ruta (4-dir, determinista)
     agents.js         el PCJ ("mono"): movimiento solo por click→ruta
   render/             [RENDERIZADOR GRÁFICO]
-    render.js         canvas 2D, vista CENITAL con rotación yaw libre (cámara RTS)
+    render.js         canvas 2D, vista ¾ ortogonal tipo Xenonauts (C4): diamante, paredes extruidas, fade de oclusión
   app/
     app.js            pegamento: modos (menú/dev/juego), cámara, input, bucle
 tests/
@@ -40,7 +40,7 @@ tests/
 - **Lógica PRE-CARGADA POR NEXO** (Nexo = nivel/fase). No hay life-sim global: cada Nexo declara su lógica en datos y el engine la ejecuta solo mientras ese Nexo está cargado.
 - **Toda pared bloquea su tile completo.** Siempre. (Contrato C1, nacido del feedback humano.)
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
-- **Tests en verde antes de cualquier entrega:** `npm test` (49 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (59 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -51,7 +51,7 @@ tests/
 
 | Acción | Control |
 |---|---|
-| Rotar vista (cenital, yaw libre) | `Q` / `E` |
+| Rotar vista (¾, pasos de 90°) | `Q` / `E` |
 | Zoom anclado al cursor | rueda del ratón |
 | Pan | arrastrar (cualquier botón) |
 | Pausa (en juego) | `Espacio` |

@@ -1,10 +1,13 @@
 {
   "name": "ugs",
   "version": "0.1.0",
-  "description": "UGS — Station Builder. Base revamp: motor por Nexos (lógica pre-cargada), cámara cenital RTS.",
+  "description": "UGS — Station Builder. Base revamp: motor por Nexos (lógica pre-cargada), vista ¾ tipo Xenonauts.",
   "private": true,
   "type": "commonjs",
   "scripts": {
     "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
   }
 }
