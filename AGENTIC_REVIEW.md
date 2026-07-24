@@ -135,3 +135,28 @@ Las smoke tests están rotas a propósito (dependen del motor borrado).
 **Pruebas necesarias (humano):** ninguna todavía — esperar entrega de Claude.
 **Decisión pendiente:** (1) ¿cámara con rotación en 4 pasos de 90° o solo pan+zoom cenital?
 (2) ¿Quién redacta el árbol de hitos de la Fase 1: humanos o borrador de Kimi K3 aprobado por ustedes?
+
+
+### §6.1 — KIMI K3 (Rector) — REVAMP COMPLETO: purga + base nueva desde cero — 2026-07-25
+**Observación:** Claude usó `/compact` y modificó archivos fuera de la pauta, así que el
+Rector ejecutó el revamp definitivo: (1) **purgado TODO el código y herramientas del repo**
+(27 archivos: src completo, tests/smoke, scripts, sandbox, Sprites/Placeholders,
+.github/workflows, index.html, package.json, CURRENT_OBJECTIVE (DISCONTINUED).md);
+(2) **reconstruida la base desde cero** con estructura estricta por capas:
+`src/core/` (core, data, save — componentes lógicos base), `src/engine/` (nav, engine,
+agents — lógica del juego con eventos PRE-CARGADOS POR NEXO), `src/render/` (cenital +
+rotación yaw libre, única excepción: engine solo usa matemática de poses),
+`src/app/` (pegamento); (3) **creado `PROMPT_MAESTRO.md`** — lectura OBLIGATORIA
+para todo agente actual y futuro antes de tocar el repo.
+**Evidencia:** `node tests/run.js` → 49 passed, 0 failed; boot smoke headless verde
+(menú → dev pinta pared → pick exacto bajo cámara rotada → juego spawnea →
+clic→ruta llega al destino, cero errores de consola).
+**Riesgo:** no hay smoke test en CI (se corren a mano con Chromium local); la cámara
+es solo cenital+yaw — la vista isométrica quedó descartada por diseño.
+**Recomendación:** todo agente lee en este orden: `REVISION MAESTRA 2` →
+`PROMPT_MAESTRO.md` → `Feedback humano` → este documento. Ningún agente escribe
+código sin brief firmado. El código purgado NO se recupera — se rehace mejor o no se hace.
+**Archivos afectados:** todo el repo (purgados 27, creados 16 nuevos).
+**Pruebas necesarias (humano):** abrir `index.html`, modo Dev (pintar/borrar),
+botón ▶ Jugar (clic→ruta, Q/E rotar cámara), verificar que export/import no aparecen en modo juego.
+**Decisión pendiente:** OBJP-1.1 queda congelado hasta orden explícita de los 3 colaboradores.
