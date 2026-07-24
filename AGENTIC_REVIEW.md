@@ -181,3 +181,42 @@ entre cámara y PCJ, (4) sprites de pie. Implementar solo con orden explícita.
 **Pruebas necesarias (humano):** ninguna — cambio documental.
 **Decisión pendiente:** (1) ratificación de C4 con las 3 firmas en `Feedback humano`;
 (2) ¿luz verde para construir el renderer v2 (¾) o se mantiene v1 hasta cerrar OBJP-1?
+
+
+### §6.3 — KIMI K3 (Rector) — RENDERER V2: vista ¾ tipo Xenonauts implementada — 2026-07-25
+**Observación:** con luz verde del organizador ("construye el render, MUY cercano a
+Xenonauts"), se reescribió `render/render.js` cumpliendo el contrato C4:
+(1) **proyección dimétrica ¾** — grid cuadrado en diamante (yaw base 45°,
+pasos de 90° con Q/E), eje Y comprimido (TILT 0.55), altura z real;
+(2) **paredes extruidas** (WALL_H 0.72) con tapa + caras laterales sombreadas
+según luz de escena, caras entre paredes vecinas ocultas (sin costuras), y
+huellas diagonal/rounded extruidas como prismas;
+(3) **fade de oclusión**: paredes entre la cámara y el PCJ se dibujan al 35%;
+(4) **sprites de pie**: PCJ con sombra elíptica, cuerpo, casco y visor hacia el
+facing; objetos como cajas extruidas (puerta abierta baja a 0.1).
+El picking se resuelve SIEMPRE en el plano del suelo (screenToWorld es inversa
+exacta): la altura visual de las paredes nunca engaña al clic.
+**Evidencia:** `node tests/run.js` → **59 checks, ALL SUITES GREEN** (10 nuevos:
+proyección ¾, caras visibles a 45°/90°, fade; se reemplazó el test "cenital:
+celdas cuadradas" — requisito cambiado por C4 aprobado, documentado aquí).
+Smoke funcional headless (playwright-core + chromium): boot ?auto=game →
+spawn → clic→ruta a (5,5) ✓ → rotar 90° (135°) → clic→ruta a (7,2) ✓ →
+**cero errores de consola**. Capturas de la escena demo a 45° y 135° con fade
+verificado visualmente.
+**Riesgo:** sprites placeholder geométricos (cápsula + casco), no arte final;
+el fade usa un cono heurístico (podría requerir ajuste con salas más altas);
+`?auto=` es un hook de debug que conviene mantener fuera de la vista del jugador.
+**Recomendación:** -FROMO/-BX prueban el checklist visual abajo; siguiente
+candidato de milestone: sprites reales o mejoras de materiales (texturas de
+suelo/pared) cuando el arte esté aprobado. OBJP-1.1 sigue congelado.
+**Archivos afectados:** `src/render/render.js` (reescrito), `src/app/app.js`
+(yaw 45°+pasos 90°, hook ?auto=), `src/core/data.js` (paleta de suelos),
+`tests/engine.test.js`, `index.html`, `README.md`, `package.json`
+(devDependency playwright-core para smokes).
+**Pruebas necesarias (humano):** (1) abrir `index.html` → Jugar: sala en
+diamante ¾, PCJ de pie; (2) Q/E rota en 90° y las caras de las paredes cambian;
+(3) clic→ruta funciona en los 4 ángulos; (4) ponerse tras una pared: se
+desvanece; (5) modo Dev: pintar/borrar con la vista ¾; (6) export/import sigue
+oculto en juego.
+**Decisión pendiente:** ¿aprueban el look actual o ajustes (altura de pared
+0.72, TILT 0.55, paleta)? Ratificación de C4 pendiente de las 3 firmas.
