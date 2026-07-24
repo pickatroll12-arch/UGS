@@ -31,9 +31,9 @@
 
   // ---- materiales / catálogos mínimos (crecen por necesidad, no por ocio) --
   const FLOORS = {
-    deck:  { id: 'deck',  color: '#3a4250', line: '#4a5468' },
-    dark:  { id: 'dark',  color: '#2a2f3a', line: '#3a4250' },
-    light: { id: 'light', color: '#4a5468', line: '#5a6678' }
+    deck:  { id: 'deck',  color: '#475061', line: '#4a5468' },
+    dark:  { id: 'dark',  color: '#39404d', line: '#3a4250' },
+    light: { id: 'light', color: '#5d6880', line: '#5a6678' }
   };
   const WALL_KINDS = ['block', 'diagonal', 'rounded'];
   const OBJECT_DEFS = {
