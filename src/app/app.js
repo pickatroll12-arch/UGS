@@ -5,8 +5,8 @@
  * Vive ENTRE la lógica y el renderizador: orquesta, pero las reglas del
  * juego están en engine/ y los píxeles en render/ (ver PROMPT_MAESTRO.md §2).
  *
- * Cámara (decisión del Rector): vista CENITAL con rotación yaw libre.
- *   Q/E ............ rotar la vista (el mundo gira bajo la cámara)
+ * Cámara (contrato C4): vista ¾ ORTOGONAL tipo Xenonauts.
+ *   Q/E ............ rotar la vista en pasos de 90° (el mundo gira bajo la cámara)
  *   rueda .......... zoom anclado al cursor
  *   arrastrar ...... pan (botón izquierdo en vacío / medio / derecho)
  *
@@ -32,7 +32,7 @@
     nexoId: null,
     tool: 'floor',                   // dev: floor | wall | erase | entry | link
     brush: { floor: 'deck', wallKind: 'block', wallOrient: 0 },
-    cam: { x: 0, y: 0, zoom: 1, rot: 0 },
+    cam: { x: 0, y: 0, zoom: 1, rot: Math.PI / 4 },   // C4: yaw base 45° (diamante)
     hover: null,
     pendingLink: null,
     paused: false
@@ -56,7 +56,7 @@
       engine.start(nexo());
       spawnAtEntry();
       app.paused = false;
-      setStatus('Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar');
+      setStatus('Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°');
     } else {
       engine.stop();
       agents.clear();
@@ -168,9 +168,9 @@
   window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-    if (k === 'q') rotateCam(-Math.PI / 12);
-    else if (k === 'e') rotateCam(Math.PI / 12);
-    else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar'); }
+    if (k === 'q') rotateCam(-Math.PI / 2);            // C4: yaw en pasos de 90°
+    else if (k === 'e') rotateCam(Math.PI / 2);
+    else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°'); }
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
 
@@ -314,7 +314,9 @@
   resize();
   refreshNexoSel();
   R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
-  setMode('menu');
+  // debug/smoke hook: ?auto=dev|game salta el menú
+  const auto = new URLSearchParams(location.search).get('auto');
+  setMode(auto === 'dev' || auto === 'game' ? auto : 'menu');
   requestAnimationFrame(frame);
 
   // hook de depuración/tests
