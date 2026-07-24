@@ -1,11 +1,12 @@
 /*
- * UGS — browser smoke tests (BUG-06).  Run: npm run smoke
+ * UGS — browser smoke tests.  Run: npm run smoke
  *
- * A reproducible Playwright/Chromium headless pass over the real editor. It is
- * the safety net for the whole app: boot, i18n statuses, destructive resize
- * warning, and — most importantly — a full elevator round-trip that proves
- * room-motion events survive deck transitions (BUG-01), including pause and
- * speed 3 during travel.
+ * A reproducible Playwright/Chromium headless pass over the real app. It is the
+ * safety net for the whole thing: boot, i18n statuses, destructive resize
+ * warning, the top-down plan camera + full-tile wall collision (human feedback
+ * that motivated the reset), the reset's [COMPONENTES LÓGICOS] (engine / nav /
+ * agents — click→route PCJ, per-Nexo declared room-motion), and a full elevator
+ * round-trip that proves motion survives phase transitions, incl. pause/speed.
  *
  * Playwright is resolved from local node_modules first (CI: devDependency),
  * then from a known global install (this managed environment). Chromium is the
@@ -252,6 +253,29 @@ const run = async () => {
   });
   ck('REV3: default diagonal wall blocks its whole tile', pw.defaultFullBlocked, pw);
   ck('partial wall (opt-in): tile walkable, closed side blocked, open side passable', pw.walkable && pw.eastBlocked && pw.westOpen, pw);
+
+  // ── 3e'. reset [COMPONENTES LÓGICOS]: engine/nav/agents API + click→route ──
+  const core = await page.evaluate(() => {
+    const U = window.UGS;
+    const api = {
+      engine: !!(U.engine && typeof U.engine.create === 'function'),
+      nav: !!(U.nav && typeof U.nav.findPath === 'function' && typeof U.nav.buildWalkGrid === 'function'),
+      agents: !!(U.agents && typeof U.agents.create === 'function'),
+      engineRuns: !!(U._engine && typeof U._engine.isRunning === 'function' && typeof U._engine.activeCount === 'function'),
+    };
+    // click→route on the live deck: a path exists on open floor, and none
+    // crosses a full wall (the pawn can never walk through it).
+    const D = U.data, N = U.nav;
+    const room = U.editorApp.save.levels[0].rooms[0];
+    const path = N.findPath(room, 2, 2, 5, 4, D.objectBlocks);
+    const sealed = D.createRoom('s', 3, 3);
+    sealed.tiles = Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => D.createTile('deck')));
+    for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) sealed.tiles[y][x].wall = D.createWall('block', 0, 'hull');
+    return { api, hasPath: Array.isArray(path) && path.length > 0, endsAtTarget: !!path && path[path.length - 1].x === 5 && path[path.length - 1].y === 4, walledOff: N.findPath(sealed, 0, 0, 1, 1, D.objectBlocks) === null };
+  });
+  ck('logic core: engine/nav/agents modules are loaded with their API', core.api.engine && core.api.nav && core.api.agents && core.api.engineRuns, core.api);
+  ck('nav: click→route returns a path that reaches the target', core.hasPath && core.endsAtTarget, core);
+  ck('nav: no route through a fully walled-off tile (never walks through walls)', core.walledOff, core);
 
   // ── 4. import the two-deck fixture through the real file input ────────────
   await page.setInputFiles('#fileInput', FIXTURE);

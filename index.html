@@ -434,7 +434,11 @@
 <script src="src/data.js"></script>
 <script src="src/save.js"></script>
 <script src="src/render.js"></script>
-<!-- RESET TOTAL: engine.js / nav.js / agents.js eliminados. Claude los reescribe desde cero (ver AGENTIC_REVIEW.md) y reinserta sus script tags aquí. -->
+<!-- [COMPONENTES LÓGICOS] reescritos post-reset (ver AGENTIC_REVIEW §4). Orden = dependencias:
+     nav (usa core) → engine (usa core) → agents (usa core+nav+data). La lógica NUNCA importa el render. -->
+<script src="src/nav.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/agents.js"></script>
 <script src="src/editor.js"></script>
 </body>
 </html>
