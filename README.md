@@ -1,122 +1,64 @@
-# UGS
+# UGS — Station Builder
 
-**UGS** is an isometric, top-down space-station builder and life-sim engine,
-built with plain HTML5 + Canvas 2D — **no build step, no bundler, no server**.
-The long-term vision is a station manager with STALKER-style autonomous NPCs
-(A-life). The current work is **Stage 1**: a solid map/level engine plus a
-**Station Builder** editor.
+Constructor de estaciones espaciales en el navegador. **Vanilla JS + Canvas 2D, sin build, sin dependencias de runtime.**
 
-> Design philosophy: **mechanics before graphics**, and a strict
-> **simulation / rendering separation** so the renderer can be upgraded later
-> without rewriting the data model, pathfinding, simulation, or save format.
+> ⚠️ **ESTADO: REVAMP TOTAL (2026-07-24).** Todo el código anterior fue purgado por decisión de los 3 colaboradores humanos. Esta es la base nueva, construida desde cero siguiendo `REVISION MAESTRA 2` y la filosofía de estructura de `PROMPT_MAESTRO.md`. Léelos antes de tocar nada.
 
----
+## Documentos rectores (en este orden)
 
-## Running the app
+1. **`REVISION MAESTRA 2`** — la visión y el estándar maestro del proyecto (objetivos OBJP-1/1.1/2, definiciones, gobernanza).
+2. **`PROMPT_MAESTRO.md`** — la estructura del código y las reglas de trabajo para TODO agente (actual o futuro). Es el "prompt" que cualquier IA debe seguir.
+3. **`AGENTIC_REVIEW.md`** — registro de coordinación entre agentes (handoffs, veredictos del Rector).
+4. **`Feedback humano`** — canal exclusivo de los 3 colaboradores humanos. Los agentes solo leen.
 
-There is no build step. Open the editor directly in a browser:
+## Estructura del código
 
 ```
-# just open the file — file:// works, no server needed
-index.html
-```
-
-All game code lives under `src/` as classic `<script>` files that hang off a
-single `window.UGS` namespace, loaded in dependency order by `index.html`.
-
-- **Build mode** — paint floors/walls, place objects, set entry points, link
-  decks, and author room motion (shift / rotate / orbit / carousel).
-- **Play mode** — run the deterministic simulation: click a floor tile to walk
-  the pawn, a door to open it, an elevator to change deck. Pause + 1×/2×/3×.
-
-Maps export/import to a versioned JSON save file (file-picker only — no fetch).
-
----
-
-## Running the tests
-
-The core, data, simulation, and navigation modules run headlessly in Node
-(they use UMD tails, so the same files load in the browser and in Node).
-
-```
-npm test          # runs every src/*.test.js suite and prints a grand total
-```
-
-Or run a single suite directly:
-
-```
-node src/core.test.js
-node src/data.test.js
-node src/engine.test.js
-node src/nav.test.js
-```
-
-The runner (`scripts/run-tests.js`) auto-discovers any new `src/*.test.js`.
-
-### Browser smoke tests
-
-A headless Playwright/Chromium pass exercises the real editor end to end (boot,
-i18n statuses, destructive-resize warning, and a full elevator round-trip that
-proves room motion survives deck transitions — incl. pause and speed 3):
-
-```
-npm install                                   # first time only (Playwright)
-npx playwright install --with-deps chromium   # first time only (browser)
-npm run smoke
-```
-
-In the managed dev environment Chromium is pre-installed and the runner finds
-Playwright automatically, so `npm run smoke` works without the install steps.
-
----
-
-## Project structure
-
-```
-index.html            Station Builder app (loads src/* in dependency order)
-package.json           npm test → scripts/run-tests.js
-scripts/run-tests.js   aggregate Node test runner
-
+index.html            shell: canvas + menú + topbar (sin lógica de juego)
 src/
-  core.js     heavy-core foundation: seeded RNG, EventBus, FixedTimestep,
-              Grid2D, Pool, math helpers            (+ core.test.js)
-  data.js     schemas / factories / registries: materials, objects, layers,
-              rooms, room events, save file          (+ data.test.js)
-  save.js     serialize / deserialize, versioned migrations, export/import
-  render.js   stateless isometric renderer (world<->screen, picking, draw)
-  engine.js   deterministic fixed-step simulation, room-motion runtime
-              (+ engine.test.js)
-  nav.js      8-directional A* pathfinding (binary heap, typed arrays)
-              (+ nav.test.js)
-  agents.js   pawn manager installed as an engine system
-  editor.js   the Station Builder application (tools, inspector, modes)
-
-sandbox/      early movement prototype (kept for reference, not the app)
+  core/               [COMPONENTES LÓGICOS — base]
+    core.js           ids, EventBus síncrono, FixedTimestep, helpers
+    data.js           modelo: Estación → Nexo → Sala → Tile/Pared/Objeto (+contratos C1-C3)
+    save.js           persistencia JSON (formato v1, sin legacy)
+  engine/             [COMPONENTES LÓGICOS — juego]
+    engine.js         runtime PRE-CARGADO POR NEXO (eventos declarativos de sala)
+    nav.js            A* click→ruta (4-dir, determinista)
+    agents.js         el PCJ ("mono"): movimiento solo por click→ruta
+  render/             [RENDERIZADOR GRÁFICO]
+    render.js         canvas 2D, vista CENITAL con rotación yaw libre (cámara RTS)
+  app/
+    app.js            pegamento: modos (menú/dev/juego), cámara, input, bucle
+tests/
+  run.js              runner sin dependencias (node tests/run.js)
+  core.test.js        core + data + save (contratos de colisión incluidos)
+  engine.test.js      nav + engine + agents + matemáticas de picking/yaw
 ```
 
-Rooms store their tiles, objects, and pawns in **room-local coordinates**; a
-room-level transform (offset + rotation + pivot) composes them into world space
-at draw time, so a moving room carries its contents unchanged.
+## Reglas de oro (resumen; el detalle está en PROMPT_MAESTRO.md)
 
----
+- **Lógica y renderizador NUNCA se mezclan.** `core/` y `engine/` no importan nada de `render/` (excepción única: `engine.js` usa matemáticas de pose de `render.js`; `render.js` jamás muta estado).
+- **Lógica PRE-CARGADA POR NEXO** (Nexo = nivel/fase). No hay life-sim global: cada Nexo declara su lógica en datos y el engine la ejecuta solo mientras ese Nexo está cargado.
+- **Toda pared bloquea su tile completo.** Siempre. (Contrato C1, nacido del feedback humano.)
+- **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
+- **Tests en verde antes de cualquier entrega:** `npm test` (49 checks hoy; solo crece).
 
-## Documentation
+## Cómo correr
 
-- [`ROADMAP.md`](ROADMAP.md) — vision, the Captain + 3-crew MVP, and the Stage 1
-  milestones (M1–M6) with per-milestone notes.
-- [`AGENTIC_REVIEW.md`](AGENTIC_REVIEW.md) — reviewer/rector notes: validated
-  strengths, architectural gaps, and performance considerations.
-- [`CURRENT_OBJECTIVE.md`](CURRENT_OBJECTIVE.md) — the active plan: a revised
-  Stage 1 usability pass (editor layout, localization, room resizing) that must
-  land before Stage 2 begins.
+- **App:** abrir `index.html` en un navegador (o GitHub Pages del repo).
+- **Tests:** `npm test` (requiere solo Node ≥ 18).
 
----
+## Controles (base actual)
 
-## Architecture rules (do not break)
+| Acción | Control |
+|---|---|
+| Rotar vista (cenital, yaw libre) | `Q` / `E` |
+| Zoom anclado al cursor | rueda del ratón |
+| Pan | arrastrar (cualquier botón) |
+| Pausa (en juego) | `Espacio` |
+| Caminar (en juego) | click en un tile |
+| Abrir puerta (en juego) | click en la puerta |
+| Viajar de Nexo (en juego) | click en el ascensor (▣) |
 
-1. Room-local coordinates; room transforms are first-class data.
-2. Simulation / render separation — `render.js` never owns game logic.
-3. Deterministic fixed-timestep simulation (seeded RNG, reproducible saves).
-4. Versioned, normalized save/load; save data stays language-neutral.
-5. Pluggable engine systems (agents, and future crew/events, install as systems).
-6. Mechanics before graphics.
+## Gobernanza
+
+Los agentes de IA (Kimi K3, Claude, Codex) trabajan bajo supervisión humana obligatoria: nada entra a `main` sin handoff en `AGENTIC_REVIEW.md` y validación de los 3 colaboradores. Ver `REVISION MAESTRA 2` §GOBERNANZA y `PROMPT_MAESTRO.md` §6.
