@@ -70,6 +70,17 @@ Hoy sí. Debe seguir siendo sí siempre.
 - **C2:** Objeto sólido bloquea; puerta/compuerta ABIERTA deja pasar.
 - **C3:** `floor:'void'` no es transitable.
 
+**Contrato de cámara (C4, visión aprobada por el organizador 2026-07-25):**
+- La VISIÓN de cámara es **¾ ortogonal tipo Xenonauts**: vista aérea inclinada
+  (~30° de elevación), paredes con altura visible, sprites "de pie", yaw en pasos
+  de 90°, y fade/cutaway de paredes que ocluyan la acción.
+- La CONSTRUCCIÓN es sobre grid plano tipo **RimWorld / Prison Architect**
+  (todo tile a tile, sin perspectiva de punto de fuga NUNCA).
+- El renderer actual (top-down plano) es **v1 transitorio**: la lógica es
+  agnóstica de cámara y NO se toca al migrar al renderer ¾ (v2). La migración
+  solo reescribe `render/render.js` + sprites. Ningún agente "reinterpreta"
+  este contrato: la cámara final es ¾, el plano es el peldaño técnico.
+
 **Reglas de módulos:**
 - Un módulo = una responsabilidad = un archivo. Si crece otra responsabilidad, nace otro módulo.
 - Todo módulo lógico usa el patrón UMD del repo (navegador `window.UGS.*` + Node `module.exports`).
