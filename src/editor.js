@@ -18,7 +18,11 @@
   const CORE = window.UGS.core;
   const I = window.UGS.i18n;
   const t = (k, p) => I.t(k, p);
-  const engine = window.UGS.engine.create();
+  // RESET TOTAL: engine/nav/agents eliminados; Claude los reescribe (ver AGENTIC_REVIEW.md).
+  // Stubs nulos: el editor arranca en modo solo-construcción hasta que exista el motor nuevo.
+  const NULL_ENGINE = { start() {}, stop() {}, update() {}, fire() {}, activeCount: () => 0, time: 0, bus: null };
+  const NULL_AGENTS = { install() {}, clear() {}, spawn() {}, place() {}, order: () => false, pawns: [], selected: null };
+  const engine = window.UGS.engine ? window.UGS.engine.create() : NULL_ENGINE;
   const simClock = new CORE.FixedTimestep(30, 6);   // 30 Hz deterministic sim
   let needsRender = true;                            // render-on-demand (idle editor draws nothing)
   function invalidate() { needsRender = true; }
@@ -1385,7 +1389,7 @@
     filterSel.addEventListener('change', e => { app.selectFilter = e.target.value; setStatus(t('status.filter', { filter: t('filter.' + e.target.value) })); });
 
     // agent manager + deterministic movement system (Play mode)
-    agents = window.UGS.agents.create(engine);
+    agents = window.UGS.agents ? window.UGS.agents.create(engine) : NULL_AGENTS;
     agents.install();
     if (engine.bus) engine.bus.on('pawn:arrived', onPawnArrived);
 
