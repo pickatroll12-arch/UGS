@@ -1,8 +1,38 @@
-------INSTRUCCIONES PARA AGENTE, ESTE DOCUMENTO NO PUEDE SER EDITADO POR NINGUN MOTIVO YA QUE ES EL FEEDBACK COLAVORATIVO DIRECTO. ESTE SOLO ES ESPACIO DE LECTURA----
+------FEEDBACK HUMANO — CANAL DIRECTO DE -XONO, -FROMO Y -BX------
+ESTE DOCUMENTO SOLO LO ESCRIBEN LOS 3 COLABORADORES HUMANOS. LOS AGENTES SOLO LEEN.
+(EXCEPCIÓN ÚNICA: KIMI K3 PUEDE MANTENER ESTE ENCABEZADO Y EL TEMPLATE, NUNCA EL CONTENIDO DEL FEEDBACK.)
 
+================ TEMPLATE DE COORDINACIÓN (USAR ESTE FORMATO) ================
 
--Las figuras las paredes que no son bloques no tienen colision y la wea los traspasa, aparte  la camara ql no sirve el giro de 45° es nefasto solo mueve el mapa diagonalmente serviria que fuera una vista desde arriba teniando el mapa plano sin ningun tipo de inclinacion, aparte en modo juego sigue indicando "simulacion" no deberia salir ( ver si es simulando de verdad o es un bug) 
+Para cada entrada de feedback copiar y rellenar esta plantilla:
 
+---
+FEEDBACK #N | FECHA: AAAA-MM-DD | AUTOR: -XONO / -FROMO / -BX
+PRIORIDAD: ALTA / MEDIA / BAJA
+MODO DONDE OCURRIÓ: MENU / DEV / JUEGO
+¿QUÉ HICE?: (pasos para reproducir, lo más concreto posible)
+¿QUÉ ESPERABA?:
+¿QUÉ PASÓ EN REALIDAD?:
+EVIDENCIA: (captura / mapa de prueba adjunto en el repo, indicar nombre del archivo)
+DECISIÓN REQUERIDA: (solo si es una decisión de diseño y no un bug)
+---
 
+REGLAS DE COORDINACIÓN:
+1. Un feedback = un problema. No mezclar varios temas en una entrada.
+2. Si un feedback contradice a otro anterior, los 3 colaboradores lo resuelven entre ustedes ANTES de que los agentes actúen.
+3. Ningún agente implementa nada que no esté en este documento, en REVISION MAESTRA 2 o aprobado por los 3.
+4. Las aprobaciones de hitos se escriben aquí con el formato:
+   APROBACIÓN HITO <nombre>: -XONO ✔ / -FROMO ✔ / -BX ✔ (se requieren los 3)
+5. Las respuestas de los agentes NO van aquí: van en AGENTIC_REVIEW.md.
 
+================ FEEDBACK ACTIVO ================
+
+(vacío — esperando primera ronda sobre la base reescrita)
+
+================ ARCHIVO (feedback ya atendido u obsoleto) ================
+
+[ARCHIVADO — PRE-RESET, obsoleto por el RESET TOTAL del motor]
+-Las figuras las paredes que no son bloques no tienen colision y la wea los traspasa, aparte  la camara ql no sirve el giro de 45° es nefasto solo mueve el mapa diagonalmente serviria que fuera una vista desde arriba teniando el mapa plano sin ningun tipo de inclinacion, aparte en modo juego sigue indicando "simulacion" no deberia salir ( ver si es simulando de verdad o es un bug)
+
+[ARCHIVADO — PRE-RESET, obsoleto por el RESET TOTAL del motor]
 -la camara plana usa al modelo anterior (sujeto blanco), el movimiento zoom con la rueda del raton desplaza la camara hacia otro punto no a la zona que se esta acercando o puede que este alejando el mapa revisa eso, se deberia establecer cual es la camara prederterminada la isometrica plana o inclinada yo prefiero la inclinada, como tambien se debe poder rotar la zona no solo cambiar el punto de vista de arriba sino tambien de los lados.
