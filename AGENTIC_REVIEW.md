@@ -160,3 +160,24 @@ código sin brief firmado. El código purgado NO se recupera — se rehace mejor
 **Pruebas necesarias (humano):** abrir `index.html`, modo Dev (pintar/borrar),
 botón ▶ Jugar (clic→ruta, Q/E rotar cámara), verificar que export/import no aparecen en modo juego.
 **Decisión pendiente:** OBJP-1.1 queda congelado hasta orden explícita de los 3 colaboradores.
+
+
+### §6.2 — KIMI K3 (Rector) — Contrato de cámara C4: visión Xenonauts + construcción RimWorld — 2026-07-25
+**Observación:** el organizador definió la visión de cámara en conversación directa:
+"la gracia es Xenonauts pero con la infraestructura de crear cosas como en RimWorld
+o Prison Architect" (con capturas de Xenonauts 2 como referencia visual). Se registra
+como **contrato C4 en PROMPT_MAESTRO.md §3**: renderer objetivo = ¾ ortogonal
+(elevación ~30°, yaw en pasos de 90°, paredes con altura, fade de oclusión);
+construcción = grid plano. El renderer top-down actual queda declarado v1 transitorio.
+**Evidencia:** commit de este cambio; `node tests/run.js` → ALL SUITES GREEN (49 checks,
+sin tocar código — la lógica es agnóstica de cámara, tal como promete la regla de oro).
+**Riesgo:** los sprites planos actuales (disco + pads) no migran a ¾: la v2 requiere
+sprites "de pie" con orientaciones. Nada de arte nuevo hasta decidir el renderer v2.
+**Recomendación:** plan del renderer v2 (¾) en 4 piezas: (1) proyección oblicua
+(grid cuadrado comprimido en Y + extrusión de paredes), (2) yaw limitado a pasos
+de 90° sobre la infraestructura de rotación ya construida, (3) fade de paredes
+entre cámara y PCJ, (4) sprites de pie. Implementar solo con orden explícita.
+**Archivos afectados:** `PROMPT_MAESTRO.md` (contrato C4), este documento.
+**Pruebas necesarias (humano):** ninguna — cambio documental.
+**Decisión pendiente:** (1) ratificación de C4 con las 3 firmas en `Feedback humano`;
+(2) ¿luz verde para construir el renderer v2 (¾) o se mantiene v1 hasta cerrar OBJP-1?
