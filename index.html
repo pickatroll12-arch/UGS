@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UGS — Station Builder (base revamp)</title>
+<style>
+  :root { --bg:#0a0c10; --panel:rgba(16,20,28,0.94); --line:#2c3340; --text:#e8eef4; --muted:#8b95a6; --accent:#62e0ef; --accent-ink:#06202a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  #game { position:fixed; inset:0; width:100vw; height:100vh; display:block; cursor:crosshair; }
+  button,select { font:inherit; color:var(--text); background:#1c222c; border:1px solid var(--line); border-radius:7px; padding:7px 10px; cursor:pointer; }
+  button:hover { border-color:#4a5666; }
+  button.active { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
+
+  /* menú principal */
+  #menu { position:fixed; inset:0; z-index:30; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    background:radial-gradient(circle at 50% 28%, #171b24, #0b0c10 70%); }
+  #menu h1 { font-size:28px; letter-spacing:.12em; margin:0 0 4px; }
+  #menu p { color:var(--muted); margin:0 0 18px; font-size:12px; }
+  #menu button { width:240px; padding:11px; font-size:14px; text-align:left; }
+  #menu button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
+
+  /* barra superior */
+  #topbar { position:fixed; z-index:5; top:0; left:0; right:0; height:44px; display:none; align-items:center; gap:10px;
+    padding:0 12px; background:var(--panel); border-bottom:1px solid var(--line); }
+  #topbar .brand { font-weight:800; font-size:13px; letter-spacing:.06em; }
+  #topbar .spacer { flex:1; }
+  #topbar .hint { font-size:11px; color:var(--muted); }
+
+  /* toolbar dev */
+  #toolbar { position:fixed; z-index:5; top:44px; left:0; bottom:0; width:86px; display:none; flex-direction:column; gap:5px;
+    padding:8px 7px; background:var(--panel); border-right:1px solid var(--line); }
+  #toolbar button { font-size:11px; padding:7px 4px; }
+  #toolbar select { font-size:11px; padding:5px 4px; }
+
+  #hud { position:fixed; z-index:4; top:54px; right:12px; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted);
+    background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:7px; padding:6px 9px; pointer-events:none; }
+  #status { position:fixed; z-index:6; left:50%; bottom:14px; transform:translateX(-50%); font-size:12px;
+    background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:8px 12px; pointer-events:none; }
+
+  /* en juego no hay chrome de desarrollo; exportar/importar BLOQUEADOS en juego */
+  body[data-mode="game"] #toolbar, body[data-mode="menu"] #toolbar { display:none !important; }
+  body[data-mode="game"] #tExport, body[data-mode="game"] #tImport,
+  body[data-mode="game"] #nexoSel { display:none !important; }
+</style>
+</head>
+<body data-mode="menu">
+<canvas id="game"></canvas>
+
+<div id="menu">
+  <h1>UGS · STATION BUILDER</h1>
+  <p>Base revamp — motor por Nexos, cámara cenital RTS</p>
+  <button id="mGame" class="primary">Jugar</button>
+  <button id="mDev">Modo Dev</button>
+</div>
+
+<header id="topbar">
+  <span class="brand">UGS</span>
+  <select id="nexoSel" title="Nexo activo"></select>
+  <span class="hint">Q/E rotar · rueda zoom · arrastrar pan</span>
+  <span class="spacer"></span>
+  <button id="tPlay">▶ Jugar</button>
+  <button id="tExport">Exportar</button>
+  <button id="tImport">Importar</button>
+  <button id="tMenu">☰ Menú</button>
+</header>
+
+<nav id="toolbar">
+  <button data-tool="floor" class="active">▦ Suelo</button>
+  <select id="floorSel"><option value="deck">deck</option><option value="dark">dark</option><option value="light">light</option></select>
+  <button data-tool="wall">▤ Pared</button>
+  <select id="wallSel"><option value="block">block</option><option value="diagonal">diagonal</option><option value="rounded">rounded</option></select>
+  <button data-tool="object">◈ Objeto</button>
+  <select id="objSel"><option value="console">console</option><option value="door">door</option><option value="elevator">elevator</option><option value="plant">plant</option></select>
+  <button data-tool="erase">⌫ Borrar</button>
+  <button data-tool="entry">⚑ Entrada</button>
+  <button data-tool="link">⛓ Link</button>
+  <button id="tNexo">+ Nexo</button>
+</nav>
+
+<div id="hud"></div>
+<div id="status">Cargando…</div>
+<input id="fileInput" type="file" accept="application/json,.json" hidden>
+
+<!-- orden de carga = orden de dependencia; todo cuelga de window.UGS -->
+<script src="src/core/core.js"></script>
+<script src="src/core/data.js"></script>
+<script src="src/core/save.js"></script>
+<script src="src/render/render.js"></script>
+<script src="src/engine/nav.js"></script>
+<script src="src/engine/engine.js"></script>
+<script src="src/engine/agents.js"></script>
+<script src="src/app/app.js"></script>
+</body>
+</html>
