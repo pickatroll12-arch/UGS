@@ -334,3 +334,48 @@ exportar estación, reimportar ambas (la biblioteca viaja en el save); (7) activ
 **Decisión pendiente:** (1) ¿mapeamos las categorías de módulo a los iconos
 IconD01-15 del kit (dirección de arte)?; (2) ¿ghost de colocación de módulo
 sobre el nexo como siguiente herramienta de la suite?
+
+
+### §6.7 — KIMI K3 (Rector) — Ghost de colocación de módulos + iconos por categoría — 2026-07-25
+**Observación:** aprobadas las dos decisiones de §6.6 por el organizador, se implementan:
+- **Ghost de colocación (sección Nexo → COLOCAR MÓDULO):** selector de blueprint y
+  modo colocación con footprint que sigue al ratón snappeado a grid; validación
+  EN VIVO con `placementCheck()` (no solapa + comparte arista — la misma regla de
+  conexión física de `placeModule`). Verde con la **arista compartida resaltada**
+  si es válida; rojo con el motivo si no. Click coloca (la sala queda con `bpId`
+  de origen), click derecho retira un módulo colocado (nunca salas propias del
+  nexo), ESC sale; la colocación múltiple queda abierta hasta salir.
+- **Iconos por categoría (dirección de arte aprobada):** energía→rayo, almacén→
+  grano, hábitat→cubierto, industria→laboratorio, general→O2; variante **verde**
+  si el diseño tiene suelo abierto, **naranja** si está vacío. En las tarjetas de
+  la biblioteca y en la cabecera del formulario. Referenciados in-situ desde
+  `!_UGS/ux/Elements/` (cero duplicación binaria).
+- Modelo: las salas ganan campo `bpId` (blueprint de origen), persistido en saves
+  (saves antiguos → null).
+**Evidencia:** `node tests/run.js` → **148 checks, ALL SUITES GREEN** (12 nuevos:
+placementCheck conexión/solape/esquina/snap a grid, sharedEdge/rectsOverlap,
+persistencia de bpId). Smoke dedicado (playwright-core + chromium) **9/9 verde**:
+icono por categoría en tarjeta, selector poblado, colocación con arista, rechazo
+por solape y por lejanía, retirada con click derecho, ESC, **cero errores de
+consola**. Capturas: ghost verde con arista resaltada, ghost rojo con motivo,
+módulo colocado renderizado y extruido junto al hub.
+**Riesgo:** el ghost valida bounding-rects axis-aligned (una sala rotada se
+aproxima por su rect, igual que en `placeModule`); deshacer/rehacer no cubre
+colocación/retirada (opera por sala editada, no por nexo); el mapeo de iconos es
+propuesta del Rector y queda como decisión humana reordenarlo (mapa declarativo
+`BP_ICONS` en app.js).
+**Recomendación:** humanos prueban el checklist abajo. Al firmarse OBJP-1.1, el
+mismo `placementCheck` sirve para la colocación con economía real.
+**Archivos afectados:** `src/engine/blueprint.js` (placementCheck/sharedEdge/
+rectsOverlap + bpId en instantiateRoom), `src/core/data.js` (room.bpId),
+`src/app/app.js` (modo colocación, ghost, iconos, placeSel), `index.html`
+(bloque COLOCAR MÓDULO, CSS de iconos), `tests/blueprint.test.js`, `README.md`,
+este documento.
+**Pruebas necesarias (humano):** (1) crear 2+ módulos con categorías distintas y
+ver sus iconos (verde = con suelo, naranja = vacío); (2) en Nexo: activar
+colocación y mover el ratón — verde pegado al nexo (arista resaltada), rojo
+lejos/solapado con el motivo en la etiqueta; (3) colocar varios módulos seguidos;
+(4) click derecho retira uno (el hub no se deja retirar); (5) ESC sale; (6)
+exportar/reimportar: las salas conservan su origen.
+**Decisión pendiente:** ¿el mapeo categoría→icono gusta o se reordena? (grano=
+almacén, cubierto=hábitat, laboratorio=industria, O2=general, rayo=energía)
