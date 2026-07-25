@@ -6,6 +6,7 @@ const R = require('../src/render/render.js');
 const NAV = require('../src/engine/nav.js');
 const ENG = require('../src/engine/engine.js');
 const AGT = require('../src/engine/agents.js');
+const BP = require('../src/engine/blueprint.js');
 
 let passed = 0, failed = 0;
 const check = (n, c) => { if (c) { passed++; console.log('  ok  ', n); } else { failed++; console.error('  FAIL', n); } };
@@ -183,6 +184,64 @@ function mkNexo() {
   check('rechazado no se mueve', pawn.x === 5 && pawn.y === 1);
   agents.place(pawn, 'otro', r.id, 2, 2);
   check('place() teletransporta sin evento', pawn.nexoId === 'otro' && pawn.x === 2);
+}
+
+// ---- blueprint: openSharedEdge ----------------------------------------------
+{
+  const nexo = D.createNexo('Nexo T');
+  const hub = D.createRoom('Hub', 10, 8);
+  D.ringWalls(hub);
+  hub.transform.x = 0; hub.transform.y = 0;
+  nexo.rooms.push(hub);
+  const bp = D.createModuleBlueprint({ name: 'Test', w: 6, h: 6 });
+  const room = BP.instantiateRoom(bp, { x: 10, y: 1 });
+  const chk = BP.placementCheck(nexo, { w: 6, h: 6 }, { x: 10, y: 1 });
+  check('placementCheck encuentra arista compartida', chk.ok && chk.touch);
+  nexo.rooms.push(room);
+  const removed = BP.openSharedEdge(nexo, room, chk.touch);
+  check('openSharedEdge quita paredes', removed > 0);
+  // E edge: room west wall (x=0) and hub east wall (x=9) should be removed
+  check('paso abierto es transitable', !room.tiles[0][0].wall && !hub.tiles[1][9].wall);
+}
+
+// ---- nav: findPathNexo multi-sala -------------------------------------------
+{
+  const nexo = D.createNexo('Nexo T');
+  const hub = D.createRoom('Hub', 10, 8);
+  D.ringWalls(hub);
+  hub.transform.x = 0; hub.transform.y = 0;
+  nexo.rooms.push(hub);
+  const bp = D.createModuleBlueprint({ name: 'Test', w: 6, h: 6 });
+  const room = BP.instantiateRoom(bp, { x: 10, y: 1 });
+  const chk = BP.placementCheck(nexo, { w: 6, h: 6 }, { x: 10, y: 1 });
+  nexo.rooms.push(room);
+  BP.openSharedEdge(nexo, room, chk.touch);
+  const path = NAV.findPathNexo(nexo, 2, 2, 12, 3);
+  check('findPathNexo cruza salas', Array.isArray(path) && path.length > 0);
+  check('ruta termina en sala destino', path[path.length - 1].roomId === room.id);
+  check('sin ruta sin abertura', NAV.findPathNexo(nexo, 2, 2, 20, 20) === null);
+}
+
+// ---- agents: multi-sala ------------------------------------------------------
+{
+  const nexo = D.createNexo('Nexo T');
+  const hub = D.createRoom('Hub', 10, 8);
+  D.ringWalls(hub);
+  hub.transform.x = 0; hub.transform.y = 0;
+  nexo.rooms.push(hub);
+  const bp = D.createModuleBlueprint({ name: 'Test', w: 6, h: 6 });
+  const room = BP.instantiateRoom(bp, { x: 10, y: 1 });
+  const chk = BP.placementCheck(nexo, { w: 6, h: 6 }, { x: 10, y: 1 });
+  nexo.rooms.push(room);
+  BP.openSharedEdge(nexo, room, chk.touch);
+  const eng = ENG.create();
+  const agents = AGT.create(eng);
+  agents.install();
+  eng.start(nexo);
+  const pawn = agents.spawn(nexo.id, hub.id, 2, 2);
+  check('order() multi-sala acepta destino en otro cuarto', agents.order(pawn, room, 2, 2) === true);
+  for (let i = 0; i < 120; i++) eng.update(nexo, 1 / 30);
+  check('el PCJ llega y cambia de sala', Math.round(pawn.x) === 2 && Math.round(pawn.y) === 2 && pawn.roomId === room.id);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

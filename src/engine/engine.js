@@ -126,6 +126,7 @@
 
     function start(nexo) {
       tracks.clear(); time = 0; running = true;
+      api.nexo = nexo;  // expuesto para agents.js (multi-sala)
       // PRE-CARGA: solo la lógica declarada de ESTE Nexo.
       for (const room of nexo.rooms) {
         for (const ev of (room.events || [])) {
@@ -134,7 +135,7 @@
         }
       }
     }
-    function stop() { running = false; tracks.clear(); }
+    function stop() { running = false; tracks.clear(); api.nexo = null; }
     function update(nexo, dt) {
       if (!running) return;
       time += dt;
@@ -149,11 +150,13 @@
     function activeCount() { return tracks.size; }
     function addSystem(fn) { systems.push(fn); return () => { const i = systems.indexOf(fn); if (i >= 0) systems.splice(i, 1); }; }
 
-    return {
+    const api = {
       start, stop, update, fire, addSystem, bus, activeCount,
+      nexo: null,  // Nexo activo (para agents.js)
       get time() { return time; },
       get running() { return running; }
     };
+    return api;
   }
 
   return { create };

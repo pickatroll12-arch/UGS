@@ -81,5 +81,25 @@ check('ids únicos', CORE.uid('x') !== CORE.uid('x'));
   check('link válido sobrevive', back.links[0].to.nexoId === b.id);
 }
 
+// normalizeModuleLibraryInput: formatos múltiples y colisión de ids
+{
+  const bp1 = D.createModuleBlueprint({ name: 'A', w: 4, h: 4 });
+  const bp2 = D.createModuleBlueprint({ name: 'B', w: 5, h: 5 });
+  const existing = [bp1.id];
+  // objeto suelto
+  const r1 = D.normalizeModuleLibraryInput(bp2, existing);
+  check('objeto suelto importa 1 módulo', r1.count === 1 && r1.added[0].name === 'B');
+  // array
+  const r2 = D.normalizeModuleLibraryInput([bp1, bp2], existing);
+  check('array importa 2 módulos', r2.count === 2);
+  check('colisión de id genera nuevo id', r2.added[0].id !== bp1.id);
+  // {moduleLibrary}
+  const r3 = D.normalizeModuleLibraryInput({ moduleLibrary: [bp2] }, existing);
+  check('{moduleLibrary} importa correctamente', r3.count === 1);
+  // entrada inválida
+  const r4 = D.normalizeModuleLibraryInput(undefined, existing);
+  check('entrada inválida devuelve 0', r4.count === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

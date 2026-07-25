@@ -85,5 +85,83 @@
     return null;
   }
 
-  return { walkable, findPath, DIRS };
+  // A* multi-sala a nivel de Nexo (coords MUNDO). Devuelve ruta como lista de
+  // pasos {roomId, x, y} en coords LOCALES de la sala de cada paso, o null.
+  // Guard: si alguna sala tiene rotación ≠ 0, fallback a null (no soportado hoy).
+  function findPathNexo(nexo, sx, sy, tx, ty, opts) {
+    sx |= 0; sy |= 0; tx |= 0; ty |= 0;
+    const maxExpand = (opts && opts.maxExpand) || 8192;
+
+    // construir mapa mundial de walkability
+    const world = new Map();  // clave "wx,wy" → {roomId, walkable}
+    for (const room of nexo.rooms) {
+      if (room.transform.rotation !== 0) return null;  // rotación no soportada
+      const t = room.transform;
+      for (let ly = 0; ly < room.size.h; ly++) {
+        for (let lx = 0; lx < room.size.w; lx++) {
+          const wx = t.x + lx, wy = t.y + ly;
+          const key = wx + ',' + wy;
+          const tile = room.tiles[ly][lx];
+          let walkable = tile.floor !== 'void' && !tile.wall;
+          if (walkable) {
+            for (const o of room.objects) {
+              if (o.x !== lx || o.y !== ly) continue;
+              if (!o.solid) continue;
+              if (o.openable && o.open) continue;
+              walkable = false; break;
+            }
+          }
+          world.set(key, { roomId: room.id, walkable });
+        }
+      }
+    }
+
+    const startKey = sx + ',' + sy, targetKey = tx + ',' + ty;
+    if (!world.has(targetKey) || !world.get(targetKey).walkable) return null;
+    if (sx === tx && sy === ty) return [];
+    if (!world.has(startKey) || !world.get(startKey).walkable) return null;
+
+    const gScore = new Map();
+    const cameFrom = new Map();
+    const h = (x, y) => Math.abs(x - tx) + Math.abs(y - ty);
+    const open = [{ x: sx, y: sy, f: h(sx, sy), n: 0 }];
+    let counter = 1;
+    gScore.set(startKey, 0);
+
+    let expanded = 0;
+    while (open.length) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f || (open[i].f === open[bi].f && open[i].n < open[bi].n)) bi = i;
+      const cur = open.splice(bi, 1)[0];
+      const ck = cur.x + ',' + cur.y;
+      const g = gScore.get(ck);
+      if (cur.x === tx && cur.y === ty) {
+        const path = [];
+        let k = ck;
+        while (cameFrom.has(k)) {
+          const [wx, wy] = k.split(',').map(Number);
+          const cell = world.get(k);
+          const room = nexo.rooms.find(r => r.id === cell.roomId);
+          path.push({ roomId: cell.roomId, x: wx - room.transform.x, y: wy - room.transform.y });
+          k = cameFrom.get(k);
+        }
+        path.reverse();
+        return path;
+      }
+      if (++expanded > maxExpand) return null;
+      for (const [dx, dy] of DIRS) {
+        const nx = cur.x + dx, ny = cur.y + dy;
+        const nk = nx + ',' + ny;
+        if (!world.has(nk) || !world.get(nk).walkable) continue;
+        const ng = g + 1;
+        if (gScore.has(nk) && gScore.get(nk) <= ng) continue;
+        gScore.set(nk, ng);
+        cameFrom.set(nk, ck);
+        open.push({ x: nx, y: ny, f: ng + h(nx, ny), n: counter++ });
+      }
+    }
+    return null;
+  }
+
+  return { walkable, findPath, findPathNexo, DIRS };
 });

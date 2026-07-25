@@ -217,10 +217,63 @@
     return { ok: true, reason: '', x: mx, y: my, touch };
   }
 
+  // Abre paso entre dos salas que comparten arista: quita paredes en el intervalo
+  // compartido y pone suelo 'deck' si queda void. Devuelve cuántas paredes quitó.
+  function openSharedEdge(nexo, room, touch) {
+    if (!touch || !touch.edge) return 0;
+    const other = nexo.rooms.find(r => r.id === touch.roomId);
+    if (!other) return 0;
+    const e = touch.edge;
+    let removed = 0;
+
+    if (e.side === 'W' || e.side === 'E') {
+      // arista vertical: intervalo y0..y1 (coords mundo)
+      // side W: room está al OESTE de other → room east wall (lx=size.w-1), other west wall (ox=0)
+      // side E: room está al ESTE de other → room west wall (lx=0), other east wall (ox=size.w-1)
+      const roomLx = e.side === 'W' ? room.size.w - 1 : 0;
+      const otherOx = e.side === 'W' ? 0 : other.size.w - 1;
+      for (let wy = e.y0; wy < e.y1; wy++) {
+        const ly = wy - room.transform.y;
+        if (ly >= 0 && ly < room.size.h) {
+          const t = room.tiles[ly][roomLx];
+          if (t.wall) { t.wall = null; removed++; }
+          if (t.floor === 'void') t.floor = 'deck';
+        }
+        const oy = wy - other.transform.y;
+        if (oy >= 0 && oy < other.size.h) {
+          const t = other.tiles[oy][otherOx];
+          if (t.wall) { t.wall = null; removed++; }
+          if (t.floor === 'void') t.floor = 'deck';
+        }
+      }
+    } else {
+      // arista horizontal: intervalo x0..x1 (coords mundo)
+      // side N: room está al NORTE de other → room south wall (ly=size.h-1), other north wall (oy=0)
+      // side S: room está al SUR de other → room north wall (ly=0), other south wall (oy=size.h-1)
+      const roomLy = e.side === 'N' ? room.size.h - 1 : 0;
+      const otherOy = e.side === 'N' ? 0 : other.size.h - 1;
+      for (let wx = e.x0; wx < e.x1; wx++) {
+        const lx = wx - room.transform.x;
+        if (lx >= 0 && lx < room.size.w) {
+          const t = room.tiles[roomLy][lx];
+          if (t.wall) { t.wall = null; removed++; }
+          if (t.floor === 'void') t.floor = 'deck';
+        }
+        const ox = wx - other.transform.x;
+        if (ox >= 0 && ox < other.size.w) {
+          const t = other.tiles[otherOy][ox];
+          if (t.wall) { t.wall = null; removed++; }
+          if (t.floor === 'void') t.floor = 'deck';
+        }
+      }
+    }
+    return removed;
+  }
+
   return {
     paintFloorRect, paintWallOutline, eraseRect, floodFillFloor, clearRoom, resizeRoom,
     snapshotRoom, restoreRoom,
     toModuleDef, instantiateRoom,
-    rectsOverlap, sharedEdge, placementCheck
+    rectsOverlap, sharedEdge, placementCheck, openSharedEdge
   };
 });

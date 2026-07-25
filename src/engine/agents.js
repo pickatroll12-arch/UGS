@@ -70,12 +70,31 @@
       // CLICK→RUTA. false = sin ruta (tile inalcanzable/bloqueado).
       order(pawn, room, tx, ty) {
         if (!pawn || !room) return false;
-        const path = NAV.findPath(room, Math.round(pawn.x), Math.round(pawn.y), tx, ty);
+        const pawnRoom = room;  // compat: si es la misma sala, comportamiento actual
+        if (room.id === pawn.roomId) {
+          const path = NAV.findPath(room, Math.round(pawn.x), Math.round(pawn.y), tx, ty);
+          if (!path) return false;
+          pawn.path = path;
+          pawn.moving = path.length > 0;
+          if (!pawn.moving && engine && engine.bus) {
+            engine.bus.emit('pawn:arrived', { pawn, x: Math.round(pawn.x), y: Math.round(pawn.y) });
+          }
+          return true;
+        }
+        // multi-sala: convertir a mundo, buscar ruta, actualizar roomId por paso
+        const nexo = engine && engine.nexo;  // necesitamos el nexo activo
+        if (!nexo) return false;
+        const fromRoom = nexo.rooms.find(r => r.id === pawn.roomId);
+        if (!fromRoom) return false;
+        const worldSx = fromRoom.transform.x + Math.round(pawn.x);
+        const worldSy = fromRoom.transform.y + Math.round(pawn.y);
+        const worldTx = room.transform.x + tx;
+        const worldTy = room.transform.y + ty;
+        const path = NAV.findPathNexo(nexo, worldSx, worldSy, worldTx, worldTy);
         if (!path) return false;
         pawn.path = path;
         pawn.moving = path.length > 0;
         if (!pawn.moving && engine && engine.bus) {
-          // ya estaba encima del destino: cuenta como llegada (tiles de link)
           engine.bus.emit('pawn:arrived', { pawn, x: Math.round(pawn.x), y: Math.round(pawn.y) });
         }
         return true;
@@ -86,6 +105,14 @@
       let budget = SPEED * dt;
       while (budget > 0 && p.path.length) {
         const next = p.path[0];
+        // multi-sala: si el paso tiene roomId diferente, teletransportar al borde de la nueva sala
+        if (next.roomId && next.roomId !== p.roomId) {
+          p.roomId = next.roomId;
+          p.x = next.x;
+          p.y = next.y;
+          p.path.shift();
+          continue;
+        }
         const dx = next.x - p.x, dy = next.y - p.y;
         const dist = Math.hypot(dx, dy);
         if (dist <= budget) {

@@ -479,8 +479,11 @@
       if (!chk.ok) return setStatus('No se puede colocar: ' + chk.reason + '.');
       const room = BP.instantiateRoom(bp, { x: chk.x, y: chk.y });
       nexo().rooms.push(room);
+      // abrir paso entre la sala colocada y la sala del nexo tocada
+      const opened = BP.openSharedEdge(nexo(), room, chk.touch);
       invalidate();
-      setStatus(bp.name + ' colocado (' + nexo().rooms.length + ' salas en ' + nexo().name + ').');
+      setStatus(bp.name + ' colocado (' + nexo().rooms.length + ' salas en ' + nexo().name + ')' +
+        (opened ? ' · paso abierto (' + opened + ' paredes)' : ''));
       return;
     }
   }
@@ -488,17 +491,10 @@
     if (!hit) return;
     const pawn = agents.selected; if (!pawn) return;
     if (hit.object && hit.object.openable) { hit.object.open = !hit.object.open; invalidate(); return; }
-    // el PCJ camina en SU sala: resolver el punto contra ella si hay solape
-    let room = roomById(hit.roomId), lx = hit.lx, ly = hit.ly;
-    if (hit.roomId !== pawn.roomId) {
-      const pawnRoom = roomById(pawn.roomId); if (!pawnRoom) return;
-      const w = R.screenToWorld(app.cam, mouse.x, mouse.y);
-      const loc = R.worldToLocal(pawnRoom, w.x, w.y);
-      lx = Math.floor(loc.x); ly = Math.floor(loc.y);
-      if (lx < 0 || ly < 0 || lx >= pawnRoom.size.w || ly >= pawnRoom.size.h) return;
-      room = pawnRoom;
-    }
-    if (!agents.order(pawn, room, lx, ly)) setStatus('Sin ruta hasta ahí.');
+    // multi-sala: resolver contra la sala clicada directamente
+    const room = roomById(hit.roomId);
+    if (!room) return;
+    if (!agents.order(pawn, room, hit.lx, hit.ly)) setStatus('Sin ruta hasta ahí.');
     invalidate();
   }
 
@@ -672,10 +668,17 @@
   });
   bind('bpDel', () => {
     const bp = activeBp(); if (!bp) return;
+    // contar instancias colocadas antes de eliminar
+    let removedCount = 0;
+    for (const n of app.station.nexos) {
+      const before = n.rooms.length;
+      n.rooms = n.rooms.filter(r => r.bpId !== bp.id);
+      removedCount += before - n.rooms.length;
+    }
     app.station.moduleLibrary = app.station.moduleLibrary.filter(b => b.id !== bp.id);
     app.bpId = app.station.moduleLibrary.length ? app.station.moduleLibrary[0].id : null;
     resetEdit(); refreshBpList(); invalidate();
-    setStatus('Módulo eliminado.');
+    setStatus('Módulo eliminado (biblioteca + ' + removedCount + ' instancia(s) retiradas del nexo).');
   });
   bind('bpResize', () => {
     const bp = activeBp(); if (!bp) return;
@@ -690,21 +693,26 @@
     downloadJson('ugs_modulos.json', { moduleLibrary: app.station.moduleLibrary });
     setStatus('Biblioteca exportada (' + app.station.moduleLibrary.length + ' módulos).');
   });
+  bind('bpExportOne', () => {
+    const bp = activeBp(); if (!bp) return;
+    const slug = (bp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || bp.id);
+    downloadJson('ugs_modulo_' + slug + '.json', bp);
+    setStatus('Módulo exportado: ' + bp.name);
+  });
   bind('bpImport', () => $('bpFileInput').click());
   $('bpFileInput').addEventListener('change', async (e) => {
-    const f = e.target.files[0]; if (!f) return;
+    const files = Array.from(e.target.files || []); if (!files.length) return;
+    let totalAdded = 0;
     try {
-      const raw = JSON.parse(await f.text());
-      const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.moduleLibrary) ? raw.moduleLibrary : [raw]);
-      let n = 0;
-      for (const item of arr) {
-        const bp = D.normalizeModuleBlueprint(item);
-        if (app.station.moduleLibrary.some(b => b.id === bp.id)) bp.id = CORE.uid('bp');
-        app.station.moduleLibrary.push(bp); n++;
+      for (const f of files) {
+        const raw = JSON.parse(await f.text());
+        const result = D.normalizeModuleLibraryInput(raw, app.station.moduleLibrary.map(b => b.id));
+        app.station.moduleLibrary.push(...result.added);
+        totalAdded += result.count;
       }
-      if (n && !app.bpId) app.bpId = app.station.moduleLibrary[0].id;
+      if (totalAdded && !app.bpId) app.bpId = app.station.moduleLibrary[0].id;
       refreshBpList(); invalidate();
-      setStatus('Biblioteca importada: +' + n + ' módulo(s).');
+      setStatus('Biblioteca importada: +' + totalAdded + ' módulo(s) desde ' + files.length + ' archivo(s).');
     } catch (err) { setStatus('Error al importar módulos: ' + err.message); }
     e.target.value = '';
   });

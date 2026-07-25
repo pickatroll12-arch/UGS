@@ -144,11 +144,14 @@
         <button id="bpDup">⧉ Duplicar</button>
         <button id="bpDel">🗑 Eliminar</button>
       </div>
-      <h3 style="margin-top:10px">BIBLIOTECA (ARCHIVO)</h3>
       <div class="row">
-        <button id="bpExport">Exportar</button>
-        <button id="bpImport">Importar</button>
+        <button id="bpExportOne">⇩ Exportar módulo</button>
       </div>
+    </div>
+    <h3 style="margin-top:10px">BIBLIOTECA (ARCHIVO)</h3>
+    <div class="row">
+      <button id="bpExport">Exportar biblioteca</button>
+      <button id="bpImport">Importar</button>
     </div>
   </section>
 
@@ -167,7 +170,7 @@
 <div id="hud"></div>
 <div id="status">Cargando…</div>
 <input id="fileInput" type="file" accept="application/json,.json" hidden>
-<input id="bpFileInput" type="file" accept="application/json,.json" hidden>
+<input id="bpFileInput" type="file" accept="application/json,.json" multiple hidden>
 
 <!-- orden de carga = orden de dependencia; todo cuelga de window.UGS -->
 <script src="src/core/core.js"></script>

@@ -134,6 +134,23 @@
     return out;
   }
 
+  // Normaliza entrada de biblioteca de módulos (objeto suelto | array | {moduleLibrary})
+  // y regenera ids en colisión. Devuelve {added: [bp…], count}.
+  function normalizeModuleLibraryInput(raw, existingIds) {
+    if (!raw || (typeof raw !== 'object')) return { added: [], count: 0 };
+    const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.moduleLibrary) ? raw.moduleLibrary : [raw]);
+    const added = [];
+    const ids = new Set(existingIds || []);
+    for (const item of arr) {
+      if (!item || typeof item !== 'object') continue;
+      const bp = normalizeModuleBlueprint(item);
+      if (ids.has(bp.id)) bp.id = CORE.uid('bp');
+      ids.add(bp.id);
+      added.push(bp);
+    }
+    return { added, count: added.length };
+  }
+
   // Estado de la CAPA ESTRATÉGICA (engine/station.js): economía, hitos,
   // módulos instalados, naves. Viaja con el save; la semilla del RNG también.
   function createState() {
@@ -230,7 +247,7 @@
   return {
     SAVE_FORMAT, NEXO_SLOTS, FLOORS, WALL_KINDS, OBJECT_DEFS,
     createTile, createWall, createObjectInstance, createRoomEvent, createRoom, createNexo, createLink, createStation, createState, ringWalls,
-    createModuleBlueprint, normalizeModuleBlueprint,
+    createModuleBlueprint, normalizeModuleBlueprint, normalizeModuleLibraryInput,
     normalizeWall, normalizeTile, normalizeRoom, normalizeNexo, normalizeStation, normalizeState
   };
 });
