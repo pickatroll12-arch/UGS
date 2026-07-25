@@ -41,7 +41,7 @@
         unhook = engine.addSystem((nexo, dt, bus) => {
           for (const p of pawns) {
             if (p.nexoId !== nexo.id || !p.moving) continue;
-            step(p, dt, bus);
+            step(p, dt, bus, nexo);
           }
         });
       },
@@ -101,29 +101,36 @@
       }
     };
 
-    function step(p, dt, bus) {
+    // El movimiento se calcula en COORDS MUNDO: cada paso del path puede vivir en
+    // otra sala (multi-sala) y las coords locales de salas distintas no se pueden
+    // restar entre sí (los transforms son traslaciones; rotación=0 la garantiza
+    // findPathNexo). Al completar el paso se adopta la sala y el marco local del
+    // paso. Durante el cruce la posición local puede quedar fuera de rango: es
+    // solo una proyección, el render la dibuja igual de bien.
+    function step(p, dt, bus, nexo) {
       let budget = SPEED * dt;
       while (budget > 0 && p.path.length) {
         const next = p.path[0];
-        // multi-sala: si el paso tiene roomId diferente, teletransportar al borde de la nueva sala
-        if (next.roomId && next.roomId !== p.roomId) {
-          p.roomId = next.roomId;
-          p.x = next.x;
-          p.y = next.y;
-          p.path.shift();
-          continue;
+        let roomFrom = null, roomTo = null;
+        if (nexo) {
+          roomFrom = nexo.rooms.find(r => r.id === p.roomId) || null;
+          roomTo = (next.roomId && nexo.rooms.find(r => r.id === next.roomId)) || roomFrom;
         }
-        const dx = next.x - p.x, dy = next.y - p.y;
+        const fx = roomFrom ? roomFrom.transform.x : 0, fy = roomFrom ? roomFrom.transform.y : 0;
+        const tx = roomTo ? roomTo.transform.x : fx, ty = roomTo ? roomTo.transform.y : fy;
+        const wx = fx + p.x, wy = fy + p.y;            // peón en mundo
+        const dx = (tx + next.x) - wx, dy = (ty + next.y) - wy;
         const dist = Math.hypot(dx, dy);
         if (dist <= budget) {
+          if (roomTo) p.roomId = roomTo.id;            // adoptar sala del paso
           p.x = next.x; p.y = next.y;
           p.facingLocal = { x: dx / (dist || 1), y: dy / (dist || 1) };
           budget -= dist;
           p.path.shift();
         } else {
           p.facingLocal = { x: dx / dist, y: dy / dist };
-          p.x += p.facingLocal.x * budget;
-          p.y += p.facingLocal.y * budget;
+          p.x = wx + p.facingLocal.x * budget - fx;    // de vuelta al marco actual
+          p.y = wy + p.facingLocal.y * budget - fy;
           budget = 0;
         }
       }

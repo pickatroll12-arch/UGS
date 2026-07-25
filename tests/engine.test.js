@@ -244,5 +244,38 @@ function mkNexo() {
   check('el PCJ llega y cambia de sala', Math.round(pawn.x) === 2 && Math.round(pawn.y) === 2 && pawn.roomId === room.id);
 }
 
+// ---- agents: cruce multi-sala CONTINUO (regresión: sin teletransporte) ---------
+{
+  const nexo = D.createNexo('Nexo T');
+  const hub = D.createRoom('Hub', 10, 8);
+  D.ringWalls(hub);
+  hub.transform.x = 0; hub.transform.y = 0;
+  nexo.rooms.push(hub);
+  const bp = D.createModuleBlueprint({ name: 'Test', w: 6, h: 6 });
+  const room = BP.instantiateRoom(bp, { x: 10, y: 1 });
+  const chk = BP.placementCheck(nexo, { w: 6, h: 6 }, { x: 10, y: 1 });
+  nexo.rooms.push(room);
+  BP.openSharedEdge(nexo, room, chk.touch);
+  const eng = ENG.create();
+  const ag = AGT.create(eng); ag.install();
+  eng.start(nexo);
+  const pawn = ag.spawn(nexo.id, hub.id, 2, 2);
+  check('order() multi-sala (continuidad)', ag.order(pawn, room, 2, 2) === true);
+  const worldPos = () => {
+    const r = nexo.rooms.find(rr => rr.id === pawn.roomId);
+    return { x: r.transform.x + pawn.x, y: r.transform.y + pawn.y };
+  };
+  const dt = 1 / 30;
+  let prev = worldPos(), maxJump = 0;
+  for (let i = 0; i < 200 && pawn.moving; i++) {
+    eng.update(nexo, dt);
+    const w = worldPos();
+    maxJump = Math.max(maxJump, Math.hypot(w.x - prev.x, w.y - prev.y));
+    prev = w;
+  }
+  check('cruce sin teletransporte: desplazamiento por frame ≤ velocidad', maxJump <= AGT.SPEED * dt * 1.5 + 1e-9);
+  check('llega caminando a la sala destino', pawn.roomId === room.id && Math.round(pawn.x) === 2 && Math.round(pawn.y) === 2);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
