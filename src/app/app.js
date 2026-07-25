@@ -25,6 +25,15 @@
   const engine = window.UGS.engine.create();
   const agents = window.UGS.agents.create(engine);
   agents.install();
+  // capa estratégica (OBJP-1 upgrade): RNG sembrado desde el save + runtime
+  // de estación. Hoy corre invisible (sin UI de economía — eso es OBJP-1.1);
+  // sus eventos solo se anuncian en la barra de estado.
+  const rng = window.UGS.rng.create('ugs-station');
+  const station = window.UGS.station.create({ bus: engine.bus, rng });
+  engine.bus.on('station:event', ({ id }) => setStatus('Evento de estación: ' + id));
+  engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
+  engine.bus.on('station:expedition:done', ({ delivered }) => setStatus('Expedición de vuelta: ' + JSON.stringify(delivered)));
+  engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
 
   const app = {
     mode: 'menu',                    // menu | dev | game
@@ -243,7 +252,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (app.mode === 'game' && !app.paused) {
-      sim.advance(dt, (fdt) => engine.update(nexo(), fdt));
+      sim.advance(dt, (fdt) => { engine.update(nexo(), fdt); station.update(app.station, fdt); });
       if (engine.activeCount() > 0 || agents.pawns.some(p => p.moving)) invalidate();
     }
     if (dirty) {
@@ -323,4 +332,6 @@
   window.UGS.app = app;
   window.UGS._engine = engine;
   window.UGS._agents = agents;
+  window.UGS._station = station;
+  window.UGS._rng = rng;
 })();
