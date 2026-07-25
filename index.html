@@ -3,53 +3,85 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="!_UGS/ux/%D0%A1ommonElement/Logo.png">
 <title>UGS — Station Builder (base revamp)</title>
 <style>
-  :root { --bg:#0a0c10; --panel:rgba(16,20,28,0.94); --line:#2c3340; --text:#e8eef4; --muted:#8b95a6; --accent:#62e0ef; --accent-ink:#06202a; }
+  :root { --bg:#0a0c10; --panel:rgba(16,20,28,0.94); --panel2:#141a24; --line:#2c3340; --text:#e8eef4; --muted:#8b95a6;
+    --accent:#62e0ef; --accent-ink:#06202a; --ok:#7ed957; --warn:#f5a623; --danger:#ef6262; }
   * { box-sizing:border-box; }
   html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
     font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
   #game { position:fixed; inset:0; width:100vw; height:100vh; display:block; cursor:crosshair; }
-  button,select { font:inherit; color:var(--text); background:#1c222c; border:1px solid var(--line); border-radius:7px; padding:7px 10px; cursor:pointer; }
+  button,select,input { font:inherit; color:var(--text); background:#1c222c; border:1px solid var(--line); border-radius:6px; padding:6px 9px; }
+  button { cursor:pointer; }
   button:hover { border-color:#4a5666; }
   button.active { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input[type=number] { width:64px; }
 
-  /* menú principal */
+  /* menú principal (kit UX: background + logo) */
   #menu { position:fixed; inset:0; z-index:30; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px;
-    background:radial-gradient(circle at 50% 28%, #171b24, #0b0c10 70%); }
-  #menu h1 { font-size:28px; letter-spacing:.12em; margin:0 0 4px; }
+    background:linear-gradient(rgba(8,10,14,0.72), rgba(8,10,14,0.86)), url('!_UGS/ux/%D0%A1ommonElement/Background.jpg') center/cover; }
+  #menu img.logo { width:96px; height:auto; margin-bottom:6px; }
+  #menu h1 { font-size:26px; letter-spacing:.14em; margin:0 0 4px; }
   #menu p { color:var(--muted); margin:0 0 18px; font-size:12px; }
-  #menu button { width:240px; padding:11px; font-size:14px; text-align:left; }
+  #menu button { width:240px; padding:11px; font-size:14px; text-align:left; background:rgba(20,26,36,0.92); }
   #menu button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
 
   /* barra superior */
-  #topbar { position:fixed; z-index:5; top:0; left:0; right:0; height:44px; display:none; align-items:center; gap:10px;
+  #topbar { position:fixed; z-index:5; top:0; left:0; right:0; height:46px; display:none; align-items:center; gap:10px;
     padding:0 12px; background:var(--panel); border-bottom:1px solid var(--line); }
-  #topbar .brand { font-weight:800; font-size:13px; letter-spacing:.06em; }
+  #topbar .brand { display:flex; align-items:center; gap:8px; font-weight:800; font-size:13px; letter-spacing:.06em; }
+  #topbar .brand img { width:22px; height:22px; }
   #topbar .spacer { flex:1; }
   #topbar .hint { font-size:11px; color:var(--muted); }
 
-  /* toolbar dev */
-  #toolbar { position:fixed; z-index:5; top:44px; left:0; bottom:0; width:86px; display:none; flex-direction:column; gap:5px;
-    padding:8px 7px; background:var(--panel); border-right:1px solid var(--line); }
-  #toolbar button { font-size:11px; padding:7px 4px; }
-  #toolbar select { font-size:11px; padding:5px 4px; }
+  /* selector de sección dev: DISEÑAR NEXO / DISEÑAR MÓDULOS */
+  #devSections { display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+  #devSections button { border:0; border-radius:0; font-size:11px; font-weight:700; letter-spacing:.05em; padding:7px 12px; background:#161c26; }
+  #devSections button + button { border-left:1px solid var(--line); }
+  #devSections button.active { background:var(--accent); color:var(--accent-ink); }
 
-  #hud { position:fixed; z-index:4; top:54px; right:12px; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted);
+  /* panel dev (suite de diseño) */
+  #devpanel { position:fixed; z-index:5; top:46px; left:0; bottom:0; width:252px; display:none; flex-direction:column;
+    background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; }
+  #devpanel section { padding:10px 10px 12px; border-bottom:1px solid var(--line); }
+  #devpanel h3 { margin:0 0 8px; font-size:10px; letter-spacing:.14em; color:var(--muted); font-weight:800; }
+  #devpanel .row { display:flex; gap:5px; margin-bottom:5px; }
+  #devpanel .row > * { flex:1; }
+  #devpanel button { font-size:11px; padding:6px 4px; }
+  #devpanel select { font-size:11px; padding:5px 4px; width:100%; }
+  #devpanel label.field { display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:11px; color:var(--muted); margin-bottom:5px; }
+  #devpanel label.field input, #devpanel label.field select { width:120px; font-size:11px; padding:4px 6px; }
+  #devpanel label.check { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); margin-top:4px; }
+
+  /* tarjetas (kit UX: ItemEnable/IconD — barra de estado inferior) */
+  .card { position:relative; background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:8px 9px 11px; margin-bottom:6px; cursor:pointer; }
+  .card:hover { border-color:#4a5666; }
+  .card::after { content:''; position:absolute; left:8px; right:8px; bottom:4px; height:3px; border-radius:2px; background:var(--ok); }
+  .card.locked::after { background:var(--warn); }
+  .card.empty { border-style:dashed; text-align:center; color:var(--muted); font-size:11px; padding:12px 9px 15px; }
+  .card.empty::after { background:transparent; }
+  .card.sel { border-color:var(--accent); }
+  .card .t { font-size:12px; font-weight:700; }
+  .card .s { font-size:10px; color:var(--muted); margin-top:2px; }
+
+  #hud { position:fixed; z-index:4; top:56px; right:12px; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted);
     background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:7px; padding:6px 9px; pointer-events:none; }
   #status { position:fixed; z-index:6; left:50%; bottom:14px; transform:translateX(-50%); font-size:12px;
     background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:8px 12px; pointer-events:none; }
 
-  /* en juego no hay chrome de desarrollo; exportar/importar BLOQUEADOS en juego */
-  body[data-mode="game"] #toolbar, body[data-mode="menu"] #toolbar { display:none !important; }
-  body[data-mode="game"] #tExport, body[data-mode="game"] #tImport,
-  body[data-mode="game"] #nexoSel { display:none !important; }
+  /* en juego/menú no hay chrome de desarrollo; exportar/importar BLOQUEADOS en juego */
+  body[data-mode="game"] #devpanel, body[data-mode="menu"] #devpanel,
+  body[data-mode="game"] #devSections, body[data-mode="menu"] #devSections,
+  body[data-mode="game"] #tExport, body[data-mode="game"] #tImport { display:none !important; }
 </style>
 </head>
 <body data-mode="menu">
 <canvas id="game"></canvas>
 
 <div id="menu">
+  <img class="logo" src="!_UGS/ux/%D0%A1ommonElement/Logo.png" alt="UGS">
   <h1>UGS · STATION BUILDER</h1>
   <p>Base revamp — motor por Nexos, vista ¾ tipo Xenonauts</p>
   <button id="mGame" class="primary">Jugar</button>
@@ -57,8 +89,11 @@
 </div>
 
 <header id="topbar">
-  <span class="brand">UGS</span>
-  <select id="nexoSel" title="Nexo activo"></select>
+  <span class="brand"><img src="!_UGS/ux/%D0%A1ommonElement/Logo.png" alt="">UGS</span>
+  <div id="devSections" title="Qué se diseña en la suite">
+    <button id="secBtnNexo" class="active">DISEÑAR NEXO</button>
+    <button id="secBtnModules">DISEÑAR MÓDULOS</button>
+  </div>
   <span class="hint">Q/E rotar 90° · rueda zoom · arrastrar pan</span>
   <span class="spacer"></span>
   <button id="tPlay">▶ Jugar</button>
@@ -67,22 +102,66 @@
   <button id="tMenu">☰ Menú</button>
 </header>
 
-<nav id="toolbar">
-  <button data-tool="floor" class="active">▦ Suelo</button>
-  <select id="floorSel"><option value="deck">deck</option><option value="dark">dark</option><option value="light">light</option></select>
-  <button data-tool="wall">▤ Pared</button>
-  <select id="wallSel"><option value="block">block</option><option value="diagonal">diagonal</option><option value="rounded">rounded</option></select>
-  <button data-tool="object">◈ Objeto</button>
-  <select id="objSel"><option value="console">console</option><option value="door">door</option><option value="elevator">elevator</option><option value="plant">plant</option></select>
-  <button data-tool="erase">⌫ Borrar</button>
-  <button data-tool="entry">⚑ Entrada</button>
-  <button data-tool="link">⛓ Link</button>
-  <button id="tNexo">+ Nexo</button>
-</nav>
+<aside id="devpanel">
+  <!-- ======= sección NEXO (3 slots · conectores centrales · 1 por fase) ======= -->
+  <section id="secNexo">
+    <h3>NEXOS · CONECTORES CENTRALES (1 POR FASE)</h3>
+    <div id="nexoSlots"></div>
+    <h3 style="margin-top:10px">HERRAMIENTAS DE NEXO</h3>
+    <div class="row">
+      <button data-tool="entry">⚑ Entrada</button>
+      <button data-tool="link">⛓ Link</button>
+    </div>
+    <label class="check"><input type="checkbox" id="connToggle"> Mostrar frontera de conexión de módulos</label>
+  </section>
+
+  <!-- ======= sección MÓDULOS (biblioteca de blueprints) ======= -->
+  <section id="secModules" style="display:none">
+    <h3>BIBLIOTECA DE MÓDULOS</h3>
+    <div id="bpList"></div>
+    <div class="row"><button id="bpNew">+ Nuevo módulo</button></div>
+    <div id="bpForm" style="display:none">
+      <h3 style="margin-top:10px">MÓDULO ACTIVO</h3>
+      <label class="field">Nombre <input id="bpName" type="text"></label>
+      <label class="field">Categoría <select id="bpCat">
+        <option value="general">general</option><option value="energia">energía</option>
+        <option value="almacen">almacén</option><option value="habitat">hábitat</option><option value="industria">industria</option>
+      </select></label>
+      <label class="field">Coste (CRED) <input id="bpCost" type="number" min="0" step="10"></label>
+      <label class="field">Consumo (TW) <input id="bpEnergyUse" type="number" min="0" step="1"></label>
+      <label class="field">Provee energía (TW) <input id="bpProvEnergy" type="number" min="0" step="10"></label>
+      <label class="field">Provee almacén (UD) <input id="bpProvStorage" type="number" min="0" step="5"></label>
+      <label class="field">Provee PNJ (cap.) <input id="bpProvPnj" type="number" min="0" step="1"></label>
+      <label class="field">Tamaño <span><input id="bpW" type="number" min="1" max="64" style="width:52px"> × <input id="bpH" type="number" min="1" max="64" style="width:52px"></span></label>
+      <div class="row"><button id="bpResize">Aplicar tamaño</button></div>
+      <div class="row">
+        <button id="bpDup">⧉ Duplicar</button>
+        <button id="bpDel">🗑 Eliminar</button>
+      </div>
+      <h3 style="margin-top:10px">BIBLIOTECA (ARCHIVO)</h3>
+      <div class="row">
+        <button id="bpExport">Exportar</button>
+        <button id="bpImport">Importar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= herramientas de pintado (compartidas) ======= -->
+  <section id="toolblock">
+    <h3>HERRAMIENTAS DE CONSTRUCCIÓN</h3>
+    <div class="row"><button data-tool="floor" class="active">▦ Suelo (rect)</button><select id="floorSel"><option value="deck">deck</option><option value="dark">dark</option><option value="light">light</option></select></div>
+    <div class="row"><button data-tool="wall">▤ Pared (contorno)</button><select id="wallSel"><option value="block">block</option><option value="diagonal">diagonal</option><option value="rounded">rounded</option></select></div>
+    <div class="row"><button data-tool="object">◈ Objeto</button><select id="objSel"><option value="console">console</option><option value="door">door</option><option value="elevator">elevator</option><option value="plant">plant</option></select></div>
+    <div class="row"><button data-tool="fill">▨ Relleno</button><button data-tool="erase">⌫ Borrar (rect)</button></div>
+    <div class="row"><button id="tRing">▢ Auto-bordes</button><button id="tClear">✕ Vaciar</button></div>
+    <div class="row"><button id="tUndo">↩ Deshacer</button><button id="tRedo">↪ Rehacer</button></div>
+  </section>
+</aside>
 
 <div id="hud"></div>
 <div id="status">Cargando…</div>
 <input id="fileInput" type="file" accept="application/json,.json" hidden>
+<input id="bpFileInput" type="file" accept="application/json,.json" hidden>
 
 <!-- orden de carga = orden de dependencia; todo cuelga de window.UGS -->
 <script src="src/core/core.js"></script>
@@ -93,6 +172,7 @@
 <script src="src/engine/nav.js"></script>
 <script src="src/engine/engine.js"></script>
 <script src="src/engine/station.js"></script>
+<script src="src/engine/blueprint.js"></script>
 <script src="src/engine/agents.js"></script>
 <script src="src/app/app.js"></script>
 </body>

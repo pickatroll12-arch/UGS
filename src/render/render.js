@@ -365,6 +365,17 @@
         poly(ctx, [corner(hx, hy), corner(hx + 1, hy), corner(hx + 1, hy + 1), corner(hx, hy + 1)], 'rgba(255,255,255,0.14)', '#ffffff');
       }
     }
+    // ghost: preview del rectángulo de arrastre (suite dev: suelo/pared/borrar)
+    if (opts.ghost) {
+      const room = nexo.rooms.find(r => r.id === opts.ghost.roomId);
+      if (room) {
+        const g = opts.ghost;
+        const gx0 = Math.min(g.x0, g.x1), gx1 = Math.max(g.x0, g.x1) + 1;
+        const gy0 = Math.min(g.y0, g.y1), gy1 = Math.max(g.y0, g.y1) + 1;
+        const corner = (lx, ly) => { const w = localToWorld(room, lx, ly); return worldToScreen(cam, w.x, w.y, 0.03); };
+        poly(ctx, [corner(gx0, gy0), corner(gx1, gy0), corner(gx1, gy1), corner(gx0, gy1)], 'rgba(98,224,239,0.16)', 'rgba(98,224,239,0.9)');
+      }
+    }
   }
 
   function clear(ctx, w, h) { ctx.fillStyle = COLORS.bg; ctx.fillRect(0, 0, w, h); }
