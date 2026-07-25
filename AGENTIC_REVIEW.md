@@ -281,3 +281,56 @@ panel de estación (CRED/energía/almacén), catálogo de módulos, árbol de hi
 el juego sigue igual (boot, clic→ruta, Q/E) — la capa nueva es invisible.
 **Decisión pendiente:** ¿se codifica ya el árbol F1 como datos (sigue siendo
 OBJP-1.1) o esperamos las 3 firmas?
+
+
+### §6.6 — KIMI K3 (Rector) — SUITE DEV V2: secciones Nexo/Módulos + herramientas de diseño — 2026-07-25
+**Observación:** por orden del organizador, rehecha la suite de construcción dev:
+- **Selector de sección** DISEÑAR NEXO / DISEÑAR MÓDULOS en la barra superior.
+- **NEXO:** 3 slots fijos (1 por fase, tope duro coherente con `station.MAX_NEXOS`),
+  tarjetas con estado de desbloqueo por fase (barra verde/naranja del kit UX),
+  creación secuencial, y **overlay de frontera de conexión** (los nexos son
+  conectores centrales: la frontera visualiza la regla de arista compartida de
+  `placeModule`).
+- **MÓDULOS:** biblioteca de blueprints (sala de diseño + metadatos coste CRED /
+  consumo TW / provides energía-almacén-PNJ / categoría / tamaño). La biblioteca
+  viaja en el save (`station.moduleLibrary`) y tiene export/import JSON propio,
+  duplicar, eliminar, redimensionar (contenido recentrado). Puente a la capa
+  estratégica: `toModuleDef()` + `instantiateRoom()` (ids frescos por colocación).
+- **Herramientas (ambas secciones):** suelo por rectángulo (drag), pared por
+  contorno de sala (drag), borrado por rectángulo, bote de relleno (flood fill),
+  objetos, auto-bordes, vaciar, **deshacer/rehacer** (Ctrl+Z/Y, snapshots por sala).
+- **Kit UX aplicado:** logo + background referenciados IN-SITU desde `!_UGS/ux/`
+  (cero duplicación binaria en el repo) y lenguaje visual del kit (tarjetas con
+  barra de estado, paneles dark) en todo el chrome dev.
+- Bug detectado por el smoke y corregido: `spawnAtEntry()` se cayó en la
+  reescritura de app.js (el PCJ no spawneaba al entrar en juego).
+**Evidencia:** `node tests/run.js` → **136 checks, ALL SUITES GREEN** (44 nuevos
+en `tests/blueprint.test.js`: modelo de blueprint, moduleLibrary en save, ops de
+edición, redimensión, snapshots, puente a placeModule con conexión física).
+Smoke funcional (playwright-core + chromium): **18/18 verde** — tope de 3 nexos,
+crear/editar/metadatos/redimensionar/duplicar/eliminar blueprint, drag-rect de
+suelo y contorno de pared, deshacer/rehacer, juego spawn + click→ruta, **cero
+errores de consola**. Capturas: menú (logo+fondo kit), sección Nexo, sección
+Módulos, editor con contenido, overlay de conexión.
+**Riesgo:** el borrado por rectángulo es destructivo en un gesto (mitigado con
+deshacer); el overlay de frontera dibuja el bounding-rect de cada sala, no tiles
+individuales; deshacer/rehacer se reinicia al cambiar de objetivo de edición;
+los iconos IconD01-15 del kit aún no se usan (esperan mapeo con dirección de arte).
+**Recomendación:** humanos prueban el checklist abajo. Siguientes candidatos:
+(1) ghost de colocación de módulo sobre el nexo (preview del footprint +
+validación de conexión en vivo, usa `rectsTouch`); (2) al firmarse OBJP-1.1,
+poblar las defs F1 desde la biblioteca (el formato ya es compatible).
+**Archivos afectados:** `src/engine/blueprint.js` (nuevo), `src/core/data.js`
+(blueprints + moduleLibrary + NEXO_SLOTS), `src/app/app.js` (capa dev reescrita),
+`src/render/render.js` (ghost de arrastre), `index.html` (suite v2 + assets
+in-situ), `tests/blueprint.test.js` (nuevo), `README.md`, `PROMPT_MAESTRO.md`,
+este documento.
+**Pruebas necesarias (humano):** (1) Modo Dev → conmutar DISEÑAR NEXO / DISEÑAR
+MÓDULOS; (2) crear Nexo 2 y 3 desde sus tarjetas (no existe 4º slot); (3) crear
+un módulo, pintar con drag (suelo/pared), relleno, auto-bordes, Ctrl+Z/Y;
+(4) editar metadatos y tamaño; (5) duplicar/eliminar; (6) exportar biblioteca,
+exportar estación, reimportar ambas (la biblioteca viaja en el save); (7) activar
+"Mostrar frontera de conexión"; (8) Jugar: spawn, click→ruta y Q/E siguen igual.
+**Decisión pendiente:** (1) ¿mapeamos las categorías de módulo a los iconos
+IconD01-15 del kit (dirección de arte)?; (2) ¿ghost de colocación de módulo
+sobre el nexo como siguiente herramienta de la suite?
