@@ -70,6 +70,7 @@
     w = CORE.clamp(w || 8, 1, 64); h = CORE.clamp(h || 8, 1, 64);
     return {
       id: CORE.uid('room'), name: name || 'Room',
+      bpId: null,           // blueprint de origen si la sala se colocó desde la biblioteca (suite Dev)
       size: { w, h },
       transform: { x: 0, y: 0, rotation: 0, pivot: { x: w / 2, y: h / 2 } },
       tiles: Array.from({ length: h }, () => Array.from({ length: w }, () => createTile('deck'))),
@@ -164,6 +165,7 @@
   function normalizeRoom(r) {
     const room = createRoom(r && r.name, r && r.size && r.size.w, r && r.size && r.size.h);
     if (r && r.id) room.id = String(r.id);
+    if (r && r.bpId) room.bpId = String(r.bpId);
     if (r && r.transform) room.transform = {
       x: Number(r.transform.x) || 0, y: Number(r.transform.y) || 0,
       rotation: ((Number(r.transform.rotation) || 0) % 360 + 360) % 360,

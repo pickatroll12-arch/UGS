@@ -9,6 +9,8 @@
  *   · Puente blueprint → capa estratégica: toModuleDef() produce defs
  *     compatibles con engine/station.js (defineModule/placeModule) y
  *     instantiateRoom() crea salas frescas con ids nuevos para colocar.
+ *   · Colocación de módulos sobre el Nexo: placementCheck() valida el
+ *     ghost de la suite Dev (no-solape + arista compartida).
  *
  * Un "module blueprint" (definido en core/data.js) es una sala + metadatos
  * de diseño (coste CRED, energyUse TW, provides). Es DATO puro: el contenido
@@ -175,14 +177,50 @@
     const room = D.normalizeRoom(bp.room);
     room.id = CORE.uid('room');
     room.name = bp.name || room.name;
+    room.bpId = bp.id;
     room.objects = room.objects.map(o => Object.assign(o, { id: CORE.uid('obj') }));
     if (pos) { room.transform.x = Number(pos.x) || 0; room.transform.y = Number(pos.y) || 0; }
     return room;
   }
 
+  // ---- colocación de módulos sobre el Nexo (ghost de la suite Dev) ------------
+  const rectsOverlap = (ax, ay, aw, ah, bx, by, bw, bh) =>
+    ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+
+  // arista compartida con solape positivo entre dos rects axis-aligned;
+  // devuelve el segmento compartido {side,...} o null (las esquinas NO cuentan)
+  function sharedEdge(ax, ay, aw, ah, bx, by, bw, bh) {
+    const ovY = Math.min(ay + ah, by + bh) - Math.max(ay, by);
+    const ovX = Math.min(ax + aw, bx + bw) - Math.max(ax, bx);
+    if (ax + aw === bx && ovY > 0) return { side: 'W', x: bx, y0: Math.max(ay, by), y1: Math.min(ay + ah, by + bh) };
+    if (bx + bw === ax && ovY > 0) return { side: 'E', x: ax, y0: Math.max(ay, by), y1: Math.min(ay + ah, by + bh) };
+    if (ay + ah === by && ovX > 0) return { side: 'N', y: by, x0: Math.max(ax, bx), x1: Math.min(ax + aw, bx + bw) };
+    if (by + bh === ay && ovX > 0) return { side: 'S', y: ay, x0: Math.max(ax, bx), x1: Math.min(ax + aw, bx + bw) };
+    return null;
+  }
+
+  // ¿puedo colocar un módulo de `size` en `pos` sobre este Nexo? (diseño, suite Dev)
+  // Reglas: no solapa con ninguna sala Y comparte arista con al menos una (conector).
+  function placementCheck(nexo, size, pos) {
+    const mw = size.w | 0, mh = size.h | 0;
+    const mx = Math.round(pos.x), my = Math.round(pos.y);
+    let touch = null;
+    for (const room of nexo.rooms) {
+      const t = room.transform;
+      if (rectsOverlap(mx, my, mw, mh, t.x, t.y, room.size.w, room.size.h)) {
+        return { ok: false, reason: 'solapa con ' + (room.name || 'una sala'), x: mx, y: my, touch: null };
+      }
+      const edge = sharedEdge(mx, my, mw, mh, t.x, t.y, room.size.w, room.size.h);
+      if (edge && !touch) touch = { roomId: room.id, edge };
+    }
+    if (!touch) return { ok: false, reason: 'sin conexión: comparte una arista con el Nexo', x: mx, y: my, touch: null };
+    return { ok: true, reason: '', x: mx, y: my, touch };
+  }
+
   return {
     paintFloorRect, paintWallOutline, eraseRect, floodFillFloor, clearRoom, resizeRoom,
     snapshotRoom, restoreRoom,
-    toModuleDef, instantiateRoom
+    toModuleDef, instantiateRoom,
+    rectsOverlap, sharedEdge, placementCheck
   };
 });
