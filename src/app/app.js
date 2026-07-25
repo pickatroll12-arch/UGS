@@ -55,6 +55,8 @@
     drag: null,                      // gesto rect activo {tool, roomId, x0,y0,x1,y1}
     pendingLink: null,
     showConn: false,
+    placing: null,                   // colocación de módulo activa {bpId} (sección Nexo)
+    mouseWorld: null,                // última posición del ratón en coords de mundo
     paused: false,
     undoStack: [], redoStack: [], editKey: null, editRoomRef: null
   };
@@ -78,6 +80,25 @@
   const invalidate = () => { dirty = true; };
   const setStatus = (m) => { if (statusEl) statusEl.textContent = m; };
   const $ = (id) => document.getElementById(id);
+
+  // ---- iconos del kit UX por categoría de módulo (dirección de arte §6.7) ----
+  // variantes: neutral / ok (barra verde) / warn (barra naranja)
+  const BP_ICONS = {
+    general:   { base: 'IconD03', ok: 'IconD08', warn: 'IconD13' },   // O2 (utilidad)
+    energia:   { base: 'IconD05', ok: 'IconD11', warn: 'IconD10' },   // rayo
+    almacen:   { base: 'IconD01', ok: 'IconD06', warn: 'IconD15' },   // grano/suministros
+    habitat:   { base: 'IconD04', ok: 'IconD09', warn: 'IconD12' },   // cubierto (vida a bordo)
+    industria: { base: 'IconD02', ok: 'IconD07', warn: 'IconD14' }    // laboratorio/procesado
+  };
+  // estado del diseño: warn si no tiene suelo abierto (claramente sin terminar)
+  function bpState(bp) {
+    for (const row of bp.room.tiles) for (const t of row) if (!t.wall && t.floor !== 'void') return 'ok';
+    return 'warn';
+  }
+  function bpIconUrl(bp) {
+    const set = BP_ICONS[bp.category] || BP_ICONS.general;
+    return '!_UGS/ux/Elements/' + (bpState(bp) === 'ok' ? set.ok : set.warn) + '.png';
+  }
 
   // ---- deshacer / rehacer (snapshots de engine/blueprint) ----------------------
   function resetEdit() { app.undoStack = []; app.redoStack = []; app.editKey = null; app.editRoomRef = null; }
@@ -118,6 +139,7 @@
     } else {
       engine.stop();
       agents.clear();
+      app.placing = null; syncPlacing();
       if (mode === 'dev') setStatus('Suite Dev: elige sección (Nexo/Módulos) y diseña. Arrastra para pintar rectángulos.');
     }
     syncChrome();
@@ -142,6 +164,7 @@
     if (app.devSection === sec) return;
     app.devSection = sec;
     app.hover = null; app.drag = null; app.pendingLink = null;
+    app.placing = null; syncPlacing();
     resetEdit();
     $('secBtnNexo').classList.toggle('active', sec === 'nexo');
     $('secBtnModules').classList.toggle('active', sec === 'modules');
@@ -211,13 +234,37 @@
     for (const bp of lib) {
       const card = document.createElement('div');
       card.className = 'card' + (bp.id === app.bpId ? ' sel' : '');
-      card.innerHTML = '<div class="t">' + bp.name + '</div>' +
-        '<div class="s">' + bp.room.size.w + '×' + bp.room.size.h + ' · ' + bp.cost + ' CRED · ' + bp.energyUse + ' TW · ' + bp.category + '</div>';
+      card.innerHTML = '<div class="in"><img class="bpicon" src="' + bpIconUrl(bp) + '" alt=""><div>' +
+        '<div class="t">' + bp.name + '</div>' +
+        '<div class="s">' + bp.room.size.w + '×' + bp.room.size.h + ' · ' + bp.cost + ' CRED · ' + bp.energyUse + ' TW · ' + bp.category + '</div>' +
+        '</div></div>';
       card.addEventListener('click', () => selectBp(bp.id));
       el.appendChild(card);
     }
     $('bpForm').style.display = activeBp() ? 'block' : 'none';
     refreshBpForm();
+    refreshPlaceSel();
+  }
+  // selector de módulo a colocar (sección Nexo → COLOCAR MÓDULO)
+  function refreshPlaceSel() {
+    const sel = $('placeSel'); if (!sel) return;
+    const lib = app.station.moduleLibrary;
+    const prev = sel.value;
+    sel.innerHTML = '';
+    for (const bp of lib) {
+      const o = document.createElement('option');
+      o.value = bp.id;
+      o.textContent = bp.name + ' (' + bp.room.size.w + '×' + bp.room.size.h + ')';
+      sel.appendChild(o);
+    }
+    if (lib.some(b => b.id === prev)) sel.value = prev;
+    $('placeToggle').disabled = !lib.length;
+    if (app.placing && !lib.some(b => b.id === app.placing.bpId)) { app.placing = null; syncPlacing(); }
+  }
+  function syncPlacing() {
+    const b = $('placeToggle'); if (!b) return;
+    b.classList.toggle('active', !!app.placing);
+    b.textContent = app.placing ? '▣ Colocación activa (ESC sale)' : '▣ Activar colocación';
   }
   function refreshBpForm() {
     const bp = activeBp(); if (!bp) return;
@@ -231,6 +278,7 @@
     $('bpProvPnj').value = bp.provides.pnjCapacity;
     $('bpW').value = bp.room.size.w;
     $('bpH').value = bp.room.size.h;
+    $('bpFormIcon').src = bpIconUrl(bp);
   }
   function selectBp(id) {
     app.bpId = id; resetEdit();
@@ -305,6 +353,8 @@
     updateMouse(e); mouse.down = true; mouse.button = e.button;
     mouse.lastX = e.clientX; mouse.lastY = e.clientY; mouse.dragged = false;
     if (e.button !== 0) e.preventDefault();
+    // colocación de módulo activa: el click lo gestiona handleClick/drawPlacementGhost
+    if (app.placing && app.mode === 'dev') { app.drag = null; return; }
     // dev: botón izquierdo sobre una sala con herramienta = gesto de edición
     if (app.mode === 'dev' && e.button === 0) {
       const hit = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
@@ -314,6 +364,8 @@
   });
   canvas.addEventListener('pointermove', (e) => {
     updateMouse(e);
+    app.mouseWorld = R.screenToWorld(app.cam, mouse.x, mouse.y);
+    if (app.placing) { invalidate(); }
     if (mouse.down && app.drag) {                       // gesto de edición activo
       const hit = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
       if (hit && hit.roomId === app.drag.roomId) { app.drag.x1 = hit.lx; app.drag.y1 = hit.ly; }
@@ -339,6 +391,18 @@
     updateMouse(e);
     if (app.drag) { const g = app.drag; app.drag = null; applyGesture(g); invalidate(); return; }
     if (mouse.dragged) { mouse.dragged = false; return; }
+    // colocación activa: click derecho retira un módulo colocado (nunca salas del nexo)
+    if (app.placing && e.button === 2 && app.mode === 'dev') {
+      const hit = R.pick(app.cam, nexo(), mouse.x, mouse.y);
+      if (hit) {
+        const room = roomById(hit.roomId);
+        if (room && room.bpId) {
+          nexo().rooms = nexo().rooms.filter(r => r !== room);
+          setStatus('Módulo retirado del nexo.'); invalidate();
+        } else setStatus('Solo se retiran salas colocadas desde la biblioteca.');
+      }
+      return;
+    }
     handleClick(mouse.x, mouse.y);
   });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, mouse.x, mouse.y); }, { passive: false });
@@ -350,6 +414,10 @@
     if ((e.ctrlKey || e.metaKey) && k === 'y' && app.mode === 'dev') { e.preventDefault(); return doRedo(); }
     if (k === 'q') rotateCam(-Math.PI / 2);            // C4: yaw en pasos de 90°
     else if (k === 'e') rotateCam(Math.PI / 2);
+    else if (k === 'escape') {
+      if (app.placing) { app.placing = null; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); }
+      app.pendingLink = null;
+    }
     else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°'); }
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
@@ -400,9 +468,21 @@
 
   // ---- clicks por modo ------------------------------------------------------
   function handleClick(px, py) {
-    const hit = R.pick(app.cam, viewNexo(), px, py);
-    if (app.mode === 'game') return gameClick(hit);
-    // en dev todo pasa por applyGesture (pointerup con app.drag)
+    if (app.mode === 'game') return gameClick(R.pick(app.cam, viewNexo(), px, py));
+    // colocación de módulo: click izquierdo coloca si la posición es válida
+    if (app.mode === 'dev' && app.placing) {
+      const bp = app.station.moduleLibrary.find(b => b.id === app.placing.bpId);
+      if (!bp) { app.placing = null; syncPlacing(); return; }
+      const w = R.screenToWorld(app.cam, px, py);
+      const size = bp.room.size;
+      const chk = BP.placementCheck(nexo(), size, { x: w.x - size.w / 2, y: w.y - size.h / 2 });
+      if (!chk.ok) return setStatus('No se puede colocar: ' + chk.reason + '.');
+      const room = BP.instantiateRoom(bp, { x: chk.x, y: chk.y });
+      nexo().rooms.push(room);
+      invalidate();
+      setStatus(bp.name + ' colocado (' + nexo().rooms.length + ' salas en ' + nexo().name + ').');
+      return;
+    }
   }
   function gameClick(hit) {
     if (!hit) return;
@@ -446,6 +526,39 @@
     ctx.restore();
   }
 
+  // ---- ghost de colocación de módulo (preview + validación en vivo) -------------
+  function drawPlacementGhost() {
+    if (!(app.mode === 'dev' && app.devSection === 'nexo' && app.placing && app.mouseWorld)) return;
+    const bp = app.station.moduleLibrary.find(b => b.id === app.placing.bpId);
+    if (!bp) return;
+    const size = bp.room.size;
+    const chk = BP.placementCheck(nexo(), size, { x: app.mouseWorld.x - size.w / 2, y: app.mouseWorld.y - size.h / 2 });
+    const col = chk.ok ? '126,217,87' : '239,98,98';
+    const pts = [[0, 0], [size.w, 0], [size.w, size.h], [0, size.h]]
+      .map(([lx, ly]) => R.worldToScreen(app.cam, chk.x + lx, chk.y + ly, 0.02));
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(' + col + ',0.16)'; ctx.fill();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = 'rgba(' + col + ',0.9)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.setLineDash([]);
+    if (chk.ok && chk.touch) {          // arista compartida: resaltado sólido
+      const e = chk.touch.edge;
+      const a = e.x != null ? { x: e.x, y: e.y0 } : { x: e.x0, y: e.y };
+      const b = e.x != null ? { x: e.x, y: e.y1 } : { x: e.x1, y: e.y };
+      const sa = R.worldToScreen(app.cam, a.x, a.y, 0.03), sb = R.worldToScreen(app.cam, b.x, b.y, 0.03);
+      ctx.strokeStyle = 'rgba(126,217,87,0.95)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(' + col + ',0.95)';
+    ctx.font = '12px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText(bp.name + ' ' + size.w + '×' + size.h + (chk.ok ? ' · conexión OK — click para colocar' : ' · ' + chk.reason), mouse.x + 14, mouse.y - 10);
+    ctx.restore();
+  }
+
   // ---- bucle ---------------------------------------------------------------
   function resize() {
     const scale = Math.min(window.devicePixelRatio || 1, 2);
@@ -473,6 +586,7 @@
         ghost: app.drag && RECT_TOOLS.includes(app.drag.tool) ? app.drag : null
       });
       drawConnOverlay();
+      drawPlacementGhost();
       hudEl.textContent = app.station.name + ' · ' + view.name +
         (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
         '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°';
@@ -530,6 +644,16 @@
   });
   bind('tUndo', doUndo);
   bind('tRedo', doRedo);
+
+  // colocación de módulo desde biblioteca (sección Nexo)
+  bind('placeToggle', () => {
+    if (app.placing) { app.placing = null; syncPlacing(); invalidate(); return; }
+    const bpId = $('placeSel').value;
+    if (!bpId) return setStatus('La biblioteca está vacía: crea un módulo en DISEÑAR MÓDULOS.');
+    app.placing = { bpId };
+    syncPlacing(); invalidate();
+    setStatus('Colocación: mueve el ratón (verde = conexión OK) · click coloca · click derecho retira · ESC sale.');
+  });
 
   // biblioteca de módulos
   bind('bpNew', () => {
