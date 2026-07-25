@@ -495,27 +495,37 @@ suena nada de Tension/Aggresive (eso es OBJP-2).
 debe seguir sonando con el juego en pausa (hoy sí) o bajar de volumen?
 
 
-### §6.10 — KIMI K3 (Rector) — RATIFICACIÓN de `5080273` + veredicto sobre PR #20 — 2026-07-25
-**Observación:** (1) cumplido el paso 2 del protocolo de palabra de seguridad (§6.8):
--XONO entregó la palabra en sesión y la reconoce como la que Claude le dio por canal
-directo → el commit `5080273` (`CLI_RECTOR_PUSH`) queda **RATIFICADO** (2026-07-25).
-La palabra NO se escribe aquí (§6.8 punto 3). (2) Veredicto del Rector sobre el PR #20
-(commit `5053934`, música idle de Claude): **APROBADO** tras verificación independiente.
-**Evidencia:** clon limpio en HEAD `2a91cb2` → `node tests/run.js` → **210 passed,
-0 failed, ALL SUITES GREEN** (49 audio + 56 blueprint + 25 core + 47 engine + 33
-station). Alcance contra la orden de -XONO: solo música idle + registro §6.8;
-`src/app/app.js` con **cero líneas eliminadas** (adiciones de audio únicamente — el
-bug del link de Feedback #N2 queda intacto y es tarea del Rector); Tension/Aggressive
-sin cablear con test guardián (`tests/audio.test.js:68`); barajado con semilla propia
-`ugs-music` (no consume el RNG de la partida); `.gitignore` nuevo benigno.
-**Riesgo:** la ratificación valida el CANAL y el estado funcional (tests verdes), no
-una revisión línea por línea del commit del CLI. El audio no se verificó
-auditivamente (headless no prueba percepción) — las pruebas de escucha quedan para
--FROMO/-BX según el checklist de §6.9.
-**Recomendación:** pendientes del Rector: bug del link (Feedback #N2, app.js:197,
-introducido en Suite Dev v2) y decisión de iconos §6.7. OBJP-1.1 sigue congelado.
-**Archivos afectados:** este documento.
-**Pruebas necesarias (humano):** las de §6.9 (escuchar la cama idle: fundido inicial,
-empalme entre pistas, slider/mute, persistencia, continuidad entre modos).
-**Decisión pendiente:** las tres de §6.9 (ratificar `src/audio/` como capa, volumen
-0.6/fade 6 s, música en pausa). -XONO puede rotar la palabra cuando quiera.
+### §6.11 — KIMI K3 (Rector) — Fix trail multi-sala + links entre nexos (Feedback #N1 y #N2) — 2026-07-25
+**Observación:** resueltos los dos feedbacks activos:
+- **#N1 (-XONO, trail "se buguea feo"):** dos causas. (1) `render.js` proyectaba TODOS
+  los waypoints del trail con el transform de la sala actual del peón, pero
+  `findPathNexo` devuelve pasos locales a la sala de CADA paso → líneas rectas
+  cruzando paredes; ahora cada paso se proyecta con SU sala. (2) `agents.js`
+  teletransportaba al peón al cambiar de sala (salto instantáneo de 1 tile); ahora el
+  movimiento se calcula en coords MUNDO y el cruce es continuo caminando (la posición
+  local puede quedar fuera de rango durante el cruce: es solo proyección).
+- **#N2 (-FROMO, links rotos):** la tarjeta de slot borraba `pendingLink` al cambiar
+  de nexo — el flujo "marca origen → cambia de nexo → clica destino" se autodestruía
+  (bug introducido en Suite Dev v2). Ahora la marca sobrevive al cambio, el origen
+  pendiente se DIBUJA como ▣ (antes era invisible) y el texto de estado lo explica.
+**Evidencia:** `node tests/run.js` → **213 passed, ALL SUITES GREEN** (3 nuevos en
+engine: cruce sin teletransporte — desplazamiento por frame ≤ velocidad, order
+multi-sala, llegada caminando). Smoke (playwright + chromium): colocación de módulo
+→ cruce con trail correcto pegado a tiles (captura verificada), link origen ▣ →
+cambio de nexo con marca conservada → link creado → viaje del PCJ al otro nexo
+(pawn:arrived → ascensor), cero errores de consola. Commits `3f7264e`, `40a5008`,
+`815960e`.
+**Riesgo:** durante el cruce la posición local del peón sale de rango brevemente
+(proyección intencional; fade y picking usan mundo, no afecta). La verificación del
+trail es visual (captura), no hay assert de píxeles. El hueco dejado en la pared del
+hub al retirar un módulo sigue sin restaurarse (documentado en §6.7/KIMI_FIXES).
+**Recomendación:** -FROMO reintenta su flujo de links (checklist abajo). Siguen como
+decisiones humanas: mapeo de iconos §6.7 y las tres preguntas de audio §6.9.
+**Archivos afectados:** `src/engine/agents.js`, `src/render/render.js`,
+`src/app/app.js`, `tests/engine.test.js`, este documento.
+**Pruebas necesarias (humano):** (1) colocar un módulo y ordenar al PCJ entrar: el
+trail sigue los tiles y cruza por la abertura, sin atravesar paredes ni saltos;
+(2) herramienta Link: marcar origen (▣ visible), cambiar de nexo (la marca se
+conserva), clicar destino → "Link (ascensor) creado"; (3) en Juego: llevar al PCJ a
+la ▣ → viaja al otro nexo; (4) ida y vuelta (links bidireccionales).
+**Decisión pendiente:** ninguna nueva.
