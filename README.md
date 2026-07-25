@@ -76,10 +76,14 @@ Dos secciones conmutables en la barra superior:
 
 - **DISEÑAR NEXO** — 3 slots de Nexo (uno por fase, tope duro), que actúan como
   *conectores centrales*: tarjetas con estado de desbloqueo por fase, herramientas
-  de entrada/links y overlay de "frontera de conexión" (dónde se enchufan los módulos,
-  según la regla de arista compartida de `engine/station.js`).
+  de entrada/links, overlay de "frontera de conexión" y **colocación de módulos
+  con ghost**: preview del footprint con validación en vivo (conexión por arista
+  compartida + no-solape, la misma regla de `engine/station.js`); click coloca,
+  click derecho retira, `ESC` sale. Las salas colocadas guardan su `bpId` de origen.
 - **DISEÑAR MÓDULOS** — biblioteca de blueprints reutilizables: sala de diseño +
   metadatos (coste CRED, consumo TW, provides energía/almacén/PNJ, categoría, tamaño).
+  Tarjetas con **iconos del kit UX por categoría** (rayo=energía, grano=almacén,
+  cubierto=hábitat, laboratorio=industria, O2=general; verde=con suelo, naranja=vacío).
   La biblioteca viaja en el save (`moduleLibrary`) y se exporta/importa como JSON.
   `engine/blueprint.js` convierte un blueprint en def compatible con `station.js`.
 
