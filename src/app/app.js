@@ -224,7 +224,9 @@
         card.innerHTML = '<div class="t">' + n.name + ' · FASE ' + (i + 1) + '</div>' +
           '<div class="s">' + n.rooms.length + ' sala(s) · ' + (unlocked ? 'desbloqueado en partida' : 'se desbloquea en Fase ' + (i + 1)) + '</div>';
         card.addEventListener('click', () => {
-          app.nexoId = n.id; app.pendingLink = null; app.hover = null; resetEdit();
+          // NO limpiar pendingLink: el origen del link debe sobrevivir al cambio
+          // de nexo (el flujo es: marca origen → cambia de nexo → clica destino)
+          app.nexoId = n.id; app.hover = null; resetEdit();
           R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
           refreshSlots(); invalidate();
         });
@@ -350,6 +352,9 @@
       if (k.from.nexoId === app.nexoId) out.push({ roomId: k.from.roomId, x: k.from.x, y: k.from.y });
       if (k.to.nexoId === app.nexoId) out.push({ roomId: k.to.roomId, x: k.to.x, y: k.to.y });
     }
+    // origen pendiente: visible como ▣ mientras se completa el link
+    if (app.pendingLink && app.pendingLink.nexoId === app.nexoId)
+      out.push({ roomId: app.pendingLink.roomId, x: app.pendingLink.x, y: app.pendingLink.y });
     return out;
   }
 
@@ -482,7 +487,7 @@
       if (app.devSection !== 'nexo') return setStatus('Los links se crean en la sección Nexo.');
       if (!app.pendingLink) {
         app.pendingLink = { nexoId: app.nexoId, roomId: room.id, x: g.x0, y: g.y0 };
-        setStatus('Link origen marcado. Cambia de nexo y clica el destino.');
+        setStatus('Link origen marcado (▣ visible). Cambia de nexo — la marca se conserva — y clica el destino.');
       } else {
         const p = app.pendingLink;
         if (p.nexoId === app.nexoId) { setStatus('El destino debe ser OTRO nexo.'); return; }
