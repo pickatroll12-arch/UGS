@@ -64,7 +64,8 @@ Hoy sí. Debe seguir siendo sí siempre.
 | `engine/engine.js` | lógica juego | runtime por Nexo: eventos shift/rotate/orbit/carousel, bus, paso fijo | core, render (solo pose math) |
 | `engine/station.js` | lógica juego | capa estratégica (tipo geoscape Xenonauts): economía CRED/UD/energía/PNJ, módulos (conexión física), hitos/fases, scheduler RNG, expediciones por etapas | core, rng |
 | `engine/agents.js` | lógica juego | PCJ: spawn/place/order/step, facing, 'pawn:arrived' | core, nav |
-| `render/render.js` | renderizador | proyección cenital + yaw, picking, dibujo de Nexo/salas/PCJ | data (solo catálogos) |
+| `engine/blueprint.js` | lógica juego | suite Dev: ops de edición de salas (rectángulos, relleno, redimensión), snapshots deshacer/rehacer, puente blueprint→defs de station.js | core, data |
+| `render/render.js` | renderizador | proyección ¾ ortogonal tipo Xenonauts (C4), picking en plano de suelo, dibujo de Nexo/salas/PCJ | data (solo catálogos) |
 | `app/app.js` | pegamento | shell menú/dev/juego, cámara RTS, input, bucle rAF | todo lo anterior |
 
 **Contratos del modelo (C1-C3), INQUEBRANTABLES** (nacidos del feedback humano):

@@ -14,24 +14,33 @@ Constructor de estaciones espaciales en el navegador. **Vanilla JS + Canvas 2D, 
 ## Estructura del código
 
 ```
-index.html            shell: canvas + menú + topbar (sin lógica de juego)
+index.html            shell: canvas + menú + topbar + suite Dev (sin lógica de juego)
 src/
   core/               [COMPONENTES LÓGICOS — base]
     core.js           ids, EventBus síncrono, FixedTimestep, helpers
-    data.js           modelo: Estación → Nexo → Sala → Tile/Pared/Objeto (+contratos C1-C3)
+    rng.js            RNG determinista sembrado (mulberry32); TODA probabilidad pasa aquí
+    data.js           modelo: Estación → Nexo → Sala → Tile/Pared/Objeto (+contratos C1-C3),
+                      blueprints de módulo, moduleLibrary, station.state
     save.js           persistencia JSON (formato v1, sin legacy)
   engine/             [COMPONENTES LÓGICOS — juego]
     engine.js         runtime PRE-CARGADO POR NEXO (eventos declarativos de sala)
     nav.js            A* click→ruta (4-dir, determinista)
+    station.js        capa estratégica tipo Xenonauts 2: economía CRED/UD/energía/PNJ,
+                      módulos con conexión física, hitos/fases, scheduler RNG, expediciones
+    blueprint.js      lógica de la suite Dev: ops de edición de salas (rectángulos, relleno,
+                      redimensión), deshacer/rehacer, puente blueprint→defs de station.js
     agents.js         el PCJ ("mono"): movimiento solo por click→ruta
   render/             [RENDERIZADOR GRÁFICO]
     render.js         canvas 2D, vista ¾ ortogonal tipo Xenonauts (C4): diamante, paredes extruidas, fade de oclusión
   app/
-    app.js            pegamento: modos (menú/dev/juego), cámara, input, bucle
+    app.js            pegamento: modos (menú/dev/juego), suite Dev (Nexo/Módulos), cámara, input, bucle
+!_UGS/ux/             kit UX del equipo (logo, botones, tarjetas) — referenciado in-situ por el shell
 tests/
   run.js              runner sin dependencias (node tests/run.js)
   core.test.js        core + data + save (contratos de colisión incluidos)
   engine.test.js      nav + engine + agents + matemáticas de picking/yaw
+  station.test.js     capa estratégica: RNG, economía, módulos, hitos, expediciones
+  blueprint.test.js   suite Dev: blueprints, ops de edición, puente a station.js
 ```
 
 ## Reglas de oro (resumen; el detalle está en PROMPT_MAESTRO.md)
@@ -40,7 +49,7 @@ tests/
 - **Lógica PRE-CARGADA POR NEXO** (Nexo = nivel/fase). No hay life-sim global: cada Nexo declara su lógica en datos y el engine la ejecuta solo mientras ese Nexo está cargado.
 - **Toda pared bloquea su tile completo.** Siempre. (Contrato C1, nacido del feedback humano.)
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
-- **Tests en verde antes de cualquier entrega:** `npm test` (59 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (136 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -53,11 +62,29 @@ tests/
 |---|---|
 | Rotar vista (¾, pasos de 90°) | `Q` / `E` |
 | Zoom anclado al cursor | rueda del ratón |
-| Pan | arrastrar (cualquier botón) |
+| Pan | arrastrar (botón izquierdo en vacío / medio / derecho) |
 | Pausa (en juego) | `Espacio` |
 | Caminar (en juego) | click en un tile |
 | Abrir puerta (en juego) | click en la puerta |
 | Viajar de Nexo (en juego) | click en el ascensor (▣) |
+| Pintar rectángulo / contorno (dev) | arrastrar con Suelo / Pared / Borrar |
+| Deshacer / Rehacer (dev) | `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`) |
+
+## Suite Dev (diseño)
+
+Dos secciones conmutables en la barra superior:
+
+- **DISEÑAR NEXO** — 3 slots de Nexo (uno por fase, tope duro), que actúan como
+  *conectores centrales*: tarjetas con estado de desbloqueo por fase, herramientas
+  de entrada/links y overlay de "frontera de conexión" (dónde se enchufan los módulos,
+  según la regla de arista compartida de `engine/station.js`).
+- **DISEÑAR MÓDULOS** — biblioteca de blueprints reutilizables: sala de diseño +
+  metadatos (coste CRED, consumo TW, provides energía/almacén/PNJ, categoría, tamaño).
+  La biblioteca viaja en el save (`moduleLibrary`) y se exporta/importa como JSON.
+  `engine/blueprint.js` convierte un blueprint en def compatible con `station.js`.
+
+Herramientas compartidas: suelo por rectángulo, pared por contorno, borrado por
+rectángulo, bote de relleno, objetos, auto-bordes, vaciar, deshacer/rehacer.
 
 ## Gobernanza
 
