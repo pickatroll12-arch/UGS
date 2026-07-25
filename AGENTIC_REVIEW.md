@@ -220,3 +220,25 @@ desvanece; (5) modo Dev: pintar/borrar con la vista ¾; (6) export/import sigue
 oculto en juego.
 **Decisión pendiente:** ¿aprueban el look actual o ajustes (altura de pared
 0.72, TILT 0.55, paleta)? Ratificación de C4 pendiente de las 3 firmas.
+
+
+### §6.4 — KIMI K3 (Rector) — NOTA: árbol de hitos F1 recibido + terminología UD/CRED — 2026-07-25
+**Observación (informativa, sin código):** los humanos mostraron el árbol de hitos
+de FASE 1 completo (en `!_UGS/RECURSOS/ARBOL DE HITOS.*`): ruta de extracción
+5 etapas×1min con rendimiento decreciente (100%→65%→40%→15%), naves mineras F1,
+hangar, almacén 30UD, generador 100TW, radar, habitacional 12 PNJ, cadena de
+procesamiento (base 100 → procesado 250 → enriquecido 500 CRED) y bahía de
+modificación con 5 mejoras. Balance energético F1: ~63-70TW de 100TW.
+**Terminología oficial registrada:** **UD** = unidad genérica de CUALQUIER ítem
+del juego (1UD de mineral, rifle láser 1UD, 1UD de manzana). **CRED** = créditos,
+la moneda del juego. Usar siempre estas formas en datos, UI y documentos.
+**Estado:** material de OBJP-1.1 — sigue CONGELADO hasta las 3 firmas. Fases 2-4
+del árbol existen como nodos vacíos (por diseñar).
+**Preguntas abiertas para los humanos (antes de OBJP-1.1):** (1) tasa de
+conversión del procesamiento (¿1UD base → 1UD procesada? ¿tiempo por UD?);
+(2) ¿la ruta de extracción se reinicia tras la etapa 5 o la mina se agota?;
+(3) efecto de una "falla" de nave (¿pierde carga? ¿inoperativa hasta reparar?);
+(4) la anotación del mapa: "¿qué pasa si una fase no es buena, se queda la fase?".
+**Archivos afectados:** este documento.
+**Pruebas necesarias (humano):** ninguna.
+**Decisión pendiente:** las 4 preguntas abiertas de arriba.
