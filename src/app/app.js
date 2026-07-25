@@ -10,9 +10,15 @@
  *   rueda .......... zoom anclado al cursor
  *   arrastrar ...... pan (botón izquierdo en vacío / medio / derecho)
  *
- * Modos: MENU → DEV (construir: suelo/pared/borrar/entrada/nexo/link) o
- * JUEGO (click→ruta del PCJ, puertas, viaje por ascensores). En JUEGO no
- * aparece vocabulario de desarrollo (regla del feedback humano).
+ * SUITE DEV (v2): dos secciones — DISEÑAR NEXO (3 slots, 1 por fase,
+ * conectores centrales) y DISEÑAR MÓDULOS (biblioteca de blueprints con
+ * metadatos CRED/TW/provides + editor de sala). Herramientas compartidas:
+ * suelo por rectángulo, pared por contorno, borrado por rectángulo, bote
+ * de relleno, objetos, auto-bordes, vaciar, deshacer/rehacer (Ctrl+Z/Y).
+ * Las ops de edición viven en engine/blueprint.js (lógica, Node-testeable).
+ *
+ * Modos: MENU → DEV (suite de diseño) o JUEGO (click→ruta del PCJ, puertas,
+ * ascensores). En JUEGO no aparece vocabulario de desarrollo.
  */
 (function () {
   'use strict';
@@ -21,6 +27,7 @@
   const S = window.UGS.save;
   const R = window.UGS.render;
   const NAV = window.UGS.nav;
+  const BP = window.UGS.blueprint;
 
   const engine = window.UGS.engine.create();
   const agents = window.UGS.agents.create(engine);
@@ -39,23 +46,65 @@
     mode: 'menu',                    // menu | dev | game
     station: D.createStation('Untitled Station'),
     nexoId: null,
-    tool: 'floor',                   // dev: floor | wall | erase | entry | link
+    devSection: 'nexo',              // dev: nexo | modules
+    bpId: null,                      // blueprint activo (sección módulos)
+    tool: 'floor',                   // floor | wall | object | fill | erase | entry | link
     brush: { floor: 'deck', wallKind: 'block', wallOrient: 0 },
     cam: { x: 0, y: 0, zoom: 1, rot: Math.PI / 4 },   // C4: yaw base 45° (diamante)
     hover: null,
+    drag: null,                      // gesto rect activo {tool, roomId, x0,y0,x1,y1}
     pendingLink: null,
-    paused: false
+    showConn: false,
+    paused: false,
+    undoStack: [], redoStack: [], editKey: null, editRoomRef: null
   };
   app.nexoId = app.station.startNexoId;
 
   const nexo = () => app.station.nexos.find(n => n.id === app.nexoId) || app.station.nexos[0];
   const roomById = (id) => nexo().rooms.find(r => r.id === id) || null;
+  const activeBp = () => app.station.moduleLibrary.find(b => b.id === app.bpId) || null;
+  // lo que muestra el canvas: en dev/módulos, el blueprint activo envuelto como Nexo
+  const viewNexo = () => {
+    if (app.mode === 'dev' && app.devSection === 'modules') {
+      const bp = activeBp();
+      if (bp) return { id: '__bp__', name: bp.name + ' (módulo)', rooms: [bp.room], entry: null, links: [] };
+    }
+    return nexo();
+  };
 
   let canvas, ctx, statusEl, hudEl;
   const sim = new CORE.FixedTimestep(30, 6);
   let dirty = true;
   const invalidate = () => { dirty = true; };
   const setStatus = (m) => { if (statusEl) statusEl.textContent = m; };
+  const $ = (id) => document.getElementById(id);
+
+  // ---- deshacer / rehacer (snapshots de engine/blueprint) ----------------------
+  function resetEdit() { app.undoStack = []; app.redoStack = []; app.editKey = null; app.editRoomRef = null; }
+  function ensureEditKey(room) {
+    const key = app.devSection + ':' + (app.devSection === 'modules' ? app.bpId : app.nexoId) + ':' + room.id;
+    if (key !== app.editKey) { app.editKey = key; app.editRoomRef = room; app.undoStack = []; app.redoStack = []; }
+  }
+  function pushUndo(room) {
+    ensureEditKey(room);
+    app.undoStack.push(BP.snapshotRoom(room));
+    if (app.undoStack.length > 50) app.undoStack.shift();
+    app.redoStack = [];
+  }
+  function doUndo() {
+    if (!app.undoStack.length || !app.editRoomRef) return setStatus('Nada que deshacer.');
+    const room = app.editRoomRef;
+    app.redoStack.push(BP.snapshotRoom(room));
+    BP.restoreRoom(room, app.undoStack.pop());
+    invalidate(); refreshBpForm(); setStatus('Deshecho.');
+  }
+  function doRedo() {
+    if (!app.redoStack.length || !app.editRoomRef) return setStatus('Nada que rehacer.');
+    const room = app.editRoomRef;
+    app.undoStack.push(BP.snapshotRoom(room));
+    BP.restoreRoom(room, app.redoStack.pop());
+    invalidate(); refreshBpForm(); setStatus('Rehecho.');
+  }
 
   // ---- modos ---------------------------------------------------------------
   function setMode(mode) {
@@ -69,16 +118,16 @@
     } else {
       engine.stop();
       agents.clear();
-      if (mode === 'dev') setStatus('Dev: pinta suelo/paredes, marca la entrada, añade nexos y links.');
+      if (mode === 'dev') setStatus('Suite Dev: elige sección (Nexo/Módulos) y diseña. Arrastra para pintar rectángulos.');
     }
     syncChrome();
     invalidate();
   }
   function syncChrome() {
-    document.getElementById('toolbar').style.display = app.mode === 'dev' ? 'flex' : 'none';
-    document.getElementById('menu').style.display = app.mode === 'menu' ? 'flex' : 'none';
-    document.getElementById('topbar').style.display = app.mode === 'menu' ? 'none' : 'flex';
-    document.getElementById('tPlay').textContent = app.mode === 'game' ? '🛠 Dev' : '▶ Jugar';
+    $('devpanel').style.display = app.mode === 'dev' ? 'flex' : 'none';
+    $('menu').style.display = app.mode === 'menu' ? 'flex' : 'none';
+    $('topbar').style.display = app.mode === 'menu' ? 'none' : 'flex';
+    $('tPlay').textContent = app.mode === 'game' ? '🛠 Dev' : '▶ Jugar';
   }
 
   function spawnAtEntry() {
@@ -86,6 +135,113 @@
     const n = nexo();
     const e = n.entry || { roomId: n.rooms[0].id, x: 1, y: 1 };
     agents.spawn(n.id, e.roomId, e.x, e.y);
+  }
+
+  // ---- sección dev: DISEÑAR NEXO / DISEÑAR MÓDULOS -----------------------------
+  function setDevSection(sec) {
+    if (app.devSection === sec) return;
+    app.devSection = sec;
+    app.hover = null; app.drag = null; app.pendingLink = null;
+    resetEdit();
+    $('secBtnNexo').classList.toggle('active', sec === 'nexo');
+    $('secBtnModules').classList.toggle('active', sec === 'modules');
+    $('secNexo').style.display = sec === 'nexo' ? 'block' : 'none';
+    $('secModules').style.display = sec === 'modules' ? 'block' : 'none';
+    if (sec === 'modules') {
+      if (activeBp()) R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+      setStatus('Módulos: biblioteca de blueprints. Crea uno o selecciona para editar.');
+    } else {
+      R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
+      setStatus('Nexos: 3 slots (1 por fase), conectores centrales de la estación.');
+    }
+    refreshSlots(); refreshBpList();
+    invalidate();
+  }
+
+  // ---- slots de Nexo (3, uno por fase) ------------------------------------------
+  function refreshSlots() {
+    const el = $('nexoSlots'); el.innerHTML = '';
+    const phase = app.station.state.phase;
+    for (let i = 0; i < D.NEXO_SLOTS; i++) {
+      const n = app.station.nexos[i];
+      const card = document.createElement('div');
+      if (n) {
+        const unlocked = phase >= i + 1;
+        card.className = 'card' + (unlocked ? '' : ' locked') + (n.id === app.nexoId && app.devSection === 'nexo' ? ' sel' : '');
+        card.innerHTML = '<div class="t">' + n.name + ' · FASE ' + (i + 1) + '</div>' +
+          '<div class="s">' + n.rooms.length + ' sala(s) · ' + (unlocked ? 'desbloqueado en partida' : 'se desbloquea en Fase ' + (i + 1)) + '</div>';
+        card.addEventListener('click', () => {
+          app.nexoId = n.id; app.pendingLink = null; app.hover = null; resetEdit();
+          R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
+          refreshSlots(); invalidate();
+        });
+      } else if (i === app.station.nexos.length) {
+        card.className = 'card empty';
+        card.textContent = '+ Crear Nexo ' + (i + 1) + ' (Fase ' + (i + 1) + ')';
+        card.addEventListener('click', () => createNexoSlot(i));
+      } else {
+        card.className = 'card empty';
+        card.style.opacity = '.45';
+        card.textContent = 'Nexo ' + (i + 1) + ' · crea antes el Nexo ' + i;
+      }
+      el.appendChild(card);
+    }
+  }
+  function createNexoSlot(i) {
+    if (app.station.nexos.length >= D.NEXO_SLOTS) return setStatus('Máximo ' + D.NEXO_SLOTS + ' Nexos (1 por fase).');
+    const n = D.createNexo('Nexo ' + (i + 1));
+    const hub = D.createRoom('Hub central', 10, 8); D.ringWalls(hub);
+    n.rooms.push(hub); n.entry = { roomId: hub.id, x: 2, y: 2 };
+    app.station.nexos.push(n);
+    app.nexoId = n.id; resetEdit();
+    R.centerOn(app.cam, n, canvas.clientWidth, canvas.clientHeight);
+    refreshSlots(); invalidate();
+    setStatus(n.name + ' creado (slot Fase ' + (i + 1) + ').');
+  }
+
+  // ---- biblioteca de módulos ------------------------------------------------------
+  function refreshBpList() {
+    const el = $('bpList'); el.innerHTML = '';
+    const lib = app.station.moduleLibrary;
+    if (!lib.length) {
+      const c = document.createElement('div');
+      c.className = 'card empty'; c.textContent = 'Biblioteca vacía: crea tu primer módulo.';
+      el.appendChild(c);
+    }
+    for (const bp of lib) {
+      const card = document.createElement('div');
+      card.className = 'card' + (bp.id === app.bpId ? ' sel' : '');
+      card.innerHTML = '<div class="t">' + bp.name + '</div>' +
+        '<div class="s">' + bp.room.size.w + '×' + bp.room.size.h + ' · ' + bp.cost + ' CRED · ' + bp.energyUse + ' TW · ' + bp.category + '</div>';
+      card.addEventListener('click', () => selectBp(bp.id));
+      el.appendChild(card);
+    }
+    $('bpForm').style.display = activeBp() ? 'block' : 'none';
+    refreshBpForm();
+  }
+  function refreshBpForm() {
+    const bp = activeBp(); if (!bp) return;
+    if (document.activeElement && /^(bpName|bpCat|bpCost|bpEnergyUse|bpProvEnergy|bpProvStorage|bpProvPnj|bpW|bpH)$/.test(document.activeElement.id)) return; // no pisar mientras se escribe
+    $('bpName').value = bp.name;
+    $('bpCat').value = bp.category;
+    $('bpCost').value = bp.cost;
+    $('bpEnergyUse').value = bp.energyUse;
+    $('bpProvEnergy').value = bp.provides.energy;
+    $('bpProvStorage').value = bp.provides.storage;
+    $('bpProvPnj').value = bp.provides.pnjCapacity;
+    $('bpW').value = bp.room.size.w;
+    $('bpH').value = bp.room.size.h;
+  }
+  function selectBp(id) {
+    app.bpId = id; resetEdit();
+    if (app.devSection === 'modules' && activeBp()) R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+    refreshBpList(); invalidate();
+  }
+  function downloadJson(filename, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
   // ---- viaje entre Nexos (ascensores) --------------------------------------
@@ -140,36 +296,49 @@
   const mouse = { x: 0, y: 0, down: false, button: 0, lastX: 0, lastY: 0, dragged: false };
   function updateMouse(e) { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; }
 
-  canvas = document.getElementById('game');
+  canvas = $('game');
   ctx = canvas.getContext('2d');
-  statusEl = document.getElementById('status');
-  hudEl = document.getElementById('hud');
+  statusEl = $('status');
+  hudEl = $('hud');
 
   canvas.addEventListener('pointerdown', (e) => {
     updateMouse(e); mouse.down = true; mouse.button = e.button;
     mouse.lastX = e.clientX; mouse.lastY = e.clientY; mouse.dragged = false;
     if (e.button !== 0) e.preventDefault();
+    // dev: botón izquierdo sobre una sala con herramienta = gesto de edición
+    if (app.mode === 'dev' && e.button === 0) {
+      const hit = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
+      if (hit) { app.drag = { tool: app.tool, roomId: hit.roomId, x0: hit.lx, y0: hit.ly, x1: hit.lx, y1: hit.ly }; return; }
+    }
+    app.drag = null;
   });
   canvas.addEventListener('pointermove', (e) => {
     updateMouse(e);
+    if (mouse.down && app.drag) {                       // gesto de edición activo
+      const hit = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
+      if (hit && hit.roomId === app.drag.roomId) { app.drag.x1 = hit.lx; app.drag.y1 = hit.ly; }
+      app.hover = hit; invalidate();
+      return;
+    }
     if (mouse.down) {
       const dx = e.clientX - mouse.lastX, dy = e.clientY - mouse.lastY;
       if (Math.abs(dx) + Math.abs(dy) > 2) mouse.dragged = true;
-      if (mouse.dragged) {                       // arrastrar = pan (todos los modos)
+      if (mouse.dragged) {                              // pan (vacío / medio / derecho)
         app.cam.x += dx; app.cam.y += dy;
         mouse.lastX = e.clientX; mouse.lastY = e.clientY;
         invalidate();
         return;
       }
     }
-    app.hover = R.pick(app.cam, nexo(), mouse.x, mouse.y);
+    app.hover = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
     invalidate();
   });
   window.addEventListener('pointerup', (e) => {
     if (!mouse.down) return;
     mouse.down = false;
-    if (mouse.dragged) { mouse.dragged = false; return; }
     updateMouse(e);
+    if (app.drag) { const g = app.drag; app.drag = null; applyGesture(g); invalidate(); return; }
+    if (mouse.dragged) { mouse.dragged = false; return; }
     handleClick(mouse.x, mouse.y);
   });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, mouse.x, mouse.y); }, { passive: false });
@@ -177,17 +346,63 @@
   window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+    if ((e.ctrlKey || e.metaKey) && k === 'z' && app.mode === 'dev') { e.preventDefault(); return e.shiftKey ? doRedo() : doUndo(); }
+    if ((e.ctrlKey || e.metaKey) && k === 'y' && app.mode === 'dev') { e.preventDefault(); return doRedo(); }
     if (k === 'q') rotateCam(-Math.PI / 2);            // C4: yaw en pasos de 90°
     else if (k === 'e') rotateCam(Math.PI / 2);
     else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°'); }
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
 
+  // ---- gestos de edición (suite dev) -------------------------------------------
+  const RECT_TOOLS = ['floor', 'wall', 'erase'];
+  function applyGesture(g) {
+    const view = viewNexo();
+    const room = view.rooms.find(r => r.id === g.roomId);
+    if (!room) return;
+    const x1 = g.x1 == null ? g.x0 : g.x1, y1 = g.y1 == null ? g.y0 : g.y1;
+    if (RECT_TOOLS.includes(g.tool)) {
+      pushUndo(room);
+      let n = 0;
+      if (g.tool === 'floor') n = BP.paintFloorRect(room, g.x0, g.y0, x1, y1, app.brush.floor);
+      else if (g.tool === 'wall') n = BP.paintWallOutline(room, g.x0, g.y0, x1, y1, app.brush.wallKind, app.brush.wallOrient);
+      else n = BP.eraseRect(room, g.x0, g.y0, x1, y1);
+      setStatus(n ? 'Editado (' + n + ' tiles).' : 'Sin cambios.');
+    } else if (g.tool === 'fill') {
+      pushUndo(room);
+      const n = BP.floodFillFloor(room, g.x0, g.y0, app.brush.floor);
+      setStatus(n ? 'Relleno (' + n + ' tiles).' : 'Sin cambios.');
+    } else if (g.tool === 'object') {
+      if (!NAV.walkable(room, g.x0, g.y0) || room.objects.some(o => o.x === g.x0 && o.y === g.y0)) return setStatus('Ahí no cabe el objeto.');
+      pushUndo(room);
+      room.objects.push(D.createObjectInstance($('objSel').value, g.x0, g.y0));
+      setStatus('Objeto colocado.');
+    } else if (g.tool === 'entry') {
+      if (app.devSection !== 'nexo') return setStatus('La entrada se marca en la sección Nexo.');
+      if (NAV.walkable(room, g.x0, g.y0)) { nexo().entry = { roomId: room.id, x: g.x0, y: g.y0 }; setStatus('Entrada marcada.'); }
+    } else if (g.tool === 'link') {
+      if (app.devSection !== 'nexo') return setStatus('Los links se crean en la sección Nexo.');
+      if (!app.pendingLink) {
+        app.pendingLink = { nexoId: app.nexoId, roomId: room.id, x: g.x0, y: g.y0 };
+        setStatus('Link origen marcado. Cambia de nexo y clica el destino.');
+      } else {
+        const p = app.pendingLink;
+        if (p.nexoId === app.nexoId) { setStatus('El destino debe ser OTRO nexo.'); return; }
+        const link = D.createLink(p.nexoId, app.nexoId);
+        link.from = { nexoId: p.nexoId, roomId: p.roomId, x: p.x, y: p.y };
+        link.to = { nexoId: app.nexoId, roomId: room.id, x: g.x0, y: g.y0 };
+        app.station.links.push(link);
+        app.pendingLink = null;
+        setStatus('Link (ascensor) creado.');
+      }
+    }
+  }
+
   // ---- clicks por modo ------------------------------------------------------
   function handleClick(px, py) {
-    const hit = R.pick(app.cam, nexo(), px, py);
+    const hit = R.pick(app.cam, viewNexo(), px, py);
     if (app.mode === 'game') return gameClick(hit);
-    if (app.mode === 'dev' && hit) return devClick(hit);
+    // en dev todo pasa por applyGesture (pointerup con app.drag)
   }
   function gameClick(hit) {
     if (!hit) return;
@@ -206,39 +421,29 @@
     if (!agents.order(pawn, room, lx, ly)) setStatus('Sin ruta hasta ahí.');
     invalidate();
   }
-  function devClick(hit) {
-    const room = roomById(hit.roomId); if (!room) return;
-    const tile = room.tiles[hit.ly][hit.lx];
-    if (app.tool === 'floor') { if (!tile.wall) tile.floor = app.brush.floor; }
-    else if (app.tool === 'wall') { if (tile.floor === 'void') tile.floor = 'deck'; tile.wall = D.createWall(app.brush.wallKind, app.brush.wallOrient); }
-    else if (app.tool === 'erase') {
-      const i = room.objects.findIndex(o => o.x === hit.lx && o.y === hit.ly);
-      if (i >= 0) room.objects.splice(i, 1);
-      else if (tile.wall) tile.wall = null;
-      else tile.floor = 'void';
+
+  // ---- overlay: frontera de conexión (los Nexos son conectores centrales) -------
+  function drawConnOverlay() {
+    if (!(app.mode === 'dev' && app.devSection === 'nexo' && app.showConn)) return;
+    ctx.save();
+    ctx.setLineDash([7, 5]);
+    ctx.strokeStyle = 'rgba(98,224,239,0.9)';
+    ctx.lineWidth = 2;
+    for (const room of nexo().rooms) {
+      const pts = [[0, 0], [room.size.w, 0], [room.size.w, room.size.h], [0, room.size.h]].map(([lx, ly]) => {
+        const w = R.localToWorld(room, lx, ly);
+        return R.worldToScreen(app.cam, w.x, w.y, 0.02);
+      });
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.stroke();
     }
-    else if (app.tool === 'entry') {
-      if (NAV.walkable(room, hit.lx, hit.ly)) { nexo().entry = { roomId: room.id, x: hit.lx, y: hit.ly }; setStatus('Entrada marcada.'); }
-    }
-    else if (app.tool === 'object') {
-      if (NAV.walkable(room, hit.lx, hit.ly) && !room.objects.some(o => o.x === hit.lx && o.y === hit.ly)) {
-        room.objects.push(D.createObjectInstance(document.getElementById('objSel').value, hit.lx, hit.ly));
-      }
-    }
-    else if (app.tool === 'link') {
-      if (!app.pendingLink) { app.pendingLink = { nexoId: app.nexoId, roomId: room.id, x: hit.lx, y: hit.ly }; setStatus('Link origen marcado. Cambia de nexo y clica el destino.'); }
-      else {
-        const p = app.pendingLink;
-        if (p.nexoId === app.nexoId) { setStatus('El destino debe ser OTRO nexo.'); return; }
-        const link = D.createLink(p.nexoId, app.nexoId);
-        link.from = { nexoId: p.nexoId, roomId: p.roomId, x: p.x, y: p.y };
-        link.to = { nexoId: app.nexoId, roomId: room.id, x: hit.lx, y: hit.ly };
-        app.station.links.push(link);
-        app.pendingLink = null;
-        setStatus('Link (ascensor) creado.');
-      }
-    }
-    invalidate();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(98,224,239,0.85)';
+    ctx.font = '12px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('frontera de conexión: los módulos se enchufan compartiendo una arista con el Nexo', 14, canvas.clientHeight - 12);
+    ctx.restore();
   }
 
   // ---- bucle ---------------------------------------------------------------
@@ -257,75 +462,149 @@
     }
     if (dirty) {
       dirty = false;
+      const view = viewNexo();
       R.clear(ctx, canvas.clientWidth, canvas.clientHeight);
-      R.drawNexo(ctx, app.cam, nexo(), {
-        entry: nexo().entry,
-        linkMarkers: linkMarkers(),
+      R.drawNexo(ctx, app.cam, view, {
+        entry: app.mode === 'dev' && app.devSection === 'nexo' ? view.entry : (app.mode === 'game' ? view.entry : null),
+        linkMarkers: app.devSection === 'nexo' ? linkMarkers() : [],
         pawns: agents.pawns.filter(p => p.nexoId === app.nexoId),
         selectedPawnId: agents.selected && agents.selected.id,
-        hover: app.mode === 'dev' ? app.hover : null
+        hover: app.mode === 'dev' ? app.hover : null,
+        ghost: app.drag && RECT_TOOLS.includes(app.drag.tool) ? app.drag : null
       });
-      hudEl.textContent = app.station.name + ' · ' + nexo().name + '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°';
+      drawConnOverlay();
+      hudEl.textContent = app.station.name + ' · ' + view.name +
+        (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
+        '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°';
     }
     requestAnimationFrame(frame);
   }
 
-  // ---- chrome (menú / toolbar) ----------------------------------------------
-  function bind(id, fn) { document.getElementById(id).addEventListener('click', fn); }
+  // ---- chrome (menú / suite) ----------------------------------------------
+  function bind(id, fn) { $(id).addEventListener('click', fn); }
   bind('mDev', () => setMode('dev'));
   bind('mGame', () => setMode('game'));
   bind('tMenu', () => setMode('menu'));
   bind('tPlay', () => setMode(app.mode === 'game' ? 'dev' : 'game'));
-  bind('tNexo', () => {
-    const n = D.createNexo('Nexo ' + (app.station.nexos.length + 1));
-    const r = D.createRoom('Room 1', 10, 8); D.ringWalls(r);
-    n.rooms.push(r); n.entry = { roomId: r.id, x: 2, y: 2 };
-    app.station.nexos.push(n);
-    refreshNexoSel(); app.nexoId = n.id; document.getElementById('nexoSel').value = n.id;
-    R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
-    setStatus(n.name + ' añadido.'); invalidate();
-  });
+  bind('secBtnNexo', () => setDevSection('nexo'));
+  bind('secBtnModules', () => setDevSection('modules'));
   bind('tExport', () => S.exportToFile(app.station));
-  bind('tImport', () => document.getElementById('fileInput').click());
-  document.getElementById('fileInput').addEventListener('change', async (e) => {
+  bind('tImport', () => $('fileInput').click());
+  $('fileInput').addEventListener('change', async (e) => {
     const f = e.target.files[0]; if (!f) return;
     try {
       app.station = S.deserialize(await f.text());
       app.nexoId = app.station.startNexoId;
-      refreshNexoSel();
-      R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
+      app.bpId = app.station.moduleLibrary.length ? app.station.moduleLibrary[0].id : null;
+      app.pendingLink = null; resetEdit();
+      refreshSlots(); refreshBpList();
+      R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
       setStatus('Estación importada.'); invalidate();
     } catch (err) { setStatus('Error al importar: ' + err.message); }
     e.target.value = '';
   });
-  document.getElementById('nexoSel').addEventListener('change', (e) => {
-    app.nexoId = e.target.value;
-    app.pendingLink = null;
-    R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
-    invalidate();
-  });
-  function refreshNexoSel() {
-    const sel = document.getElementById('nexoSel'); sel.innerHTML = '';
-    for (const n of app.station.nexos) {
-      const o = document.createElement('option'); o.value = n.id; o.textContent = n.name;
-      if (n.id === app.nexoId) o.selected = true; sel.appendChild(o);
-    }
-  }
+
+  // herramientas de pintado (compartidas)
   document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => {
     app.tool = b.dataset.tool;
     document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
     invalidate();
   }));
-  document.getElementById('floorSel').addEventListener('change', (e) => { app.brush.floor = e.target.value; });
-  document.getElementById('wallSel').addEventListener('change', (e) => { app.brush.wallKind = e.target.value; });
+  $('floorSel').addEventListener('change', (e) => { app.brush.floor = e.target.value; });
+  $('wallSel').addEventListener('change', (e) => { app.brush.wallKind = e.target.value; });
+  $('connToggle').addEventListener('change', (e) => { app.showConn = e.target.checked; invalidate(); });
+
+  // sala objetivo de botones de sala: en módulos el blueprint; en nexo la sala bajo el hover (o la primera)
+  function currentEditRoom() {
+    if (app.devSection === 'modules') { const bp = activeBp(); return bp ? bp.room : null; }
+    if (app.hover && app.hover.roomId) { const r = roomById(app.hover.roomId); if (r) return r; }
+    return nexo().rooms[0] || null;
+  }
+  bind('tRing', () => {
+    const room = currentEditRoom(); if (!room) return setStatus('Nada que bordear.');
+    pushUndo(room); D.ringWalls(room); invalidate(); setStatus('Auto-bordes aplicados.');
+  });
+  bind('tClear', () => {
+    const room = currentEditRoom(); if (!room) return setStatus('Nada que vaciar.');
+    pushUndo(room); BP.clearRoom(room); invalidate(); setStatus('Sala vaciada.');
+  });
+  bind('tUndo', doUndo);
+  bind('tRedo', doRedo);
+
+  // biblioteca de módulos
+  bind('bpNew', () => {
+    const bp = D.createModuleBlueprint({ name: 'Módulo ' + (app.station.moduleLibrary.length + 1), w: 8, h: 6 });
+    app.station.moduleLibrary.push(bp);
+    selectBp(bp.id);
+    setStatus('Blueprint creado: edítalo con las herramientas y ajusta sus metadatos.');
+  });
+  bind('bpDup', () => {
+    const bp = activeBp(); if (!bp) return;
+    const copy = D.normalizeModuleBlueprint(JSON.parse(JSON.stringify(bp)));
+    copy.id = CORE.uid('bp'); copy.name = bp.name + ' copia';
+    app.station.moduleLibrary.push(copy);
+    selectBp(copy.id);
+    setStatus('Módulo duplicado.');
+  });
+  bind('bpDel', () => {
+    const bp = activeBp(); if (!bp) return;
+    app.station.moduleLibrary = app.station.moduleLibrary.filter(b => b.id !== bp.id);
+    app.bpId = app.station.moduleLibrary.length ? app.station.moduleLibrary[0].id : null;
+    resetEdit(); refreshBpList(); invalidate();
+    setStatus('Módulo eliminado.');
+  });
+  bind('bpResize', () => {
+    const bp = activeBp(); if (!bp) return;
+    const w = CORE.clamp(Number($('bpW').value) || bp.room.size.w, 1, 64);
+    const h = CORE.clamp(Number($('bpH').value) || bp.room.size.h, 1, 64);
+    pushUndo(bp.room);
+    BP.resizeRoom(bp.room, w, h);
+    refreshBpList(); invalidate();
+    setStatus('Tamaño aplicado: ' + w + '×' + h + ' (contenido recentrado).');
+  });
+  bind('bpExport', () => {
+    downloadJson('ugs_modulos.json', { moduleLibrary: app.station.moduleLibrary });
+    setStatus('Biblioteca exportada (' + app.station.moduleLibrary.length + ' módulos).');
+  });
+  bind('bpImport', () => $('bpFileInput').click());
+  $('bpFileInput').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const raw = JSON.parse(await f.text());
+      const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.moduleLibrary) ? raw.moduleLibrary : [raw]);
+      let n = 0;
+      for (const item of arr) {
+        const bp = D.normalizeModuleBlueprint(item);
+        if (app.station.moduleLibrary.some(b => b.id === bp.id)) bp.id = CORE.uid('bp');
+        app.station.moduleLibrary.push(bp); n++;
+      }
+      if (n && !app.bpId) app.bpId = app.station.moduleLibrary[0].id;
+      refreshBpList(); invalidate();
+      setStatus('Biblioteca importada: +' + n + ' módulo(s).');
+    } catch (err) { setStatus('Error al importar módulos: ' + err.message); }
+    e.target.value = '';
+  });
+
+  // formulario de metadatos del módulo activo
+  function bindBpField(id, fn) { $(id).addEventListener('change', (e) => { const bp = activeBp(); if (!bp) return; fn(bp, e.target.value); refreshBpList(); invalidate(); }); }
+  bindBpField('bpName', (bp, v) => { bp.name = String(v).trim() || bp.name; bp.room.name = bp.name; });
+  bindBpField('bpCat', (bp, v) => { bp.category = v; });
+  bindBpField('bpCost', (bp, v) => { bp.cost = Math.max(0, Number(v) | 0); });
+  bindBpField('bpEnergyUse', (bp, v) => { bp.energyUse = Math.max(0, Number(v) | 0); });
+  bindBpField('bpProvEnergy', (bp, v) => { bp.provides.energy = Math.max(0, Number(v) | 0); });
+  bindBpField('bpProvStorage', (bp, v) => { bp.provides.storage = Math.max(0, Number(v) | 0); });
+  bindBpField('bpProvPnj', (bp, v) => { bp.provides.pnjCapacity = Math.max(0, Number(v) | 0); });
 
   // ---- boot ------------------------------------------------------------------
   resize();
-  refreshNexoSel();
-  R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
-  // debug/smoke hook: ?auto=dev|game salta el menú
-  const auto = new URLSearchParams(location.search).get('auto');
+  refreshSlots();
+  refreshBpList();
+  R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+  // debug/smoke hook: ?auto=dev|game salta el menú (&sec=modules fuerza sección)
+  const qs = new URLSearchParams(location.search);
+  const auto = qs.get('auto');
   setMode(auto === 'dev' || auto === 'game' ? auto : 'menu');
+  if (auto === 'dev' && qs.get('sec') === 'modules') setDevSection('modules');
   requestAnimationFrame(frame);
 
   // hook de depuración/tests
