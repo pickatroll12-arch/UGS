@@ -30,6 +30,7 @@
   'use strict';
 
   const SAVE_FORMAT = 1;
+  const NEXO_SLOTS = 3;   // tope físico de diseño: 3 Nexos, 1 por fase (station.MAX_NEXOS)
 
   // ---- materiales / catálogos mínimos (crecen por necesidad, no por ocio) --
   const FLOORS = {
@@ -98,7 +99,38 @@
     ringWalls(room);
     nexo.rooms.push(room);
     nexo.entry = { roomId: room.id, x: 2, y: 2 };
-    return { formatVersion: SAVE_FORMAT, name: name || 'Untitled Station', nexos: [nexo], links: [], startNexoId: nexo.id, state: createState() };
+    return { formatVersion: SAVE_FORMAT, name: name || 'Untitled Station', nexos: [nexo], links: [], startNexoId: nexo.id, state: createState(), moduleLibrary: [] };
+  }
+
+  // ---- blueprints de módulo (suite Dev, sección MÓDULOS) ----------------------
+  // Un blueprint = sala de diseño + metadatos que luego alimentan las defs de
+  // la capa estratégica (engine/station.js). Es DATO de diseño, no contenido F1.
+  function createModuleBlueprint(opts) {
+    opts = opts || {};
+    const p = opts.provides || {};
+    const room = createRoom(opts.name || 'Módulo', opts.w || 8, opts.h || 6);
+    ringWalls(room);
+    return {
+      id: CORE.uid('bp'),
+      name: String(opts.name || 'Módulo'),
+      category: String(opts.category || 'general'),
+      cost: Math.max(0, Number(opts.cost) | 0),
+      energyUse: Math.max(0, Number(opts.energyUse) | 0),
+      provides: {
+        energy: Math.max(0, Number(p.energy) | 0),
+        storage: Math.max(0, Number(p.storage) | 0),
+        pnjCapacity: Math.max(0, Number(p.pnjCapacity) | 0)
+      },
+      notes: String(opts.notes || ''),
+      room
+    };
+  }
+  function normalizeModuleBlueprint(bp) {
+    if (!bp || typeof bp !== 'object') return createModuleBlueprint({});
+    const out = createModuleBlueprint(bp);
+    out.room = normalizeRoom(bp.room);
+    if (bp.id) out.id = String(bp.id);
+    return out;
   }
 
   // Estado de la CAPA ESTRATÉGICA (engine/station.js): economía, hitos,
@@ -175,6 +207,7 @@
     }));
     out.startNexoId = out.nexos.some(n => n.id === s.startNexoId) ? s.startNexoId : out.nexos[0].id;
     out.state = normalizeState(s.state);
+    out.moduleLibrary = (Array.isArray(s.moduleLibrary) ? s.moduleLibrary : []).map(normalizeModuleBlueprint);
     return out;
   }
 
@@ -193,8 +226,9 @@
   }
 
   return {
-    SAVE_FORMAT, FLOORS, WALL_KINDS, OBJECT_DEFS,
+    SAVE_FORMAT, NEXO_SLOTS, FLOORS, WALL_KINDS, OBJECT_DEFS,
     createTile, createWall, createObjectInstance, createRoomEvent, createRoom, createNexo, createLink, createStation, createState, ringWalls,
+    createModuleBlueprint, normalizeModuleBlueprint,
     normalizeWall, normalizeTile, normalizeRoom, normalizeNexo, normalizeStation, normalizeState
   };
 });
