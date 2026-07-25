@@ -85,7 +85,7 @@
     const t = room.transform;
     const r = -(t.rotation || 0) * Math.PI / 180;
     const cos = Math.cos(r), sin = Math.sin(r);
-    const px = t.pivot ? t.pivot.x : 0, py = t.pivot ? t.pivot.y : 0;
+    const px = t.pivot ? t.pivot.x : 0, py = t.pivot.y : 0;
     const dx = wx - t.x - px, dy = wy - t.y - py;
     return { x: px + dx * cos - dy * sin, y: py + dx * sin + dy * cos };
   }
@@ -329,7 +329,9 @@
         const s0 = worldToScreen(cam, ...Object.values(localToWorld(room, p.x + 0.5, p.y + 0.5)), 0.02);
         ctx.moveTo(s0.x, s0.y);
         for (const wp of p.path) {
-          const c = tileCenterWorld(room, wp.x, wp.y);
+          // cada paso vive en SU sala (multi-sala); sin roomId = sala actual del peón
+          const wr = (wp.roomId && nexo.rooms.find(r => r.id === wp.roomId)) || room;
+          const c = tileCenterWorld(wr, wp.x, wp.y);
           const s = worldToScreen(cam, c.x, c.y, 0.02);
           ctx.lineTo(s.x, s.y);
         }
