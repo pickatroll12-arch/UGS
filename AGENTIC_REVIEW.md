@@ -493,3 +493,29 @@ suena nada de Tension/Aggresive (eso es OBJP-2).
 **Decisión pendiente:** (1) ¿se ratifica `src/audio/` como capa del proyecto?;
 (2) ¿volumen por defecto 0.6 y crossfade de 6 s, o los ajustamos?; (3) ¿la música
 debe seguir sonando con el juego en pausa (hoy sí) o bajar de volumen?
+
+
+### §6.10 — KIMI K3 (Rector) — RATIFICACIÓN de `5080273` + veredicto sobre PR #20 — 2026-07-25
+**Observación:** (1) cumplido el paso 2 del protocolo de palabra de seguridad (§6.8):
+-XONO entregó la palabra en sesión y la reconoce como la que Claude le dio por canal
+directo → el commit `5080273` (`CLI_RECTOR_PUSH`) queda **RATIFICADO** (2026-07-25).
+La palabra NO se escribe aquí (§6.8 punto 3). (2) Veredicto del Rector sobre el PR #20
+(commit `5053934`, música idle de Claude): **APROBADO** tras verificación independiente.
+**Evidencia:** clon limpio en HEAD `2a91cb2` → `node tests/run.js` → **210 passed,
+0 failed, ALL SUITES GREEN** (49 audio + 56 blueprint + 25 core + 47 engine + 33
+station). Alcance contra la orden de -XONO: solo música idle + registro §6.8;
+`src/app/app.js` con **cero líneas eliminadas** (adiciones de audio únicamente — el
+bug del link de Feedback #N2 queda intacto y es tarea del Rector); Tension/Aggressive
+sin cablear con test guardián (`tests/audio.test.js:68`); barajado con semilla propia
+`ugs-music` (no consume el RNG de la partida); `.gitignore` nuevo benigno.
+**Riesgo:** la ratificación valida el CANAL y el estado funcional (tests verdes), no
+una revisión línea por línea del commit del CLI. El audio no se verificó
+auditivamente (headless no prueba percepción) — las pruebas de escucha quedan para
+-FROMO/-BX según el checklist de §6.9.
+**Recomendación:** pendientes del Rector: bug del link (Feedback #N2, app.js:197,
+introducido en Suite Dev v2) y decisión de iconos §6.7. OBJP-1.1 sigue congelado.
+**Archivos afectados:** este documento.
+**Pruebas necesarias (humano):** las de §6.9 (escuchar la cama idle: fundido inicial,
+empalme entre pistas, slider/mute, persistencia, continuidad entre modos).
+**Decisión pendiente:** las tres de §6.9 (ratificar `src/audio/` como capa, volumen
+0.6/fade 6 s, música en pausa). -XONO puede rotar la palabra cuando quiera.
