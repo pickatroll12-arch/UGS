@@ -40,6 +40,17 @@ CONSERVA LA MAYORIA DE FUNCIONES Y COSAS ANTIGUAS Y QUEDAN ANTICUADOS CON LA NUE
 
 
 
+-FROMO
+EEDBACK #N2 | FECHA: 2026-07-25 | AUTOR: -FROMO 
+PRIORIDAD: MEDIA 
+MODO DONDE OCURRIÓ:DEV-JUEGO
+¿QUÉ HICE?: Probar la mecanica de link
+¿QUÉ ESPERABA?: esperaba cambiar de nexo a nexo
+¿QUÉ PASÓ EN REALIDAD?: no se realizo la marca de link en los nexos seleccionados y no se puedo cambiar de nexo aunque existe texto relacionado que se realizo la marca link.
+EVIDENCIA: N/A
+DECISIÓN REQUERIDA: Revisar si las marcas link funcionan o si es un bug arreglar la falla
+
+
 
 
 
