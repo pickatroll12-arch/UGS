@@ -15,6 +15,8 @@
  *   C2. Un objeto sólido bloquea su tile, salvo puerta/compuerta ABIERTA.
  *   C3. floor 'void' no es transitable.
  *
+ * station.state = estado de la CAPA ESTRATÉGICA (engine/station.js).
+ *
  * Corre en navegador (window.UGS.data) y en Node (module.exports).
  */
 (function (root, factory) {
@@ -96,7 +98,19 @@
     ringWalls(room);
     nexo.rooms.push(room);
     nexo.entry = { roomId: room.id, x: 2, y: 2 };
-    return { formatVersion: SAVE_FORMAT, name: name || 'Untitled Station', nexos: [nexo], links: [], startNexoId: nexo.id };
+    return { formatVersion: SAVE_FORMAT, name: name || 'Untitled Station', nexos: [nexo], links: [], startNexoId: nexo.id, state: createState() };
+  }
+
+  // Estado de la CAPA ESTRATÉGICA (engine/station.js): economía, hitos,
+  // módulos instalados, naves. Viaja con el save; la semilla del RNG también.
+  function createState() {
+    return {
+      cred: 0, seed: 'ugs-station', phase: 1,
+      energy: { capacity: 0, used: 0 }, blackout: false,
+      inventory: {}, storageCap: 0,
+      pnj: { count: 1, capacity: 0 },
+      unlocked: [], abilities: [], buildable: [], modules: [], ships: []
+    };
   }
 
   function ringWalls(room) {
@@ -160,12 +174,27 @@
       to:   { nexoId: String(k.to.nexoId),   roomId: k.to.roomId || null,   x: k.to.x | 0,   y: k.to.y | 0 }
     }));
     out.startNexoId = out.nexos.some(n => n.id === s.startNexoId) ? s.startNexoId : out.nexos[0].id;
+    out.state = normalizeState(s.state);
+    return out;
+  }
+
+  // estado estratégico: reparar/completar lo que falte (saves viejos o rotos)
+  function normalizeState(st) {
+    const base = createState();
+    if (!st || typeof st !== 'object') return base;
+    const out = Object.assign(base, st);
+    out.cred = Number(out.cred) || 0;
+    out.phase = CORE.clamp(Number(out.phase) || 1, 1, 4);
+    out.energy = { capacity: Number(out.energy && out.energy.capacity) || 0, used: Number(out.energy && out.energy.used) || 0 };
+    out.inventory = (out.inventory && typeof out.inventory === 'object') ? out.inventory : {};
+    out.pnj = { count: Number(out.pnj && out.pnj.count) || 0, capacity: Number(out.pnj && out.pnj.capacity) || 0 };
+    for (const k of ['unlocked', 'abilities', 'buildable', 'modules', 'ships']) if (!Array.isArray(out[k])) out[k] = [];
     return out;
   }
 
   return {
     SAVE_FORMAT, FLOORS, WALL_KINDS, OBJECT_DEFS,
-    createTile, createWall, createObjectInstance, createRoomEvent, createRoom, createNexo, createLink, createStation, ringWalls,
-    normalizeWall, normalizeTile, normalizeRoom, normalizeNexo, normalizeStation
+    createTile, createWall, createObjectInstance, createRoomEvent, createRoom, createNexo, createLink, createStation, createState, ringWalls,
+    normalizeWall, normalizeTile, normalizeRoom, normalizeNexo, normalizeStation, normalizeState
   };
 });
