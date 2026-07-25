@@ -1,0 +1,182 @@
+/* UGS — tests de la capa estratégica (core/rng + engine/station).
+   Las defs usadas aquí son FIXTURES DE TEST, no contenido del juego:
+   el contenido F1 del árbol humano es OBJP-1.1 (congelado).
+   node tests/station.test.js */
+'use strict';
+const CORE = require('../src/core/core.js');
+const RNG = require('../src/core/rng.js');
+const D = require('../src/core/data.js');
+const S = require('../src/core/save.js');
+const ST = require('../src/engine/station.js');
+
+let passed = 0, failed = 0;
+const check = (n, c) => { if (c) { passed++; console.log('  ok  ', n); } else { failed++; console.error('  FAIL', n); } };
+
+console.log('UGS station/rng tests\n');
+
+// ---- rng: determinismo ------------------------------------------------------
+{
+  const a = RNG.create('semilla'), b = RNG.create('semilla');
+  const sa = [a.next(), a.next(), a.next()].join(',');
+  const sb = [b.next(), b.next(), b.next()].join(',');
+  check('misma semilla → misma secuencia', sa === sb);
+  const c = RNG.create('otra');
+  check('semilla distinta → secuencia distinta', c.next() !== a.next() || c.next() !== a.next());
+  const r = RNG.create(42);
+  check('range() respeta límites', Array.from({ length: 50 }, () => r.range(2, 5)).every(v => v >= 2 && v <= 5));
+  const p = RNG.create('p');
+  check('chance(0) nunca, chance(1) siempre', !p.chance(0) && p.chance(1));
+  const q = RNG.create('s');
+  const st = q.state; const v1 = q.next();
+  q.state = st;
+  check('state restaurable reproduce el valor', q.next() === v1);
+}
+
+// ---- fixtures ---------------------------------------------------------------
+function mkStation(cred) { const s = D.createStation('T'); s.state.cred = cred || 0; return s; }
+function mkEngine(withBus) {
+  const bus = withBus === true ? new CORE.EventBus() : (withBus || null);
+  const st = ST.create({ bus, rng: RNG.create('test') });
+  st.defineModule({ id: 'gen', name: 'Generador', cost: 0, free: true, energyUse: 0, provides: { energy: 100 } });
+  st.defineModule({ id: 'almacen', name: 'Almacén', cost: 200, free: true, energyUse: 5, provides: { storage: 30 } });
+  st.defineModule({ id: 'hab', name: 'Habitacional', cost: 100, free: true, energyUse: 5, provides: { pnjCapacity: 12 } });
+  return st;
+}
+function mkRoomAt(name, w, h, x, y) {
+  const r = D.createRoom(name, w, h);
+  r.transform.x = x; r.transform.y = y;
+  return r;
+}
+
+// ---- economía -----------------------------------------------------------------
+{
+  const st = mkEngine();
+  const s = mkStation(500);
+  check('canAfford/pay', st.canAfford(s, 300) && st.pay(s, 300) && s.state.cred === 200 && !st.pay(s, 300));
+  st.earn(s, 50);
+  check('earn suma CRED', s.state.cred === 250);
+  check('sin almacén no cabe nada (storageCap 0)', st.addItem(s, 'mineral', 5) === 0);
+  s.state.storageCap = 30;
+  check('addItem respeta el tope UD', st.addItem(s, 'mineral', 40) === 30 && st.storedTotal(s) === 30);
+  check('removeItem descuenta en UD', st.removeItem(s, 'mineral', 12) === 12 && st.storedTotal(s) === 18);
+}
+
+// ---- módulos: colocación con conexión física ------------------------------------
+{
+  const st = mkEngine();
+  const s = mkStation(1000);
+  const nexo = s.nexos[0];
+  const main = nexo.rooms[0];   // 12×9 en (0,0)
+  // primero el generador (gratis, provee energía)
+  const r1 = st.placeModule(s, nexo, 'gen', mkRoomAt('Gen', 4, 4, 12, 0));
+  check('placeModule generador conectado al Nexo', r1.ok && s.state.energy.capacity === 100);
+  // almacén pegado al generador (12..16 en x → pegar en x=16)
+  const r2 = st.placeModule(s, nexo, 'almacen', mkRoomAt('Alm', 4, 4, 16, 0));
+  check('placeModule almacén conectado módulo→módulo', r2.ok && s.state.storageCap === 30 && s.state.cred === 800);
+  // desconectado: flotando lejos
+  const r3 = st.placeModule(s, nexo, 'hab', mkRoomAt('Hab', 4, 4, 40, 40));
+  check('placeModule rechaza sala desconectada', !r3.ok && /conexión/.test(r3.reason));
+  // energía insuficiente: 2 almacenes más (5+5+5=15 ≤ 100 ok) — forzamos con def cara energéticamente
+  st.defineModule({ id: 'devorador', cost: 0, free: true, energyUse: 200 });
+  const r4 = st.placeModule(s, nexo, 'devorador', mkRoomAt('Dev', 2, 2, 0, 9));
+  check('placeModule rechaza sin headroom energético', !r4.ok && /energía/.test(r4.reason));
+  st.defineModule({ id: 'radar', name: 'Radar', cost: 0, energyUse: 0 });   // NO free: exige hito
+  const r5 = st.placeModule(s, nexo, 'radar', mkRoomAt('Rad', 2, 2, 0, 9));
+  check('placeModule rechaza módulo sin hito (no buildable)', !r5.ok && /hito/.test(r5.reason));
+  check('blackout se calcula en recompute', (() => { s.state.modules.push({ id: 'x', defId: 'devorador' }); st.recompute(s); return s.state.blackout === true; })());
+}
+
+// ---- hitos y fases -----------------------------------------------------------------
+{
+  const st = mkEngine();
+  st.defineHito({ id: 'h1', phase: 1, cost: 100, grants: { modules: ['almacen'] } });
+  st.defineHito({ id: 'h2', phase: 1, cost: 50, requires: ['h1'], grants: { abilities: ['dar_tareas'] } });
+  st.defineHito({ id: 'h3', phase: 2, cost: 10 });
+  const s = mkStation(1000);
+  check('h2 bloqueado por requires', !st.hitoStatus(s, 'h2').ok);
+  check('hito desconocido rechazado', !st.hitoStatus(s, 'nope').ok);
+  check('unlock h1 otorga módulo construible', st.unlockHito(s, 'h1').ok && s.state.buildable.includes('almacen') && s.state.cred === 900);
+  check('unlock h2 otorga habilidad', st.unlockHito(s, 'h2').ok && s.state.abilities.includes('dar_tareas'));
+  check('fase avanza al completar sus hitos', s.state.phase === 2);
+  check('doble unlock rechazado', !st.unlockHito(s, 'h1').ok);
+  check('nexoLimit = min(fase, 3)', st.nexoLimit(s) === 2 && (s.state.phase = 5, st.nexoLimit(s) === 3));
+}
+
+// ---- scheduler RNG ------------------------------------------------------------------
+{
+  const bus = new CORE.EventBus();
+  const st = mkEngine(bus);
+  const s = mkStation(0);
+  let fired = 0;
+  bus.on('station:event', () => fired++);
+  st.addTimer({ id: 'falla_gen', interval: 10, chance: 1 });   // 100% para el test
+  for (let i = 0; i < 25; i++) st.update(s, 1);                 // 25 s → 2 disparos
+  check('timer dispara por intervalo', fired === 2);
+  // con chance real: determinista por semilla
+  const run = () => {
+    const b2 = new CORE.EventBus();
+    const e = ST.create({ bus: b2, rng: RNG.create('suerte') });
+    let n = 0; b2.on('station:event', () => n++);
+    e.addTimer({ id: 'x', interval: 1, chance: 0.5 });
+    const s2 = mkStation(0);
+    for (let i = 0; i < 100; i++) e.update(s2, 1);
+    return n;
+  };
+  check('scheduler RNG determinista por semilla', run() === run());
+}
+
+// ---- expedición (fuera de pantalla) ----------------------------------------------------
+{
+  const bus = new CORE.EventBus();
+  const mk = () => {
+    const e = ST.create({ bus, rng: RNG.create('ruta') });
+    e.defineRoute({
+      id: 'extraccion', failChance: 0.1,
+      stages: [
+        { duration: 60, yields: [{ chance: 1, item: 'mineral', min: 1, max: 1 }] },              // etapa 1: 1UD segura
+        { duration: 60, yields: [{ chance: 0.65, item: 'mineral', min: 1, max: 1 }] },           // etapa 3 del árbol
+        { duration: 60, yields: [{ chance: 0.15, item: 'mineral', min: 5, max: 5 }] }            // etapa 5 del árbol
+      ]
+    });
+    return e;
+  };
+  const run = () => {
+    const e = mk();
+    const s = mkStation(0);
+    s.state.storageCap = 30;
+    const ship = e.addShip(s, { id: 'n1', capacity: 5 });
+    e.launchExpedition(s, 'extraccion', 'n1');
+    for (let i = 0; i < 300 * 30; i++) e.update(s, 1 / 30);   // 5 min de simulación (margen float)
+    return JSON.stringify({ inv: s.state.inventory, ship: ship.state });
+  };
+  const a = run(), b = run();
+  check('expedición completa es determinista', a === b);
+  const res = JSON.parse(a);
+  check('la nave vuelve (idle o damaged)', res.ship === 'idle' || res.ship === 'damaged');
+  if (res.ship === 'idle') check('descarga respeta UD/capacidad', (res.inv.mineral || 0) <= 5);
+  // estados de la nave
+  const e = mk();
+  const s = mkStation(0);
+  check('launch con ruta desconocida falla', !e.launchExpedition(s, 'nada', 'n1').ok);
+  const sh = e.addShip(s, { id: 'n1' });
+  sh.state = 'out';
+  check('launch con nave ocupada falla', !e.launchExpedition(s, 'extraccion', 'n1').ok);
+  sh.state = 'damaged';
+  s.state.cred = 100;
+  check('reparar nave cuesta CRED y la deja idle', e.repairShip(s, 'n1', 50).ok && sh.state === 'idle' && s.state.cred === 50);
+}
+
+// ---- persistencia de la capa estratégica --------------------------------------------------
+{
+  const st = mkEngine();
+  const s = mkStation(777);
+  s.state.inventory.mineral = 9;
+  s.state.phase = 3;
+  s.state.unlocked.push('h1');
+  const back = S.deserialize(S.serialize(s));
+  check('save round-trip conserva la capa estratégica', back.state.cred === 777 && back.state.inventory.mineral === 9 && back.state.phase === 3 && back.state.unlocked[0] === 'h1');
+  check('save viejo sin state se repara', (() => { const b2 = S.deserialize(JSON.stringify({ name: 'x', nexos: [] })); return b2.state && b2.state.phase === 1 && b2.state.cred === 0; })());
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);
