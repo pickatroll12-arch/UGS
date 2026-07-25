@@ -66,6 +66,8 @@ Hoy sí. Debe seguir siendo sí siempre.
 | `engine/agents.js` | lógica juego | PCJ: spawn/place/order/step, facing, 'pawn:arrived' | core, nav |
 | `engine/blueprint.js` | lógica juego | suite Dev: ops de edición de salas (rectángulos, relleno, redimensión), snapshots deshacer/rehacer, puente blueprint→defs de station.js | core, data |
 | `render/render.js` | renderizador | proyección ¾ ortogonal tipo Xenonauts (C4), picking en plano de suelo, dibujo de Nexo/salas/PCJ | data (solo catálogos) |
+| `audio/music.js` | audio (director) | decide QUÉ pista suena y con qué ganancia: barajado sembrado, fundidos y crossfade de potencia constante. Sin DOM → corre en Node y tiene tests | core, rng |
+| `audio/player.js` | audio (driver) | ejecuta los comandos del director sobre dos `<audio>`; política de autoplay/unlock. Única pieza del audio que toca el navegador | nada (recibe el director) |
 | `app/app.js` | pegamento | shell menú/dev/juego, cámara RTS, input, bucle rAF | todo lo anterior |
 
 **Contratos del modelo (C1-C3), INQUEBRANTABLES** (nacidos del feedback humano):
@@ -83,6 +85,13 @@ Hoy sí. Debe seguir siendo sí siempre.
   agnóstica de cámara y NO se toca al migrar al renderer ¾ (v2). La migración
   solo reescribe `render/render.js` + sprites. Ningún agente "reinterpreta"
   este contrato: la cámara final es ¾, el plano es el peldaño técnico.
+
+**Regla del audio (misma doctrina que el render, 2026-07-25):** el audio es
+PRESENTACIÓN, no simulación. La decisión musical vive en lógica pura y testeable
+(`audio/music.js`), el navegador solo obedece (`audio/player.js`). Ninguna capa de
+juego sabe que existe el audio: `core/`, `engine/` y `render/` no lo importan jamás.
+La música corre con dt real fuera del paso fijo — no puede influir en el determinismo
+del engine — y usa **semilla propia** (`ugs-music`), nunca el RNG de la partida.
 
 **Reglas de módulos:**
 - Un módulo = una responsabilidad = un archivo. Si crece otra responsabilidad, nace otro módulo.

@@ -1,0 +1,5 @@
+# dependencias de desarrollo (playwright-core para smokes); el runtime es vanilla
+node_modules/
+package-lock.json
+# smokes locales (se corren a mano, no viven en el repo)
+.smoke*.mjs

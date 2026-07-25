@@ -81,6 +81,36 @@
   const setStatus = (m) => { if (statusEl) statusEl.textContent = m; };
   const $ = (id) => document.getElementById(id);
 
+  // ---- música idle (cama ambiente de la cubierta) ---------------------------
+  // El director (audio/music.js) decide qué suena y con qué ganancia; el driver
+  // (audio/player.js) lo ejecuta sobre dos <audio>. Aquí solo se cablean las
+  // preferencias del usuario y el pulso del bucle. Semilla propia: la música NO
+  // debe consumir el RNG de la partida (eso rompería el determinismo del save).
+  const MUSIC_PREFS_KEY = 'ugs.music';
+  const music = window.UGS.music.create({ rng: window.UGS.rng.create('ugs-music'), volume: 0.6 });
+  const player = window.UGS.audioPlayer.create({ music });
+  let musicVol = 0.6, musicMuted = false;
+
+  function loadMusicPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem(MUSIC_PREFS_KEY) || '{}');
+      if (typeof p.volume === 'number') musicVol = CORE.clamp(p.volume, 0, 1);
+      musicMuted = !!p.muted;
+    } catch (_) { /* almacenamiento no disponible: se usan los valores por defecto */ }
+  }
+  function saveMusicPrefs() {
+    try { localStorage.setItem(MUSIC_PREFS_KEY, JSON.stringify({ volume: musicVol, muted: musicMuted })); }
+    catch (_) { /* idem */ }
+  }
+  function applyMusicPrefs() {
+    const silent = musicMuted || musicVol === 0;
+    player.setVolume(silent ? 0 : musicVol);
+    const btn = $('muBtn');
+    btn.textContent = silent ? '🔇' : '🔊';
+    btn.classList.toggle('off', silent);
+    $('muVol').value = String(Math.round(musicVol * 100));
+  }
+
   // ---- iconos del kit UX por categoría de módulo (dirección de arte §6.7) ----
   // variantes: neutral / ok (barra verde) / warn (barra naranja)
   const BP_ICONS = {
@@ -565,6 +595,9 @@
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    // la música corre en TODOS los modos (menú incluido) y con dt real: es
+    // presentación, no simulación — no pasa por el paso fijo del engine.
+    player.update(dt);
     if (app.mode === 'game' && !app.paused) {
       sim.advance(dt, (fdt) => { engine.update(nexo(), fdt); station.update(app.station, fdt); });
       if (engine.activeCount() > 0 || agents.pawns.some(p => p.moving)) invalidate();
@@ -596,6 +629,16 @@
   bind('mGame', () => setMode('game'));
   bind('tMenu', () => setMode('menu'));
   bind('tPlay', () => setMode(app.mode === 'game' ? 'dev' : 'game'));
+  // música: mute + volumen (persistentes). El navegador bloquea el audio hasta
+  // el primer gesto del usuario: por eso todo click/tecla reintenta el unlock.
+  bind('muBtn', () => { musicMuted = !(musicMuted || musicVol === 0); if (!musicMuted && musicVol === 0) musicVol = 0.6; saveMusicPrefs(); applyMusicPrefs(); player.unlock(); });
+  $('muVol').addEventListener('input', (e) => {
+    musicVol = CORE.clamp((Number(e.target.value) || 0) / 100, 0, 1);
+    if (musicVol > 0) musicMuted = false;
+    saveMusicPrefs(); applyMusicPrefs(); player.unlock();
+  });
+  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => player.unlock(), { capture: true });
+
   bind('secBtnNexo', () => setDevSection('nexo'));
   bind('secBtnModules', () => setDevSection('modules'));
   bind('tExport', () => S.exportToFile(app.station));
@@ -731,6 +774,9 @@
   resize();
   refreshSlots();
   refreshBpList();
+  loadMusicPrefs();
+  applyMusicPrefs();
+  player.start();                 // suena en cuanto el navegador lo permita (unlock)
   R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
   // debug/smoke hook: ?auto=dev|game salta el menú (&sec=modules fuerza sección)
   const qs = new URLSearchParams(location.search);
@@ -745,4 +791,6 @@
   window.UGS._agents = agents;
   window.UGS._station = station;
   window.UGS._rng = rng;
+  window.UGS._music = music;
+  window.UGS._player = player;
 })();

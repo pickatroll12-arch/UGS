@@ -32,6 +32,10 @@ src/
     agents.js         el PCJ ("mono"): movimiento solo por click→ruta
   render/             [RENDERIZADOR GRÁFICO]
     render.js         canvas 2D, vista ¾ ortogonal tipo Xenonauts (C4): diamante, paredes extruidas, fade de oclusión
+  audio/              [AUDIO]
+    music.js          director: decide qué pista suena y con qué ganancia (crossfade de
+                      potencia constante, orden barajado por rng.js). Sin DOM → Node-testeable
+    player.js         driver: ejecuta los comandos del director sobre dos <audio>; autoplay/unlock
   app/
     app.js            pegamento: modos (menú/dev/juego), suite Dev (Nexo/Módulos), cámara, input, bucle
 !_UGS/ux/             kit UX del equipo (logo, botones, tarjetas) — referenciado in-situ por el shell
@@ -41,7 +45,12 @@ tests/
   engine.test.js      nav + engine + agents + matemáticas de picking/yaw
   station.test.js     capa estratégica: RNG, economía, módulos, hitos, expediciones
   blueprint.test.js   suite Dev: blueprints, ops de edición, puente a station.js
+  audio.test.js       director musical: barajado, fundidos, crossfade, bucle infinito
 ```
+
+El kit del equipo se referencia **in-situ** (cero duplicación binaria): `!_UGS/ux/` para la
+UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_MU` y
+`Aggresive_Events_Mu` NO están cableadas: música por evento es OBJP-2, congelado).
 
 ## Reglas de oro (resumen; el detalle está en PROMPT_MAESTRO.md)
 
@@ -49,7 +58,9 @@ tests/
 - **Lógica PRE-CARGADA POR NEXO** (Nexo = nivel/fase). No hay life-sim global: cada Nexo declara su lógica en datos y el engine la ejecuta solo mientras ese Nexo está cargado.
 - **Toda pared bloquea su tile completo.** Siempre. (Contrato C1, nacido del feedback humano.)
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
-- **Tests en verde antes de cualquier entrega:** `npm test` (136 checks hoy; solo crece).
+- **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
+  el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
+- **Tests en verde antes de cualquier entrega:** `npm test` (210 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -69,6 +80,17 @@ tests/
 | Viajar de Nexo (en juego) | click en el ascensor (▣) |
 | Pintar rectángulo / contorno (dev) | arrastrar con Suelo / Pared / Borrar |
 | Deshacer / Rehacer (dev) | `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`) |
+| Silenciar / volumen de música | control 🔊 abajo a la derecha (visible en todos los modos) |
+
+## Música
+
+Cama ambiente **idle** de la cubierta: las 4 pistas de `!_UGS/Fx/Music/Deck_Idle_Mu/` se
+encadenan en bucle infinito con **crossfade de potencia constante** (6 s), orden barajado
+por `core/rng.js` (semilla propia `ugs-music`: la música nunca consume el RNG de la partida)
+y sin repetir pista dos veces seguidas. Entra con fundido y para con fundido. El navegador
+bloquea el audio hasta el primer gesto del usuario: mientras tanto la transición se congela
+(no se consume en silencio) y arranca sola con el primer click. Volumen y mute persisten en
+`localStorage`.
 
 ## Suite Dev (diseño)
 
