@@ -65,6 +65,9 @@
   .card.sel { border-color:var(--accent); }
   .card .t { font-size:12px; font-weight:700; }
   .card .s { font-size:10px; color:var(--muted); margin-top:2px; }
+  .card .in { display:flex; gap:8px; align-items:center; }
+  .card img.bpicon { width:30px; height:30px; flex:none; }
+  img.bpicon.inline { width:22px; height:22px; vertical-align:middle; margin-left:6px; }
 
   #hud { position:fixed; z-index:4; top:56px; right:12px; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted);
     background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:7px; padding:6px 9px; pointer-events:none; }
@@ -113,6 +116,9 @@
       <button data-tool="link">⛓ Link</button>
     </div>
     <label class="check"><input type="checkbox" id="connToggle"> Mostrar frontera de conexión de módulos</label>
+    <h3 style="margin-top:10px">COLOCAR MÓDULO (DESDE BIBLIOTECA)</h3>
+    <div class="row"><select id="placeSel"></select></div>
+    <div class="row"><button id="placeToggle">▣ Activar colocación</button></div>
   </section>
 
   <!-- ======= sección MÓDULOS (biblioteca de blueprints) ======= -->
@@ -121,7 +127,7 @@
     <div id="bpList"></div>
     <div class="row"><button id="bpNew">+ Nuevo módulo</button></div>
     <div id="bpForm" style="display:none">
-      <h3 style="margin-top:10px">MÓDULO ACTIVO</h3>
+      <h3 style="margin-top:10px">MÓDULO ACTIVO<img id="bpFormIcon" class="bpicon inline" src="" alt=""></h3>
       <label class="field">Nombre <input id="bpName" type="text"></label>
       <label class="field">Categoría <select id="bpCat">
         <option value="general">general</option><option value="energia">energía</option>

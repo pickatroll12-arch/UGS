@@ -160,5 +160,43 @@ console.log('UGS blueprint/devsuite tests\n');
   check('dos instancias del mismo blueprint → ids distintos', room1.id !== room2.id);
 }
 
+// ---- ghost de colocación de módulos (suite Dev) --------------------------------
+{
+  const nexo = D.createNexo('N');
+  const hub = D.createRoom('hub', 4, 4); hub.transform.x = 0; hub.transform.y = 0;
+  nexo.rooms.push(hub);
+  const size = { w: 3, h: 3 };
+
+  const ok = BP.placementCheck(nexo, size, { x: 4, y: 0 });          // arista E, solape 3
+  check('placementCheck: posición conectada es ok', ok.ok === true && ok.touch && ok.touch.roomId === hub.id);
+  check('placementCheck: arista compartida = lado E con intervalo', ok.touch.edge.side === 'E' && ok.touch.edge.x === 4 && ok.touch.edge.y0 === 0 && ok.touch.edge.y1 === 3);
+  const okS = BP.placementCheck(nexo, size, { x: 0, y: 4 });          // arista S
+  check('placementCheck: también vale por el lado S', okS.ok === true && okS.touch.edge.side === 'S');
+  const over = BP.placementCheck(nexo, size, { x: 2, y: 2 });
+  check('placementCheck: solape rechazado', !over.ok && /solapa/.test(over.reason));
+  const corner = BP.placementCheck(nexo, size, { x: 4, y: 4 });       // solo esquina
+  check('placementCheck: esquina NO es conexión', !corner.ok && /conexión/.test(corner.reason));
+  const far = BP.placementCheck(nexo, size, { x: 20, y: 20 });
+  check('placementCheck: lejos = sin conexión', !far.ok && /conexión/.test(far.reason));
+  const snap = BP.placementCheck(nexo, size, { x: 3.6, y: 0.4 });     // redondea a grid
+  check('placementCheck: posición se snappea a grid entero', snap.ok === true && snap.x === 4 && snap.y === 0);
+
+  // sharedEdge directo
+  check('sharedEdge: sin contacto → null', BP.sharedEdge(0, 0, 2, 2, 5, 5, 2, 2) === null);
+  check('sharedEdge: rectsOverlap básico', BP.rectsOverlap(0, 0, 2, 2, 1, 1, 2, 2) === true && BP.rectsOverlap(0, 0, 2, 2, 2, 0, 2, 2) === false);
+}
+
+// ---- salas colocadas desde blueprint: bpId ---------------------------------------
+{
+  const bp = D.createModuleBlueprint({ name: 'BP T', w: 3, h: 3 });
+  const room = BP.instantiateRoom(bp, { x: 10, y: 0 });
+  check('instantiateRoom: registra bpId de origen', room.bpId === bp.id);
+  const st = D.createStation('T');
+  st.nexos[0].rooms.push(room);
+  const rt = S.deserialize(S.serialize(st));
+  check('save round-trip conserva room.bpId', rt.nexos[0].rooms[1].bpId === bp.id);
+  check('sala de diseño sin bpId → null', rt.nexos[0].rooms[0].bpId === null);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
