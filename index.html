@@ -74,6 +74,16 @@
   #status { position:fixed; z-index:6; left:50%; bottom:14px; transform:translateX(-50%); font-size:12px;
     background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:8px 12px; pointer-events:none; }
 
+  /* Control de música: visible y OPERATIVO en todos los modos. z-index por
+     encima de #menu (30), que es un overlay a pantalla completa: si no, en el
+     menú el control se ve pero no se puede clicar. */
+  #audiobar { position:fixed; z-index:40; right:12px; bottom:14px; display:flex; align-items:center; gap:8px;
+    background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:6px 10px; }
+  #audiobar button { background:transparent; border:0; color:var(--fg); font-size:14px; cursor:pointer; padding:0 2px; }
+  #audiobar button.off { color:var(--muted); }
+  #audiobar input[type=range] { width:92px; accent-color:var(--accent); }
+  #audiobar .lbl { font-size:10px; color:var(--muted); font-family:ui-monospace,monospace; }
+
   /* en juego/menú no hay chrome de desarrollo; exportar/importar BLOQUEADOS en juego */
   body[data-mode="game"] #devpanel, body[data-mode="menu"] #devpanel,
   body[data-mode="game"] #devSections, body[data-mode="menu"] #devSections,
@@ -169,6 +179,13 @@
 
 <div id="hud"></div>
 <div id="status">Cargando…</div>
+
+<!-- música idle: mute + volumen (persisten en localStorage) -->
+<div id="audiobar" title="Música ambiente de la cubierta">
+  <button id="muBtn">🔊</button>
+  <input id="muVol" type="range" min="0" max="100" step="1" value="60">
+  <span class="lbl" id="muLbl">MÚSICA</span>
+</div>
 <input id="fileInput" type="file" accept="application/json,.json" hidden>
 <input id="bpFileInput" type="file" accept="application/json,.json" multiple hidden>
 
@@ -177,6 +194,8 @@
 <script src="src/core/rng.js"></script>
 <script src="src/core/data.js"></script>
 <script src="src/core/save.js"></script>
+<script src="src/audio/music.js"></script>
+<script src="src/audio/player.js"></script>
 <script src="src/render/render.js"></script>
 <script src="src/engine/nav.js"></script>
 <script src="src/engine/engine.js"></script>

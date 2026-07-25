@@ -379,3 +379,117 @@ lejos/solapado con el motivo en la etiqueta; (3) colocar varios módulos seguido
 exportar/reimportar: las salas conservan su origen.
 **Decisión pendiente:** ¿el mapeo categoría→icono gusta o se reordena? (grano=
 almacén, cubierto=hábitat, laboratorio=industria, O2=general, rayo=energía)
+
+
+### §6.8 — CLAUDE — Categorización del commit `5080273` como CLI_RECTOR_PUSH — 2026-07-25
+**Observación:** el commit `5080273` ("feat: implement KIMI_FIXES_SUITE_DEV.md fixes",
+autor `Kimi CLI`) entró a `main` sin handoff en este documento, de modo que el registro
+de coordinación saltaba de §6.7 al estado actual sin dejar traza. Queda **categorizado
+como `CLI_RECTOR_PUSH`**: push directo del Rector desde su CLI, fuera del flujo
+branch+PR de `PROMPT_MAESTRO.md` §5.3, amparado por la excepción "salvo Kimi K3
+ejerciendo de Rector". **-XONO autorizó expresamente a Claude a categorizar este
+commit** (orden directa en sesión, 2026-07-25); Claude no juzga aquí el contenido
+del commit, solo lo etiqueta y lo hace visible en el canal compartido de agentes.
+
+**Contenido cubierto por la etiqueta** (verificado en el código, no en el documento
+de origen): navegación multi-sala (`openSharedEdge`, `findPathNexo`, `agents.order`
+entre salas, `gameClick` sin restricción de sala), borrado de módulo que retira sus
+instancias colocadas, bloque de archivo de biblioteca fuera de `#bpForm`, y export
+individual + import múltiple con `normalizeModuleLibraryInput`. Estado en `main`:
+funcional y con tests en verde.
+
+**PROTOCOLO DE PALABRA DE SEGURIDAD (nuevo, exigido por -XONO):**
+1. La etiqueta `CLI_RECTOR_PUSH` **no valida el commit por sí sola**: queda en estado
+   PENDIENTE DE RATIFICACIÓN hasta que se cumpla el paso 2.
+2. **Kimi K3 debe preguntar a -XONO por la palabra de seguridad** antes de dar por
+   aceptado este commit y cualquier futuro push directo a `main` desde su CLI.
+3. La palabra **NO está escrita en este repositorio ni en ningún documento del
+   proyecto**: se entregó a -XONO por canal directo (fuera de banda). Quien no la
+   haya recibido de -XONO no puede conocerla, y ese es justamente el punto.
+4. **Si -XONO no reconoce la palabra, el commit queda RECHAZADO** y debe revertirse
+   o rehacerse por el flujo branch+PR normal.
+5. -XONO puede rotar la palabra cuando quiera; la nueva se comunica igual, fuera de
+   banda, y nunca se escribe aquí.
+**Evidencia:** `git log 5080273` (autor Kimi CLI, 9 archivos); verificación del código
+resultante en `src/engine/nav.js:91`, `src/engine/agents.js:93`, `src/app/app.js:669`,
+`src/core/data.js:139`, `index.html:151`. `npm test` en verde sobre ese estado.
+**Riesgo:** la etiqueta es documental y no impide técnicamente otro push directo;
+depende de que el Rector respete el protocolo. Claude no ha revisado línea por línea
+la corrección funcional del commit — solo su existencia, alcance y estado verde.
+**Recomendación:** Kimi K3 solicita la palabra a -XONO y anota aquí el resultado
+(RATIFICADO / RECHAZADO, con fecha). Mientras tanto el commit sigue en `main`.
+**Archivos afectados:** este documento (solo registro; ningún cambio de código).
+**Pruebas necesarias (humano):** ninguna funcional. -XONO custodia la palabra.
+**Decisión pendiente:** ratificación o rechazo del commit `5080273` por parte de
+-XONO tras la consulta de Kimi K3.
+
+
+### §6.9 — CLAUDE — Música idle: cama ambiente con crossfade — 2026-07-25
+**Observación:** por orden directa de -XONO (que acaba de pushear `!_UGS/Fx/`), se
+implementa la **música idle**. Pedido literal: "si puedes hacerlas loopeables bien,
+si no un fade que permita las transiciones de forma grata" → se entregan **las dos
+cosas**: bucle infinito Y transición con fundido, porque las pistas no son gapless
+(no empalman sin costura) y un corte seco entre ellas se oye mal.
+
+- **Capa nueva `src/audio/`, con la misma doctrina que el render:** `music.js` es el
+  DIRECTOR (decide qué suena y con qué ganancia; lógica pura, sin DOM, corre en Node
+  y tiene tests) y `player.js` es el DRIVER (única pieza que toca el navegador:
+  ejecuta comandos sobre dos `<audio>`). Ninguna capa de juego importa audio.
+- **Bucle:** las 4 pistas de `Deck_Idle_Mu` se barajan con `core/rng.js` (semilla
+  propia `ugs-music` — la música NO consume el RNG de la partida, eso rompería el
+  determinismo del save), se encadenan sin fin y se rebarajan al agotarse evitando
+  repetir la pista recién sonada.
+- **Crossfade de POTENCIA CONSTANTE** (sin/cos, 6 s): la energía suma 1 durante todo
+  el cruce, así no se "hunde" el volumen a mitad de camino como haría un fundido
+  lineal. La pista siguiente se precarga 12 s antes (streaming, ~5 MB por pista;
+  nada se descarga hasta que hace falta: `preload='none'` de partida).
+- **Autoplay:** los navegadores bloquean el audio hasta el primer gesto. Si `play()`
+  es rechazado, el driver reporta "estancado" y el director recibe dt=0 — el fundido
+  NO se consume en silencio: arranca íntegro con el primer click del usuario.
+- **Control de usuario:** 🔊 + slider abajo a la derecha, visible y operativo en los
+  TRES modos (menú incluido); volumen y mute persisten en `localStorage`.
+- **Alcance respetado:** SOLO la cama idle. `Tension_Events_MU` y `Aggresive_Events_Mu`
+  existen en `!_UGS/Fx` y quedan SIN CABLEAR: música por evento es OBJP-2, congelado.
+  Hay un test que falla a propósito si alguien las cuela en el catálogo idle.
+**Evidencia:** `node tests/run.js` → **210 checks, ALL SUITES GREEN** (49 nuevos en
+`tests/audio.test.js`: barajado determinista, catálogo, fundido de entrada, precarga
+anticipada, potencia constante durante el cruce, 10+ pistas encadenadas sin repetir
+ni caer a silencio, pista única en bucle consigo misma, duración desconocida →
+corte por 'ended', volumen maestro, fundido de salida, dt=0 por autoplay).
+Smoke funcional (playwright-core + chromium, con servidor que soporta Range)
+**22/22 verde**: arranque solo, fundido real a 0.6, precarga, crossfade con las dos
+pistas sonando a potencia constante, relevo completo, slider/mute/persistencia,
+música continua a través de menú→juego→dev, PCJ sigue spawneando, **cero errores
+de consola**.
+**Dos fallos reales encontrados y corregidos gracias al smoke** (los unitarios no
+los veían): (1) el overlay `#menu` tapaba el control de música — se veía pero no se
+podía clicar desde el menú; (2) el driver contaba una pista TERMINADA como "audio
+bloqueado", lo que congelaba el crossfade para siempre si la pista saliente acababa
+antes que el fundido. Ambos con test/verificación de regresión.
+**Riesgo / lo que NO se probó:** no lo he escuchado — la verificación es de niveles
+y estados, no de gusto musical; si un empalme suena mal es cuestión de ajustar los
+6 s de fade (parámetro `fade` en app.js). Si el host que sirve el juego no manda
+`Content-Length`/`Range`, el navegador deja `duration` en infinito y no se puede
+programar el crossfade: se cae a corte duro al terminar la pista (sin silencio ni
+error; GitHub Pages sí los manda). Autoplay probado con la política desactivada en
+headless; en un navegador real la música empezará al primer click. Volumen por
+defecto 0.6 elegido por mí. Sin control de música en `!_UGS/ux` todavía: el widget
+usa el estilo de panel del kit, no un botón dedicado del arte.
+**Decisión estructural que requiere vuestro visto bueno:** `src/audio/` es una CAPA
+NUEVA que no estaba en la estructura de `PROMPT_MAESTRO.md` §3. La he añadido a la
+tabla siguiendo la doctrina existente (director puro / driver tonto, igual que
+lógica / render), pero crear capa es decisión humana: si preferís otra ubicación,
+se mueve sin tocar la lógica.
+**Archivos afectados:** `src/audio/music.js` (nuevo), `src/audio/player.js` (nuevo),
+`tests/audio.test.js` (nuevo), `src/app/app.js` (creación, preferencias, pulso del
+bucle, unlock), `index.html` (scripts, widget `#audiobar`, CSS), `README.md`,
+`PROMPT_MAESTRO.md` (§3: filas de audio + regla del audio), este documento.
+**Pruebas necesarias (humano):** (1) abrir `index.html`: la música entra sola con
+fundido tras el primer click; (2) dejarla ~3 min y escuchar el empalme entre pistas
+— ¿la transición es "grata" o queréis más/menos de 6 s?; (3) mover el slider y
+mutear: responde al instante; (4) recargar: recuerda volumen y mute; (5) pasar de
+menú a juego y a dev: la música no se corta ni se reinicia; (6) confirmar que NO
+suena nada de Tension/Aggresive (eso es OBJP-2).
+**Decisión pendiente:** (1) ¿se ratifica `src/audio/` como capa del proyecto?;
+(2) ¿volumen por defecto 0.6 y crossfade de 6 s, o los ajustamos?; (3) ¿la música
+debe seguir sonando con el juego en pausa (hoy sí) o bajar de volumen?
