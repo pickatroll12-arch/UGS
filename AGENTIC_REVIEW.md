@@ -495,6 +495,32 @@ suena nada de Tension/Aggresive (eso es OBJP-2).
 debe seguir sonando con el juego en pausa (hoy sí) o bajar de volumen?
 
 
+### §6.10 — KIMI K3 (Rector) — RATIFICACIÓN de `5080273` + veredicto sobre PR #20 — 2026-07-25
+**Observación:** (1) cumplido el paso 2 del protocolo de palabra de seguridad (§6.8):
+-XONO entregó la palabra en sesión y la reconoce como la que Claude le dio por canal
+directo → el commit `5080273` (`CLI_RECTOR_PUSH`) queda **RATIFICADO** (2026-07-25).
+La palabra NO se escribe aquí (§6.8 punto 3). (2) Veredicto del Rector sobre el PR #20
+(commit `5053934`, música idle de Claude): **APROBADO** tras verificación independiente.
+**Evidencia:** clon limpio en HEAD `2a91cb2` → `node tests/run.js` → **210 passed,
+0 failed, ALL SUITES GREEN** (49 audio + 56 blueprint + 25 core + 47 engine + 33
+station). Alcance contra la orden de -XONO: solo música idle + registro §6.8;
+`src/app/app.js` con **cero líneas eliminadas** (adiciones de audio únicamente — el
+bug del link de Feedback #N2 queda intacto y es tarea del Rector); Tension/Aggressive
+sin cablear con test guardián (`tests/audio.test.js:68`); barajado con semilla propia
+`ugs-music` (no consume el RNG de la partida); `.gitignore` nuevo benigno.
+**Riesgo:** la ratificación valida el CANAL y el estado funcional (tests verdes), no
+una revisión línea por línea del commit del CLI. El audio no se verificó
+auditivamente (headless no prueba percepción) — las pruebas de escucha quedan para
+-FROMO/-BX según el checklist de §6.9.
+**Recomendación:** pendientes del Rector: bug del link (Feedback #N2, app.js:197,
+introducido en Suite Dev v2) y decisión de iconos §6.7. OBJP-1.1 sigue congelado.
+**Archivos afectados:** este documento.
+**Pruebas necesarias (humano):** las de §6.9 (escuchar la cama idle: fundido inicial,
+empalme entre pistas, slider/mute, persistencia, continuidad entre modos).
+**Decisión pendiente:** las tres de §6.9 (ratificar `src/audio/` como capa, volumen
+0.6/fade 6 s, música en pausa). -XONO puede rotar la palabra cuando quiera.
+
+
 ### §6.11 — KIMI K3 (Rector) — Fix trail multi-sala + links entre nexos (Feedback #N1 y #N2) — 2026-07-25
 **Observación:** resueltos los dos feedbacks activos:
 - **#N1 (-XONO, trail "se buguea feo"):** dos causas. (1) `render.js` proyectaba TODOS
@@ -529,3 +555,35 @@ trail sigue los tiles y cruza por la abertura, sin atravesar paredes ni saltos;
 conserva), clicar destino → "Link (ascensor) creado"; (3) en Juego: llevar al PCJ a
 la ▣ → viaja al otro nexo; (4) ida y vuelta (links bidireccionales).
 **Decisión pendiente:** ninguna nueva.
+
+
+### §6.12 — KIMI K3 (Rector) — RATIFICACIÓN del módulo de pantallas (PR #21) — 2026-07-25
+**Observación:** cumplido el paso 2 del protocolo de palabra de seguridad (§6.8):
+-XONO entregó la palabra en sesión y la reconoce como la que Claude le dio por canal
+directo → el commit `e51a01c` (PR #21, merge `7a399be`; "feat(screens): módulo de
+pantallas de consola + pantalla de prueba 'radar'") queda **RATIFICADO**. La palabra
+NO se escribe aquí (§6.8 punto 3). Veredicto del Rector sobre el código: **APROBADO**
+tras verificación independiente.
+**Evidencia:** clon limpio en HEAD `7a399be` → `node tests/run.js` → **213 passed,
+ALL SUITES GREEN**. Alcance: un solo archivo nuevo `src/screens/screens.js` (445
+líneas), cero archivos existentes tocados; NO lo carga index.html ni lo importa
+ninguna capa (aislado por diseño, riesgo cero para el juego). Dependencias: solo
+`core/rng.js` con semilla propia por pantalla (`ugs-screen-<id>`) — no consume el RNG
+de la partida; cero `Math.random`. Lógica sin DOM (carga y corre en Node, verificado);
+`draw` solo lee estado. Contenido: registro de tipos de pantalla
+(define/open/has/list), chrome común estética Award BIOS (rejilla 80 col, EGA 16,
+marcos doble línea, Item Help en vídeo inverso) y pantalla de muestra 'radar' con
+datos simulados (barrido con estela, contactos con deriva, sondeo por vuelta,
+alcance seleccionable).
+**Riesgo:** llegó sin handoff (esta entrada lo cubre). La pantalla radar usa datos
+simulados — el wiring real (consola del mapa → pantalla al interactuar el PCJ, datos
+de estación) queda para un milestone posterior autorizado. No verificado
+visualmente en navegador (revisión de código + Node).
+**Recomendación:** cuando se autorice el wiring: index.html carga screens.js, el
+objeto 'console' abre su pantalla al interactuar el PCJ y las pantallas consumen
+datos de `station.js`. Mantener el patrón lógica-pura/driver ya usado en audio.
+**Archivos afectados:** este documento (registro; el código llegó por PR #21).
+**Pruebas necesarias (humano):** ninguna todavía — el módulo no es visible hasta el
+wiring. Cuando se enganche: abrir una consola, navegar con flechas, Item Help.
+**Decisión pendiente:** ¿autorizan el wiring de pantallas (consola → radar) como
+siguiente paso, o espera a cerrar OBJP-1?
