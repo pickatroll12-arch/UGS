@@ -242,3 +242,42 @@ conversión del procesamiento (¿1UD base → 1UD procesada? ¿tiempo por UD?);
 **Archivos afectados:** este documento.
 **Pruebas necesarias (humano):** ninguna.
 **Decisión pendiente:** las 4 preguntas abiertas de arriba.
+
+
+### §6.5 — KIMI K3 (Rector) — OBJP-1 UPGRADE: capa estratégica tipo Xenonauts 2 — 2026-07-25
+**Observación:** por orden del organizador, se analizaron REVISION MAESTRA 2 y el
+árbol de hitos F1 y se actualizó el motor para soportar esas capacidades A FUTURO,
+apuntando a un motor tipo Xenonauts 2 (capa táctica + capa estratégica).
+Análisis meta → capacidad añadida:
+| Meta del documento humano | Capacidad nueva |
+|---|---|
+| "En modo juego solo se pueden comprar y conectar módulos" | `station.placeModule()`: valida hito, CRED, energía y CONEXIÓN FÍSICA (arista compartida con el Nexo) |
+| "Fase = árbol de hitos; desbloquear todos para avanzar" | motor de hitos {phase, cost, requires[], grants{modules, abilities}} + avance de fase automático (tope 4 fases / 3 nexos, 1 por nivel) |
+| "Eventos RNG cada cierto tiempo" (falla generador 20%/20min) | scheduler de temporizadores RNG deterministas que emiten por el bus |
+| "Expedición minera ocurre fuera de pantalla" + ruta 5 etapas | expediciones por ETAPAS con rendimientos probabilísticos, naves con capacidad/falla/reparación |
+| CRED / UD / energía / PNJ cap | economía de estación persistida en `station.state` (viaja en saves) |
+| Probabilidades por todas partes | `core/rng.js`: mulberry32 sembrado (semilla en el save; prohibido Math.random) |
+**Alcance respetado:** CERO contenido F1 (módulos/hitos/rutas del árbol humano) —
+OBJP-1.1 sigue congelado; solo se entrega CAPACIDAD (formatos declarativos +
+runtime). Sin UI de economía (milestone posterior). Las defs de los tests son
+fixtures, no contenido del juego.
+**Evidencia:** `node tests/run.js` → **92 checks, ALL SUITES GREEN** (33 nuevos
+en `tests/station.test.js`: determinismo del RNG, economía UD/CRED, colocación
+de módulos con conexión física y headroom energético, cadena de hitos + avance
+de fase, scheduler RNG por semilla, expedición completa determinista con
+descarga UD, round-trip del save con capa estratégica). Boot headless sin
+errores con los nuevos scripts cargados.
+**Riesgo:** la capa estratégica corre invisible en modo juego (solo anuncia
+eventos en la barra de estado); sin UI aún. El scheduler vive en la instancia
+del engine de estación — al importar un save se recrea (documentado).
+**Recomendación:** cuando OBJP-1.1 se firme, el contenido F1 del árbol entra
+como DATOS (defs de módulos/hitos/rutas) sin tocar el motor. Candidatos de UI:
+panel de estación (CRED/energía/almacén), catálogo de módulos, árbol de hitos.
+**Archivos afectados:** `src/core/rng.js` (nuevo), `src/engine/station.js`
+(nuevo), `src/core/data.js` (station.state + normalizeState), `src/app/app.js`
+(wiring), `index.html` (scripts), `tests/station.test.js` (nuevo),
+`PROMPT_MAESTRO.md` (tabla + determinismo), este documento.
+**Pruebas necesarias (humano):** ninguna funcional nueva visible; verificar que
+el juego sigue igual (boot, clic→ruta, Q/E) — la capa nueva es invisible.
+**Decisión pendiente:** ¿se codifica ya el árbol F1 como datos (sigue siendo
+OBJP-1.1) o esperamos las 3 firmas?

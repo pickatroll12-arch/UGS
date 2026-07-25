@@ -57,10 +57,12 @@ Hoy sí. Debe seguir siendo sí siempre.
 | Módulo | Capa | Responsabilidad | Puede importar |
 |---|---|---|---|
 | `core/core.js` | lógica base | ids, EventBus síncrono, FixedTimestep, helpers | nada |
+| `core/rng.js` | lógica base | RNG determinista sembrado (mulberry32); TODA probabilidad del juego pasa aquí | nada |
 | `core/data.js` | lógica base | modelo (Estación→Nexo→Sala→Tile), catálogos, **contratos C1-C3**, normalización | core |
 | `core/save.js` | lógica base | persistencia JSON v1 (sin legacy) | data |
 | `engine/nav.js` | lógica juego | A* click→ruta, walkable (aplica C1-C3) | nada |
 | `engine/engine.js` | lógica juego | runtime por Nexo: eventos shift/rotate/orbit/carousel, bus, paso fijo | core, render (solo pose math) |
+| `engine/station.js` | lógica juego | capa estratégica (tipo geoscape Xenonauts): economía CRED/UD/energía/PNJ, módulos (conexión física), hitos/fases, scheduler RNG, expediciones por etapas | core, rng |
 | `engine/agents.js` | lógica juego | PCJ: spawn/place/order/step, facing, 'pawn:arrived' | core, nav |
 | `render/render.js` | renderizador | proyección cenital + yaw, picking, dibujo de Nexo/salas/PCJ | data (solo catálogos) |
 | `app/app.js` | pegamento | shell menú/dev/juego, cámara RTS, input, bucle rAF | todo lo anterior |
@@ -92,7 +94,8 @@ Hoy sí. Debe seguir siendo sí siempre.
 ## §4. Determinismo y calidad (definition of done)
 
 1. El engine avanza a paso fijo (`FixedTimestep` en app.js → `engine.update(nexo, dtFijo)`).
-   Nada de `Date.now()`/`Math.random()` en lógica de juego.
+   Nada de `Date.now()`/`Math.random()` en lógica de juego: TODA probabilidad usa
+   `core/rng.js` con la semilla del save (`station.state.seed`).
 2. **Todo módulo nuevo llega con su test en Node** (`tests/*.test.js`, runner `tests/run.js`).
    `npm test` debe quedar en verde. Verde es requisito, no prueba suficiente:
    en tu handoff declaras qué probaste manualmente y qué NO probaste.
