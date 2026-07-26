@@ -587,3 +587,51 @@ datos de `station.js`. Mantener el patrón lógica-pura/driver ya usado en audio
 wiring. Cuando se enganche: abrir una consola, navegar con flechas, Item Help.
 **Decisión pendiente:** ¿autorizan el wiring de pantallas (consola → radar) como
 siguiente paso, o espera a cerrar OBJP-1?
+
+
+### §6.13 — KIMI K3 (Rector) — Decisiones §6.7/§6.9/§6.12 + sprite de consola v3 integrado — 2026-07-26
+**Observación:** (1) decisiones humanas registradas: §6.7 (mapeo categoría→icono)
+APROBADO sin cambios; §6.9 (tres preguntas de audio) APROBADO todo: `src/audio/`
+ratificada como capa, volumen 0.6 y crossfade de 6 s, la música sigue sonando en
+pausa; §6.12 (wiring de pantallas) NO autorizado por ahora — el módulo screens
+queda aislado hasta nueva orden. (2) -XONO subió 8 sprites de consola a
+`!_UGS/RECURSOS/Processed/` (commit `32cad4b`) con la orden «intenta usar v1 o
+v3» → se integra **v3** en el renderer.
+**Implementación:** la hoja v3 (2048×2102) trae la consola en los 4 yaws sobre
+fondo blanco + placa negra con grid. Separar por color resultó no fiable (la
+consola y la placa comparten rango de luminancia), así que el renderer recorta
+cada vista con la **silueta hexagonal medida** (clip de canvas — cero procesado
+de píxel: funciona también bajo file:// y no contamina el repo con binarios
+derivados). Escala: el span esquina-a-esquina de la cara superior se mapea a la
+huella 0.62 tiles (factor 0.62·√2·TILE·zoom/topW); ancla: centro de huella →
+centro del tile en el suelo. Si la imagen no ha cargado o falla, dibuja la caja
+procedural de siempre (fallback). Datos en `CONSOLE_SPRITE.VIEWS` (render.js) —
+si el arte cambia la hoja hay que re-medir (documentado en el código).
+**Evidencia:** clon limpio → `node tests/run.js` → **218 passed, ALL SUITES
+GREEN** (+5 checks de integridad de las vistas: 4 yaws, hexágonos de 6 puntos,
+rects dentro de la hoja, ancla dentro del rect, topW positivo). Smoke visual
+(servidor local, misma vía que producción): las 4 vistas correctas por yaw,
+consola asentada y centrada en su tile, sin fondo ni placa ni etiquetas, cero
+errores de consola; captura verificada por el Rector. Commits `07d5d83` y
+`5cd5449`.
+**INCIDENTE (transparencia):** el primer push de esta entrega (`576caa3`) subió
+por error dos archivos con contenido placeholder (fallo de emisión del Rector,
+no del código); se reparó en `07d5d83` más corrección de dos typos de
+transcripción en `5cd5449`, verificado byte-exacto por md5 + clon limpio con
+tests en verde. Lección aplicada: la verificación post-push incluye diff de
+contenido, no solo presencia.
+**Riesgo:** mediciones manuales ±5 px (invisibles a escala de juego); la consola
+v3 es más oscura que la procedural (diseño del arte); la placa del artista no se
+dibuja (solo la consola) — el suelo del juego queda visible bajo ella. v1 (más
+detalle, pantalla azul) queda candidata si se prefiere, pero su placa gris es
+casi del color de la consola: requeriría recorte manual.
+**Recomendación:** humanos prueban el checklist; si v3 se aprueba, mismo formato
+de hoja (4 yaws + silueta medida) para puerta/ascensor/planta.
+**Archivos afectados:** `src/render/render.js`, `tests/engine.test.js`, este
+documento.
+**Pruebas necesarias (humano):** (1) modo Dev: pintar una consola — aparece el
+sprite (la primera vez puede tardar un instante: es la carga de la hoja); (2)
+Q/E: la consola rota con la cámara en los 4 ángulos; (3) zoom: el sprite escala
+limpio; (4) valorar si el tono oscuro de v3 encaja o preferís v1.
+**Decisión pendiente:** ¿v3 aprobada o iteramos a v1? ¿mismo tratamiento de
+sprite para el resto de objetos?
