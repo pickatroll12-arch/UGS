@@ -85,9 +85,9 @@
     const t = room.transform;
     const r = -(t.rotation || 0) * Math.PI / 180;
     const cos = Math.cos(r), sin = Math.sin(r);
-    const px = t.pivot ? pivot.x : 0, py = pivot ? pivot.y : 0;
+    const px = t.pivot ? t.pivot.x : 0, py = t.pivot ? t.pivot.y : 0;
     const dx = wx - t.x - px, dy = wy - t.y - py;
-    return { x: px + dx * cos - dy * sin, y: px + dx * cos - dy * sin, y: py + dx * sin + dy * cos };
+    return { x: px + dx * cos - dy * sin, y: py + dx * sin + dy * cos };
   }
   function tileCenterWorld(room, lx, ly) { return localToWorld(room, lx + 0.5, ly + 0.5); }
   function roomCenterWorld(room) { return localToWorld(room, room.size.w / 2, room.size.h / 2); }
