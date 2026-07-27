@@ -74,6 +74,9 @@
     background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:7px; padding:6px 9px; pointer-events:none; }
   #status { position:fixed; z-index:6; left:50%; bottom:14px; transform:translateX(-50%); font-size:12px;
     background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:8px 12px; pointer-events:none; }
+  /* en Dev la barra de rombos ocupa el borde inferior: estado y música suben */
+  body[data-mode="dev"] #status { bottom:126px; }
+  body[data-mode="dev"] #audiobar { bottom:126px; }
 
   /* Control de música: visible y OPERATIVO en todos los modos. z-index por
      encima de #menu (30), que es un overlay a pantalla completa: si no, en el
@@ -121,11 +124,8 @@
   <section id="secNexo">
     <h3>NEXOS · CONECTORES CENTRALES (1 POR FASE)</h3>
     <div id="nexoSlots"></div>
-    <h3 style="margin-top:10px">HERRAMIENTAS DE NEXO</h3>
-    <div class="row">
-      <button data-tool="entry">⚑ Entrada</button>
-      <button data-tool="link">⛓ Link</button>
-    </div>
+    <h3 style="margin-top:10px">AYUDAS DE NEXO</h3>
+    <!-- Entrada [8] y Ascensor [9] viven ahora en la barra de rombos inferior -->
     <label class="check"><input type="checkbox" id="connToggle"> Mostrar frontera de conexión de módulos</label>
     <h3 style="margin-top:10px">COLOCAR MÓDULO (DESDE BIBLIOTECA)</h3>
     <div class="row"><select id="placeSel"></select></div>
@@ -166,13 +166,15 @@
     </div>
   </section>
 
-  <!-- ======= herramientas de pintado (compartidas) ======= -->
+  <!-- ======= opciones de herramienta =======
+       Las HERRAMIENTAS se eligen en la barra de rombos de abajo (tools/toolbox.js)
+       con las teclas 1..9,0. Aquí quedan solo sus opciones y las acciones de sala. -->
   <section id="toolblock">
-    <h3>HERRAMIENTAS DE CONSTRUCCIÓN</h3>
-    <div class="row"><button data-tool="floor" class="active">▦ Suelo (rect)</button><select id="floorSel"><option value="deck">deck</option><option value="dark">dark</option><option value="light">light</option></select></div>
-    <div class="row"><button data-tool="wall">▤ Pared (contorno)</button><select id="wallSel"><option value="block">block</option><option value="diagonal">diagonal</option><option value="rounded">rounded</option></select></div>
-    <div class="row"><button data-tool="object">◈ Objeto</button><select id="objSel"><option value="console">console</option><option value="door">door</option><option value="elevator">elevator</option><option value="plant">plant</option></select></div>
-    <div class="row"><button data-tool="fill">▨ Relleno</button><button data-tool="erase">⌫ Borrar (rect)</button></div>
+    <h3>OPCIONES DE HERRAMIENTA</h3>
+    <label class="field">Suelo <select id="floorSel"><option value="deck">deck</option><option value="dark">dark</option><option value="light">light</option></select></label>
+    <label class="field">Pared <select id="wallSel"><option value="block">block</option><option value="diagonal">diagonal</option><option value="rounded">rounded</option></select></label>
+    <label class="field">Objeto <select id="objSel"><option value="console">console</option><option value="door">door</option><option value="elevator">elevator</option><option value="plant">plant</option></select></label>
+    <h3 style="margin-top:10px">ACCIONES DE SALA</h3>
     <div class="row"><button id="tRing">▢ Auto-bordes</button><button id="tClear">✕ Vaciar</button></div>
     <div class="row"><button id="tUndo">↩ Deshacer</button><button id="tRedo">↪ Rehacer</button></div>
   </section>
@@ -204,6 +206,7 @@
 <script src="src/engine/engine.js"></script>
 <script src="src/engine/station.js"></script>
 <script src="src/engine/blueprint.js"></script>
+<script src="src/tools/toolbox.js"></script>
 <script src="src/engine/agents.js"></script>
 <script src="src/app/app.js"></script>
 </body>

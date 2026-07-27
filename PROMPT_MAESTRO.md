@@ -68,6 +68,7 @@ Hoy sí. Debe seguir siendo sí siempre.
 | `render/render.js` | renderizador | proyección ¾ ortogonal tipo Xenonauts (C4), picking en plano de suelo, dibujo de Nexo/salas/PCJ | data (solo catálogos) |
 | `audio/music.js` | audio (director) | decide QUÉ pista suena y con qué ganancia: barajado sembrado, fundidos y crossfade de potencia constante. Sin DOM → corre en Node y tiene tests | core, rng |
 | `audio/player.js` | audio (driver) | ejecuta los comandos del director sobre dos `<audio>`; política de autoplay/unlock. Única pieza del audio que toca el navegador | nada (recibe el director) |
+| `tools/toolbox.js` | herramientas | catálogo de la suite Dev: teclas fijas 1..9/0, disponibilidad por sección, geometría de los rombos y su dibujo. NO edita nada — solo dice qué herramienta está activa | nada |
 | `app/app.js` | pegamento | shell menú/dev/juego, cámara RTS, input, bucle rAF | todo lo anterior |
 
 **Contratos del modelo (C1-C3), INQUEBRANTABLES** (nacidos del feedback humano):
@@ -92,6 +93,17 @@ PRESENTACIÓN, no simulación. La decisión musical vive en lógica pura y teste
 juego sabe que existe el audio: `core/`, `engine/` y `render/` no lo importan jamás.
 La música corre con dt real fuera del paso fijo — no puede influir en el determinismo
 del engine — y usa **semilla propia** (`ugs-music`), nunca el RNG de la partida.
+
+**Contrato de herramientas (C5, orden del organizador 2026-07-27):**
+- **DRAG BOX es intocable.** Suelo, Pared y Borrar se aplican arrastrando un
+  rectángulo. Ningún rediseño puede degradarlas a click suelto.
+  `tests/toolbox.test.js` vigila esto y falla la entrega si desaparece.
+- La tecla de una herramienta es **fija** (1..9, 0). Si no aplica en la sección
+  actual se muestra apagada, pero su número NO se reasigna: la memoria muscular
+  del equipo no se rompe al cambiar de sección.
+- Las herramientas de etapas congeladas (OBJP-1.1 / OBJP-2) se declaran en
+  `RESERVED` y se dibujan bloqueadas. Declarar hueco en la UI está permitido;
+  implementar su función NO, hasta las 3 firmas.
 
 **Reglas de módulos:**
 - Un módulo = una responsabilidad = un archivo. Si crece otra responsabilidad, nace otro módulo.

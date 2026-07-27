@@ -28,6 +28,7 @@
   let R = window.UGS.render;
   const NAV = window.UGS.nav;
   const BP = window.UGS.blueprint;
+  const TB = window.UGS.toolbox;
 
   const engine = window.UGS.engine.create();
   const agents = window.UGS.agents.create(engine);
@@ -48,8 +49,11 @@
     nexoId: null,
     devSection: 'nexo',              // dev: nexo | modules
     bpId: null,                      // blueprint activo (sección módulos)
-    tool: 'floor',                   // floor | wall | object | fill | erase | entry | link
+    tool: 'select',                  // id del catálogo de tools/toolbox.js (arranca inocuo)
     brush: { floor: 'deck', wallKind: 'block', wallOrient: 0 },
+    selection: null,                 // herramienta Seleccionar: {roomId, x, y, objId}
+    toolHover: null,                 // rombo bajo el puntero (barra inferior)
+    toolLayout: null,                // último layout de la barra (hit-test sin recalcular)
     cam: { x: 0, y: 0, zoom: 1, rot: Math.PI / 4 },   // C4: yaw base 45° (diamante)
     hover: null,
     drag: null,                      // gesto rect activo {tool, roomId, x0,y0,x1,y1}
@@ -195,6 +199,9 @@
     app.devSection = sec;
     app.hover = null; app.drag = null; app.pendingLink = null;
     app.placing = null; syncPlacing();
+    app.selection = null; app.toolHover = null;
+    // si la herramienta activa no existe en la sección nueva, vuelve a Seleccionar
+    if (!TB.isAvailable(TB.byId(app.tool), { section: sec })) app.tool = 'select';
     resetEdit();
     $('secBtnNexo').classList.toggle('active', sec === 'nexo');
     $('secBtnModules').classList.toggle('active', sec === 'modules');
@@ -399,6 +406,16 @@
     updateMouse(e); mouse.down = true; mouse.button = e.button;
     mouse.lastX = e.clientX; mouse.lastY = e.clientY; mouse.dragged = false;
     if (e.button !== 0) e.preventDefault();
+    // la barra de herramientas se come el click: nunca se pinta el mapa por debajo
+    if (app.mode === 'dev' && app.toolLayout && TB.inBar(app.toolLayout, mouse.x, mouse.y)) {
+      app.drag = null;
+      if (e.button === 0) {
+        const slot = TB.hitTest(app.toolLayout, mouse.x, mouse.y);
+        if (slot && slot.locked) setStatus(slot.tool.name + ' — ' + slot.tool.hint);
+        else if (slot) setTool(slot.id);
+      }
+      return;
+    }
     // colocación de módulo activa: el click lo gestiona handleClick/drawPlacementGhost
     if (app.placing && app.mode === 'dev') { app.drag = null; return; }
     // dev: botón izquierdo sobre una sala con herramienta = gesto de edición
@@ -411,6 +428,14 @@
   canvas.addEventListener('pointermove', (e) => {
     updateMouse(e);
     app.mouseWorld = R.screenToWorld(app.cam, mouse.x, mouse.y);
+    // sobre la barra: resaltar el rombo y NO hacer hover en el mapa
+    if (app.mode === 'dev' && app.toolLayout && !mouse.down) {
+      const over = TB.inBar(app.toolLayout, mouse.x, mouse.y);
+      const slot = over ? TB.hitTest(app.toolLayout, mouse.x, mouse.y) : null;
+      const id = slot ? slot.id : null;
+      if (id !== app.toolHover) { app.toolHover = id; invalidate(); }
+      if (over) { if (app.hover) { app.hover = null; invalidate(); } return; }
+    }
     if (app.placing) { invalidate(); }
     if (mouse.down && app.drag) {                       // gesto de edición activo
       const hit = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
@@ -458,15 +483,98 @@
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
     if ((e.ctrlKey || e.metaKey) && k === 'z' && app.mode === 'dev') { e.preventDefault(); return e.shiftKey ? doRedo() : doUndo(); }
     if ((e.ctrlKey || e.metaKey) && k === 'y' && app.mode === 'dev') { e.preventDefault(); return doRedo(); }
+    // teclas 1..9,0 = herramientas (la tecla es fija por herramienta)
+    if (app.mode === 'dev' && !e.ctrlKey && !e.metaKey && !e.altKey && TB.byKey(e.key)) {
+      e.preventDefault(); setTool(TB.byKey(e.key).id); return;
+    }
+    // Supr retira el objeto seleccionado con la herramienta Seleccionar
+    if (app.mode === 'dev' && app.tool === 'select' && (k === 'delete' || k === 'backspace')) {
+      e.preventDefault();
+      const s = app.selection;
+      const room = s && viewNexo().rooms.find(r => r.id === s.roomId);
+      const obj = room && room.objects.find(o => o.x === s.x && o.y === s.y);
+      if (!obj) return setStatus('No hay objeto seleccionado.');
+      pushUndo(room);
+      room.objects = room.objects.filter(o => o !== obj);
+      setStatus('Objeto retirado (' + obj.type + ').');
+      invalidate();
+      return;
+    }
     if (k === 'q') rotateCam(-Math.PI / 2);            // C4: yaw en pasos de 90°
     else if (k === 'e') rotateCam(Math.PI / 2);
     else if (k === 'escape') {
-      if (app.placing) { app.placing = null; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); }
+      if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); }
       app.pendingLink = null;
     }
     else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°'); }
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
+
+  // ---- barra de herramientas (rombos, abajo) ---------------------------------
+  // El catálogo, las teclas y la geometría viven en tools/toolbox.js; aquí solo
+  // se conecta con el estado de la app. `app.tool` sigue siendo la única fuente
+  // de verdad de qué herramienta está activa.
+  function setTool(id, silent) {
+    const t = TB.byId(id);
+    if (!t) return false;
+    if (!TB.isAvailable(t, { section: app.devSection })) {
+      setStatus(t.name + ': solo en la sección DISEÑAR NEXO.');
+      return false;
+    }
+    // salir de la colocación con ghost al cambiar a otra herramienta
+    if (app.placing && id !== 'module') { app.placing = null; syncPlacing(); }
+    app.tool = id;
+    if (id === 'module') startPlacing();
+    if (!silent) setStatus(t.name + ' [' + t.key + '] · ' + t.hint);
+    invalidate();
+    return true;
+  }
+  function startPlacing() {
+    if (app.placing) return;
+    const sel = $('placeSel');
+    const bpId = sel && sel.value;
+    if (!bpId) return setStatus('No hay módulos en la biblioteca: crea uno en DISEÑAR MÓDULOS.');
+    app.placing = { bpId };
+    syncPlacing();
+  }
+  function drawToolbar() {
+    if (app.mode !== 'dev') { app.toolLayout = null; return; }
+    const panel = $('devpanel');
+    app.toolLayout = TB.draw(ctx, canvas.clientWidth, canvas.clientHeight, {
+      active: app.tool,
+      hoverId: app.toolHover,
+      section: app.devSection,
+      left: panel ? panel.offsetWidth : 0     // centrar en el área libre, no bajo el panel
+    });
+  }
+  // marcador de la herramienta Seleccionar (mismo camino que drawConnOverlay:
+  // matemática de render.js, así vale igual en el renderer 2D y en el 3D)
+  function drawSelection() {
+    const s = app.selection;
+    if (!s || app.mode !== 'dev' || app.tool !== 'select') return;
+    const room = viewNexo().rooms.find(r => r.id === s.roomId);
+    if (!room) return;
+    const pts = [[s.x, s.y], [s.x + 1, s.y], [s.x + 1, s.y + 1], [s.x, s.y + 1]].map(([lx, ly]) => {
+      const w = R.localToWorld(room, lx, ly);
+      return R.worldToScreen(app.cam, w.x, w.y, 0.03);
+    });
+    ctx.save();
+    ctx.strokeStyle = '#62e0ef'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath(); ctx.stroke();
+    ctx.restore();
+  }
+  function describeSelection(room, x, y) {
+    const tile = room.tiles[y] && room.tiles[y][x];
+    if (!tile) return 'Fuera de la sala.';
+    const obj = room.objects.find(o => o.x === x && o.y === y);
+    const parts = [room.name + ' (' + x + ',' + y + ')', 'suelo: ' + tile.floor];
+    if (tile.wall) parts.push('pared: ' + tile.wall.kind);
+    if (obj) parts.push('objeto: ' + obj.type + ' — Supr lo retira');
+    return parts.join(' · ');
+  }
 
   // ---- gestos de edición (suite dev) -------------------------------------------
   const RECT_TOOLS = ['floor', 'wall', 'erase'];
@@ -486,11 +594,17 @@
       pushUndo(room);
       const n = BP.floodFillFloor(room, g.x0, g.y0, app.brush.floor);
       setStatus(n ? 'Relleno (' + n + ' tiles).' : 'Sin cambios.');
-    } else if (g.tool === 'object') {
+    } else if (g.tool === 'object' || g.tool === 'console') {
+      // 'console' es un atajo de 'object' fijado al tipo consola: es la pieza
+      // que se está construyendo ahora (sprite v3 + módulo screens).
+      const type = g.tool === 'console' ? 'console' : $('objSel').value;
       if (!NAV.walkable(room, g.x0, g.y0) || room.objects.some(o => o.x === g.x0 && o.y === g.y0)) return setStatus('Ahí no cabe el objeto.');
       pushUndo(room);
-      room.objects.push(D.createObjectInstance($('objSel').value, g.x0, g.y0));
-      setStatus('Objeto colocado.');
+      room.objects.push(D.createObjectInstance(type, g.x0, g.y0));
+      setStatus(g.tool === 'console' ? 'Consola colocada.' : 'Objeto colocado.');
+    } else if (g.tool === 'select') {
+      app.selection = { roomId: room.id, x: g.x0, y: g.y0 };
+      setStatus(describeSelection(room, g.x0, g.y0));
     } else if (g.tool === 'entry') {
       if (app.devSection !== 'nexo') return setStatus('La entrada se marca en la sección Nexo.');
       if (NAV.walkable(room, g.x0, g.y0)) { nexo().entry = { roomId: room.id, x: g.x0, y: g.y0 }; setStatus('Entrada marcada.'); }
@@ -634,6 +748,8 @@
       });
       drawConnOverlay();
       drawPlacementGhost();
+      drawSelection();
+      drawToolbar();
       hudEl.textContent = app.station.name + ' · ' + view.name +
         (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
         '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
@@ -676,12 +792,9 @@
     e.target.value = '';
   });
 
-  // herramientas de pintado (compartidas)
-  document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => {
-    app.tool = b.dataset.tool;
-    document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
-    invalidate();
-  }));
+  // La selección de herramienta vive en la barra inferior de rombos
+  // (tools/toolbox.js). El panel lateral solo conserva las OPCIONES de cada
+  // herramienta (tipo de suelo/pared/objeto) y las acciones de sala.
   $('floorSel').addEventListener('change', (e) => { app.brush.floor = e.target.value; });
   $('wallSel').addEventListener('change', (e) => { app.brush.wallKind = e.target.value; });
   $('connToggle').addEventListener('change', (e) => { app.showConn = e.target.checked; invalidate(); });
@@ -705,10 +818,11 @@
 
   // colocación de módulo desde biblioteca (sección Nexo)
   bind('placeToggle', () => {
-    if (app.placing) { app.placing = null; syncPlacing(); invalidate(); return; }
+    if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); invalidate(); return; }
     const bpId = $('placeSel').value;
     if (!bpId) return setStatus('La biblioteca está vacía: crea un módulo en DISEÑAR MÓDULOS.');
     app.placing = { bpId };
+    app.tool = 'module';
     syncPlacing(); invalidate();
     setStatus('Colocación: mueve el ratón (verde = conexión OK) · click coloca · click derecho retira · ESC sale.');
   });

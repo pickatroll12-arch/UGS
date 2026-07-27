@@ -67,6 +67,21 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **App:** abrir `index.html` en un navegador (o GitHub Pages del repo).
 - **Tests:** `npm test` (requiere solo Node ≥ 18).
 
+## Barra de herramientas (suite Dev)
+
+Fila de rombos en el borde inferior, una tecla fija por herramienta:
+
+| `1` | `2` | `3` | `4` | `5` | `6` | `7` | `8` | `9` | `0` |
+|---|---|---|---|---|---|---|---|---|---|
+| Seleccionar | Suelo | Pared | Borrar | Relleno | Objeto | Consola | Entrada | Ascensor | Módulo |
+
+**Suelo, Pared y Borrar son DRAG BOX**: se arrastra un rectángulo y se aplica al soltar
+(utilidad declarada intocable por el organizador; `tests/toolbox.test.js` falla si se pierde).
+La tecla **no se reasigna** al cambiar de sección: Entrada/Ascensor/Módulo solo valen en
+DISEÑAR NEXO y allí se ven apagadas, pero su número no se lo queda otra herramienta.
+Al final de la barra hay tres rombos **bloqueados** (PNJ, Evento, Zona): hueco reservado
+para OBJP-2 y OBJP-1.1, sin funcionalidad hasta las 3 firmas.
+
 ## Controles (base actual)
 
 | Acción | Control |
@@ -78,7 +93,9 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 | Caminar (en juego) | click en un tile |
 | Abrir puerta (en juego) | click en la puerta |
 | Viajar de Nexo (en juego) | click en el ascensor (▣) |
-| Pintar rectángulo / contorno (dev) | arrastrar con Suelo / Pared / Borrar |
+| Elegir herramienta (dev) | `1`…`9`, `0` o click en su rombo de la barra inferior |
+| **DRAG BOX** (dev) | arrastrar con Suelo `2` / Pared `3` / Borrar `4` |
+| Inspeccionar / retirar objeto (dev) | Seleccionar `1` + click · `Supr` retira |
 | Deshacer / Rehacer (dev) | `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`) |
 | Silenciar / volumen de música | control 🔊 abajo a la derecha (visible en todos los modos) |
 
