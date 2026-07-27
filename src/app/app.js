@@ -723,8 +723,28 @@
     if (fxCanvas) { fxCanvas.width = canvas.width; fxCanvas.height = canvas.height; }
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
   }
+  // ---- fps: contador en HUD + tope opcional ?fps=N ----------------------------
+  // El juego NO tiene tope artificial: requestAnimationFrame sigue al refresco
+  // de la pantalla (60/120/144 Hz según el monitor). ?fps=N (24..240) limita
+  // por debajo del refresco nativo (p. ej. ahorro de batería).
+  const FPS_CAP = (() => {
+    const v = parseInt(new URLSearchParams(location.search).get('fps') || '0', 10);
+    return v >= 24 && v <= 240 ? v : 0;
+  })();
+  let fpsFrames = 0, fpsAt = performance.now(), fpsNow = 0, lastFrame = 0, hudFpsShown = -1;
+  function hudText() {
+    const view = viewNexo();
+    return app.station.name + ' · ' + view.name +
+      (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
+      '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
+      (fxCanvas ? ' · 3D' : ' · 2D') + ' · ' + fpsNow + 'fps';
+  }
   let last = performance.now();
   function frame(now) {
+    if (FPS_CAP && now - lastFrame < 1000 / FPS_CAP - 0.4) { requestAnimationFrame(frame); return; }
+    lastFrame = now;
+    fpsFrames++;
+    if (now - fpsAt >= 500) { fpsNow = Math.round(fpsFrames * 1000 / (now - fpsAt)); fpsFrames = 0; fpsAt = now; }
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     // la música corre en TODOS los modos (menú incluido) y con dt real: es
     // presentación, no simulación — no pasa por el paso fijo del engine.
@@ -750,11 +770,11 @@
       drawPlacementGhost();
       drawSelection();
       drawToolbar();
-      hudEl.textContent = app.station.name + ' · ' + view.name +
-        (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
-        '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
-        (fxCanvas ? ' · 3D' : ' · 2D');
+      hudEl.textContent = hudText();
+      hudFpsShown = fpsNow;
     }
+    // el contador fps vive fuera del repintado (dirty): actualiza solo el texto
+    if (hudEl && fpsNow !== hudFpsShown) { hudFpsShown = fpsNow; hudEl.textContent = hudText(); }
     requestAnimationFrame(frame);
   }
 
