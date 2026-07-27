@@ -55,10 +55,12 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(COLORS.bg);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.62));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.15);
-    // misma luz de escena que el 2D: arriba-izquierda, desde arriba
-    sun.position.set(-0.45, 0.89, 1.1).normalize();
+    // modelo de luz calibrado con la fórmula 2D (f = 0.55 + 0.45·max(0, n·L)):
+    // ambient 0.55 + direccional 0.45 casi horizontal → laterales con el mismo
+    // sombreado por orientación que el 2D (ni quemados ni fantasma).
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.45);
+    sun.position.set(-0.45, 0.89, 0.35).normalize();
     scene.add(sun);
     const camera = new THREE.OrthographicCamera();
     gl = { renderer, scene, camera, group: null, canvas };
@@ -101,7 +103,7 @@
   // ---- materiales ------------------------------------------------------------
   const MAT = {};
   function mat(key, maker) { if (!MAT[key]) MAT[key] = maker(); return MAT[key]; }
-  const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
+  const lam = (c) => new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide });
   const basic = (c, o) => new THREE.MeshBasicMaterial({
     color: c, transparent: o != null, opacity: o == null ? 1 : o, side: THREE.DoubleSide
   });
@@ -116,7 +118,8 @@
   function addFloor(g, room, x, y, tile) {
     const c = R2.tileCenterWorld(room, x, y);
     const color = (DATA.FLOORS[tile.floor] || DATA.FLOORS.deck).color;
-    const m = mesh(new THREE.PlaneGeometry(1, 1), lam(color));
+    // sin iluminar: color plano de paleta, idéntico al 2D (deck/dark/light distinguibles)
+    const m = mesh(new THREE.PlaneGeometry(1, 1), mat('floor:' + color, () => new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })));
     m.position.set(c.x, c.y, 0);
     g.add(m);
     // línea de panel interior (detalle tipo Xenonauts)
@@ -136,9 +139,17 @@
     const wfp = fpLocal.map(p => R2.localToWorld(room, p.x, p.y));
     const shape = new THREE.Shape(wfp.map(p => new THREE.Vector2(p.x, p.y)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: WALL_H, bevelEnabled: false });
-    const m = mesh(geo, alpha != null
-      ? mat('wallFade', () => new THREE.MeshLambertMaterial({ color: COLORS.wallTop, transparent: true, opacity: 0.35, depthWrite: false }))
-      : mat('wall', () => lam(COLORS.wallTop)));
+    // dos materiales (grupos de ExtrudeGeometry: 0=tapas, 1=laterales):
+    // tapa CLARA sin iluminar (#a9b3c6) y laterales OSCUROS con sombreado 3D,
+    // el mismo contraste que el 2D — las paredes se leen sólidas, no fantasma.
+    const faded = alpha != null;
+    const capM = faded
+      ? mat('wallCapFade', () => new THREE.MeshBasicMaterial({ color: COLORS.wallTop, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }))
+      : mat('wallCap', () => new THREE.MeshBasicMaterial({ color: COLORS.wallTop, side: THREE.DoubleSide }));
+    const sideM = faded
+      ? mat('wallSideFade', () => new THREE.MeshLambertMaterial({ color: 'rgb(104,114,134)', transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }))
+      : mat('wallSide', () => new THREE.MeshLambertMaterial({ color: 'rgb(104,114,134)', side: THREE.DoubleSide }));
+    const m = mesh(geo, [capM, sideM]);
     g.add(m);
   }
 
@@ -171,7 +182,7 @@
       return;
     }
     if (o.type === 'elevator') {
-      const pad = mesh(new THREE.CircleGeometry(0.42, 4), lam('#22333c'));
+      const pad = mesh(new THREE.CircleGeometry(0.42, 4), basic('#22333c'));
       pad.rotation.z = Math.PI / 4 + (o.rotation || 0) * Math.PI / 180;
       pad.position.set(c.x, c.y, 0.02);
       g.add(pad);
@@ -180,13 +191,16 @@
       g.add(ring);
       return;
     }
-    const oc = {
-      door: o.open ? '#3f6b52' : '#5c6675',
-      console: '#3c4c5c',
-      plant: '#4a6b44'
-    }[o.type] || COLORS.objTop;
+    const OCOL = {
+      door: o.open ? { top: '#3f6b52', side: 'rgb(42,74,56)' } : { top: '#5c6675', side: 'rgb(70,78,92)' },
+      console: { top: '#3c4c5c', side: 'rgb(44,56,70)' },
+      plant: { top: '#4a6b44', side: 'rgb(58,84,52)' }
+    }[o.type] || { top: COLORS.objTop, side: 'rgb(56,64,78)' };
     const h = o.openable && o.open ? 0.1 : OBJ_H;
-    const m = mesh(new THREE.BoxGeometry(0.62, 0.62, h), lam(oc));
+    // BoxGeometry: grupos 0-3 laterales, 4 = tapa (+z), 5 = base
+    const sideM = mat('objSide:' + OCOL.side, () => new THREE.MeshLambertMaterial({ color: OCOL.side, side: THREE.DoubleSide }));
+    const topM = mat('objTop:' + OCOL.top, () => new THREE.MeshBasicMaterial({ color: OCOL.top, side: THREE.DoubleSide }));
+    const m = mesh(new THREE.BoxGeometry(0.62, 0.62, h), [sideM, sideM, sideM, sideM, topM, sideM]);
     m.rotation.z = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;
     m.position.set(c.x, c.y, h / 2);
     g.add(m);
@@ -203,11 +217,11 @@
     sh.position.set(c.x, c.y, 0.005);
     g.add(sh);
     const body = mesh(new THREE.CapsuleGeometry(0.086, 0.33, 4, 12),
-      lam(selected ? COLORS.pawnSel : COLORS.pawnBody));
+      basic(selected ? COLORS.pawnSel : COLORS.pawnBody));
     body.geometry.rotateX(Math.PI / 2);             // eje de la cápsula → z
     body.position.set(c.x, c.y, 0.29);
     g.add(body);
-    const head = mesh(new THREE.SphereGeometry(0.1, 14, 10), lam(COLORS.pawnDark));
+    const head = mesh(new THREE.SphereGeometry(0.1, 14, 10), basic(COLORS.pawnDark));
     head.position.set(c.x, c.y, 0.6);
     g.add(head);
     // visor hacia el facing
