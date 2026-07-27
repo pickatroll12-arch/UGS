@@ -25,7 +25,7 @@
   const CORE = window.UGS.core;
   const D = window.UGS.data;
   const S = window.UGS.save;
-  const R = window.UGS.render;
+  let R = window.UGS.render;
   const NAV = window.UGS.nav;
   const BP = window.UGS.blueprint;
 
@@ -74,7 +74,7 @@
     return nexo();
   };
 
-  let canvas, ctx, statusEl, hudEl;
+  let canvas, ctx, statusEl, hudEl, fxCanvas = null;
   const sim = new CORE.FixedTimestep(30, 6);
   let dirty = true;
   const invalidate = () => { dirty = true; };
@@ -380,7 +380,18 @@
   function updateMouse(e) { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; }
 
   canvas = $('game');
-  ctx = canvas.getContext('2d');
+  // Renderer 3D (three.js) por defecto — decisión humana (AGENTIC_REVIEW §6.14).
+  // ?renderer=2d fuerza el clásico; si no hay CDN/WebGL, cae a 2D solo.
+  const want3D = (new URLSearchParams(location.search).get('renderer') || '3d') !== '2d';
+  if (want3D && window.UGS.render3d && UGS.render3d.available() && UGS.render3d.init(canvas, () => invalidate())) {
+    R = UGS.render3d;
+    fxCanvas = document.createElement('canvas');
+    fxCanvas.id = 'gamefx';
+    canvas.parentNode.insertBefore(fxCanvas, canvas.nextSibling);
+    ctx = fxCanvas.getContext('2d');          // overlays 2D (frontera/ghost) sobre el WebGL
+  } else {
+    ctx = canvas.getContext('2d');
+  }
   statusEl = $('status');
   hudEl = $('hud');
 
@@ -595,6 +606,7 @@
     const scale = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(canvas.clientWidth * scale);
     canvas.height = Math.floor(canvas.clientHeight * scale);
+    if (fxCanvas) { fxCanvas.width = canvas.width; fxCanvas.height = canvas.height; }
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
   }
   let last = performance.now();
@@ -611,6 +623,7 @@
       dirty = false;
       const view = viewNexo();
       R.clear(ctx, canvas.clientWidth, canvas.clientHeight);
+      if (fxCanvas) ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       R.drawNexo(ctx, app.cam, view, {
         entry: app.mode === 'dev' && app.devSection === 'nexo' ? view.entry : (app.mode === 'game' ? view.entry : null),
         linkMarkers: app.devSection === 'nexo' ? linkMarkers() : [],
@@ -623,7 +636,8 @@
       drawPlacementGhost();
       hudEl.textContent = app.station.name + ' · ' + view.name +
         (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
-        '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°';
+        '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
+        (fxCanvas ? ' · 3D' : ' · 2D');
     }
     requestAnimationFrame(frame);
   }
