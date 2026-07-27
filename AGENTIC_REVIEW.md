@@ -746,3 +746,47 @@ y confirmar que la barra se ve igual sobre el renderer 3D**.
 **Decisión pendiente:** (1) ¿el orden de las 10 herramientas os sirve o preferís otro?;
 (2) ¿faltan herramientas para lo que viene?; (3) ¿los 3 huecos bloqueados se quedan a la
 vista o se ocultan hasta que se firmen sus etapas?
+
+
+### §6.16 — CLAUDE — Chrome sci-fi: lenguaje visual derivado del kit — 2026-07-27
+**Observación:** a petición de -XONO ("¿puedes hacer que la UI se vea más sci-fi?"), se
+rediseña el chrome entero (menú, topbar, panel dev, tarjetas, HUD, estado, música y la
+barra de rombos). **No se inventó un estilo nuevo:** se extrajo del kit del equipo.
+- **Chaflán del kit:** `!_UGS/ux/botones.svg` es un botón hexagonal con corte diagonal.
+  Esa silueta pasa a ser el motivo de toda la UI (variable CSS `--chamfer`), y el raíl
+  de la barra de herramientas —que se dibuja en canvas, no en HTML— repite el mismo
+  corte a mano para que ambos mundos hablen igual.
+- **Color:** cian `#62e0ef` (el que ya usaba la suite) como único acento; ámbar y verde
+  quedan reservados a ESTADO. Neutros sesgados a azul, nunca gris puro.
+- **Tipografía:** etiquetas técnicas en monoespaciada con tracking amplio; el texto
+  corrido sigue en sans para no perder legibilidad.
+- **Regla que me impuse:** el brillo marca lo ACTIVO, no decora. Si algo brilla es
+  porque está seleccionado, encendido o pidiendo atención.
+- Detalles: cabeceras de bloque con rombo de acento y hairline que se desvanece;
+  textura de líneas de barrido muy tenue; retícula de fondo en el menú; punto de
+  estado latiendo en la barra de mensajes; telemetría del HUD como lectura de
+  instrumento. El fondo `Background.jpg` del kit ahora SE VE (antes lo tapaba un velo
+  al 86%). Animación mínima y `prefers-reduced-motion` respetado.
+**Evidencia:** `node tests/run.js` → **277 checks, ALL SUITES GREEN**. Smoke en
+Chromium **21/21 verde** (uno nuevo: ningún botón del panel desborda su caja).
+Capturas revisadas de las cuatro vistas: Nexo, Módulos, menú y juego.
+**Fallo real encontrado por los tests durante el rediseño:** al meter degradados en los
+rombos, `draw()` reventaba con un contexto que no soporta `createLinearGradient`. Se
+añadió el helper `vgrad()` que degrada a color plano — el dibujo nunca debe ser el
+motivo de que se caiga la suite. Con test propio.
+**Riesgo / lo que NO se probó:** es un cambio de gusto, y el gusto es vuestro — si el
+cian cansa o el brillo molesta, se ajusta en las variables CSS de `:root` sin tocar
+estructura. `clip-path` en `<select>` podría recortar la flecha nativa en navegadores
+que no sean Chromium (aquí se ve bien; no lo he probado en Firefox ni Safari). Sigue
+sin probarse con el renderer 3D activo: el CDN de three.js está bloqueado por el proxy
+de este entorno.
+**Archivos afectados:** `index.html` (bloque de estilos rehecho), `src/tools/toolbox.js`
+(paleta, raíl achaflanado, faceta y brillo del rombo, `vgrad`), `tests/toolbox.test.js`,
+`README.md` (sección "Lenguaje visual"), este documento.
+**Pruebas necesarias (humano):** (1) abrir el menú y ver si el fondo del kit os gusta
+así de visible; (2) Dev: recorrer el panel y decir si el cian/brillo está bien medido o
+cansa; (3) confirmar que en modo Juego sigue sin haber vocabulario de desarrollo;
+(4) abrirlo con red para ver el chrome sobre el renderer 3D.
+**Decisión pendiente:** (1) ¿se ratifica este lenguaje visual como el de la casa?;
+(2) ¿el chaflán a 7px es el correcto o lo queréis más marcado?; (3) ¿mantenemos el
+punto latiendo en la barra de estado o es ruido?
