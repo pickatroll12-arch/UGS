@@ -6,74 +6,135 @@
 <link rel="icon" href="!_UGS/ux/%D0%A1ommonElement/Logo.png">
 <title>UGS — Station Builder (base revamp)</title>
 <style>
-  :root { --bg:#0a0c10; --panel:rgba(16,20,28,0.94); --panel2:#141a24; --line:#2c3340; --text:#e8eef4; --muted:#8b95a6;
-    --accent:#62e0ef; --accent-ink:#06202a; --ok:#7ed957; --warn:#f5a623; --danger:#ef6262; }
+  /* ================= LENGUAJE VISUAL =================
+     Sci-fi de estación, derivado del kit del equipo (!_UGS/ux): la silueta
+     achaflanada sale del botón hexagonal de `botones.svg`; el cian es el
+     acento que ya usaba la suite. Neutros SESGADOS a azul (no grises puros):
+     un gris neutro sobre fondo cian se ve sucio.
+     Reglas: chaflán en vez de esquina redonda · etiquetas técnicas en mono
+     con tracking · el brillo solo marca lo ACTIVO, nunca decora. */
+  :root {
+    --bg:#05080e; --panel:rgba(9,15,24,0.94); --panel2:#0d1622; --panel3:#0a121c;
+    --line:#1c3040; --line-hi:#2c536b; --text:#dceaf2; --muted:#7d94a8;
+    --accent:#62e0ef; --accent-ink:#04161d; --accent-dim:rgba(98,224,239,0.14);
+    --ok:#7ed957; --warn:#f5a623; --danger:#ef6262;
+    --mono:ui-monospace,"DejaVu Sans Mono","Cascadia Mono",monospace;
+    /* chaflán del kit: corte diagonal arriba-izquierda y abajo-derecha */
+    --cut:7px;
+    --chamfer:polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)),
+                      calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
   * { box-sizing:border-box; }
   html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
     font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
   #game { position:fixed; inset:0; width:100vw; height:100vh; display:block; cursor:crosshair; }
   #gamefx { position:fixed; inset:0; width:100vw; height:100vh; display:block; pointer-events:none; }
-  button,select,input { font:inherit; color:var(--text); background:#1c222c; border:1px solid var(--line); border-radius:6px; padding:6px 9px; }
-  button { cursor:pointer; }
-  button:hover { border-color:#4a5666; }
-  button.active { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
-  button:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* superficie común: chaflán + textura de líneas de barrido muy tenue */
+  .surface, #topbar, #devpanel, #hud, #status, #audiobar, .card {
+    background-image:repeating-linear-gradient(to bottom, rgba(98,224,239,0.028) 0 1px, transparent 1px 4px);
+  }
+
+  button,select,input { font:inherit; color:var(--text); background:linear-gradient(#132030,#0d1826);
+    border:1px solid var(--line); border-radius:0; clip-path:var(--chamfer); padding:6px 10px; transition:border-color .12s, box-shadow .12s, color .12s; }
+  button { cursor:pointer; letter-spacing:.03em; }
+  button:hover { border-color:var(--line-hi); color:#fff; box-shadow:inset 0 0 16px -6px var(--accent); }
+  button:focus-visible { outline:1px solid var(--accent); outline-offset:1px; }
+  button.active { background:linear-gradient(var(--accent), #3fc4d6); color:var(--accent-ink); border-color:var(--accent);
+    font-weight:700; box-shadow:0 0 14px -3px var(--accent); }
+  button:disabled { opacity:.35; cursor:not-allowed; box-shadow:none; }
+  select { background:#0d1826; }
   input[type=number] { width:64px; }
 
   /* menú principal (kit UX: background + logo) */
   #menu { position:fixed; inset:0; z-index:30; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px;
-    background:linear-gradient(rgba(8,10,14,0.72), rgba(8,10,14,0.86)), url('!_UGS/ux/%D0%A1ommonElement/Background.jpg') center/cover; }
-  #menu img.logo { width:96px; height:auto; margin-bottom:6px; }
-  #menu h1 { font-size:26px; letter-spacing:.14em; margin:0 0 4px; }
-  #menu p { color:var(--muted); margin:0 0 18px; font-size:12px; }
-  #menu button { width:240px; padding:11px; font-size:14px; text-align:left; background:rgba(20,26,36,0.92); }
-  #menu button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
+    background:radial-gradient(circle at 50% 42%, rgba(5,8,14,0.48), rgba(5,8,14,0.90) 72%),
+      url('!_UGS/ux/%D0%A1ommonElement/Background.jpg') center/cover; }
+  #menu img.logo { width:96px; height:auto; margin-bottom:6px; filter:drop-shadow(0 0 14px rgba(98,224,239,.45)); }
+  #menu h1 { font-size:26px; letter-spacing:.28em; margin:0 0 4px; text-shadow:0 0 22px rgba(98,224,239,.35); }
+  #menu p { color:var(--muted); margin:0 0 18px; font-size:11px; font-family:var(--mono); letter-spacing:.12em; text-transform:uppercase; }
+  #menu button { width:260px; padding:12px 14px; font-size:13px; text-align:left; letter-spacing:.14em; text-transform:uppercase;
+    font-family:var(--mono); background:rgba(11,20,31,0.92); }
+  #menu button.primary { background:linear-gradient(var(--accent), #3fc4d6); color:var(--accent-ink); border-color:var(--accent);
+    font-weight:700; box-shadow:0 0 22px -4px var(--accent); }
+  /* retícula de fondo: la estación siempre está detrás del menú */
+  #menu::before { content:''; position:absolute; inset:0; pointer-events:none;
+    background:
+      repeating-linear-gradient(to right, rgba(98,224,239,.05) 0 1px, transparent 1px 64px),
+      repeating-linear-gradient(to bottom, rgba(98,224,239,.05) 0 1px, transparent 1px 64px);
+    mask-image:radial-gradient(circle at 50% 45%, #000 20%, transparent 78%); }
 
   /* barra superior */
   #topbar { position:fixed; z-index:5; top:0; left:0; right:0; height:46px; display:none; align-items:center; gap:10px;
-    padding:0 12px; background:var(--panel); border-bottom:1px solid var(--line); }
-  #topbar .brand { display:flex; align-items:center; gap:8px; font-weight:800; font-size:13px; letter-spacing:.06em; }
+    padding:0 12px; background:var(--panel); border-bottom:1px solid var(--line);
+    box-shadow:0 1px 0 rgba(98,224,239,.18), 0 10px 26px -18px #000; }
+  #topbar .brand { display:flex; align-items:center; gap:8px; font-weight:800; font-size:12px; letter-spacing:.22em;
+    font-family:var(--mono); color:var(--accent); }
   #topbar .brand img { width:22px; height:22px; }
   #topbar .spacer { flex:1; }
-  #topbar .hint { font-size:11px; color:var(--muted); }
+  #topbar .hint { font-size:10px; color:var(--muted); font-family:var(--mono); letter-spacing:.07em; }
+  #topbar button { font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-family:var(--mono); }
 
   /* selector de sección dev: DISEÑAR NEXO / DISEÑAR MÓDULOS */
-  #devSections { display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
-  #devSections button { border:0; border-radius:0; font-size:11px; font-weight:700; letter-spacing:.05em; padding:7px 12px; background:#161c26; }
+  #devSections { display:flex; border:1px solid var(--line); clip-path:var(--chamfer); overflow:hidden; }
+  #devSections button { border:0; clip-path:none; font-size:10px; font-weight:700; letter-spacing:.14em; padding:8px 13px; background:#0c1622; }
   #devSections button + button { border-left:1px solid var(--line); }
-  #devSections button.active { background:var(--accent); color:var(--accent-ink); }
+  #devSections button.active { background:linear-gradient(var(--accent), #3fc4d6); color:var(--accent-ink); }
 
   /* panel dev (suite de diseño) */
   #devpanel { position:fixed; z-index:5; top:46px; left:0; bottom:0; width:252px; display:none; flex-direction:column;
-    background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; }
-  #devpanel section { padding:10px 10px 12px; border-bottom:1px solid var(--line); }
-  #devpanel h3 { margin:0 0 8px; font-size:10px; letter-spacing:.14em; color:var(--muted); font-weight:800; }
+    background:var(--panel); border-right:1px solid var(--line); overflow-y:auto;
+    box-shadow:1px 0 0 rgba(98,224,239,.14), 14px 0 34px -26px #000; }
+  #devpanel section { position:relative; padding:11px 11px 13px; border-bottom:1px solid var(--line); }
+  /* cabecera de bloque: tick de acento + hairline que se desvanece */
+  #devpanel h3 { position:relative; margin:0 0 9px; padding-left:11px; font-size:9.5px; letter-spacing:.2em;
+    color:var(--muted); font-weight:700; font-family:var(--mono); }
+  #devpanel h3::before { content:''; position:absolute; left:0; top:50%; width:5px; height:5px; transform:translateY(-50%) rotate(45deg);
+    background:var(--accent); box-shadow:0 0 7px var(--accent); }
+  #devpanel h3::after { content:''; position:absolute; left:calc(100% + 8px); right:-11px; top:50%; height:1px;
+    background:linear-gradient(90deg, var(--line-hi), transparent); }
+  #devpanel::-webkit-scrollbar { width:8px; }
+  #devpanel::-webkit-scrollbar-track { background:#070d15; }
+  #devpanel::-webkit-scrollbar-thumb { background:#1d3348; border:1px solid var(--line); }
   #devpanel .row { display:flex; gap:5px; margin-bottom:5px; }
   #devpanel .row > * { flex:1; }
-  #devpanel button { font-size:11px; padding:6px 4px; }
+  #devpanel button { font-size:10.5px; padding:7px 5px; letter-spacing:0; white-space:nowrap; }
   #devpanel select { font-size:11px; padding:5px 4px; width:100%; }
-  #devpanel label.field { display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:11px; color:var(--muted); margin-bottom:5px; }
+  #devpanel label.field { display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:10px; color:var(--muted);
+    margin-bottom:5px; font-family:var(--mono); letter-spacing:.08em; text-transform:uppercase; }
   #devpanel label.field input, #devpanel label.field select { width:120px; font-size:11px; padding:4px 6px; }
-  #devpanel label.check { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); margin-top:4px; }
+  #devpanel label.check { display:flex; align-items:center; gap:7px; font-size:10px; color:var(--muted); margin-top:5px;
+    font-family:var(--mono); letter-spacing:.05em; cursor:pointer; }
+  #devpanel input[type=checkbox] { accent-color:var(--accent); clip-path:none; }
 
   /* tarjetas (kit UX: ItemEnable/IconD — barra de estado inferior) */
-  .card { position:relative; background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:8px 9px 11px; margin-bottom:6px; cursor:pointer; }
-  .card:hover { border-color:#4a5666; }
-  .card::after { content:''; position:absolute; left:8px; right:8px; bottom:4px; height:3px; border-radius:2px; background:var(--ok); }
-  .card.locked::after { background:var(--warn); }
-  .card.empty { border-style:dashed; text-align:center; color:var(--muted); font-size:11px; padding:12px 9px 15px; }
-  .card.empty::after { background:transparent; }
-  .card.sel { border-color:var(--accent); }
-  .card .t { font-size:12px; font-weight:700; }
-  .card .s { font-size:10px; color:var(--muted); margin-top:2px; }
+  .card { position:relative; background:linear-gradient(var(--panel2), var(--panel3)); border:1px solid var(--line);
+    clip-path:var(--chamfer); padding:9px 10px 12px; margin-bottom:6px; cursor:pointer; transition:border-color .12s, box-shadow .12s; }
+  .card:hover { border-color:var(--line-hi); box-shadow:inset 0 0 22px -10px var(--accent); }
+  .card::after { content:''; position:absolute; left:9px; right:9px; bottom:4px; height:2px; background:var(--ok); box-shadow:0 0 8px -1px var(--ok); }
+  .card.locked::after { background:var(--warn); box-shadow:0 0 8px -1px var(--warn); }
+  .card.empty { border-style:dashed; text-align:center; color:var(--muted); font-size:10.5px; padding:13px 9px 16px;
+    font-family:var(--mono); letter-spacing:.06em; }
+  .card.empty::after { background:transparent; box-shadow:none; }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 18px -6px var(--accent), inset 2px 0 0 var(--accent); }
+  .card .t { font-size:11.5px; font-weight:700; letter-spacing:.06em; }
+  .card .s { font-size:9.5px; color:var(--muted); margin-top:3px; font-family:var(--mono); letter-spacing:.02em; }
   .card .in { display:flex; gap:8px; align-items:center; }
   .card img.bpicon { width:30px; height:30px; flex:none; }
   img.bpicon.inline { width:22px; height:22px; vertical-align:middle; margin-left:6px; }
 
-  #hud { position:fixed; z-index:4; top:56px; right:12px; font-family:ui-monospace,monospace; font-size:11px; color:var(--muted);
-    background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:7px; padding:6px 9px; pointer-events:none; }
-  #status { position:fixed; z-index:6; left:50%; bottom:14px; transform:translateX(-50%); font-size:12px;
-    background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:8px 12px; pointer-events:none; }
+  /* telemetría: lectura de instrumento, no etiqueta de web */
+  #hud { position:fixed; z-index:4; top:56px; right:12px; font-family:var(--mono); font-size:10.5px; color:var(--muted);
+    background:rgba(4,10,16,0.72); border:1px solid var(--line); clip-path:var(--chamfer); padding:7px 11px; pointer-events:none;
+    letter-spacing:.06em; box-shadow:inset 0 0 20px -12px var(--accent); }
+  #status { position:fixed; z-index:6; left:50%; bottom:14px; transform:translateX(-50%); font-size:11.5px;
+    background:var(--panel); border:1px solid var(--line); clip-path:var(--chamfer); padding:9px 30px 9px 15px; pointer-events:none;
+    font-family:var(--mono); letter-spacing:.03em; box-shadow:0 0 26px -14px var(--accent); }
+  /* punto de estado "en línea" a la derecha del mensaje */
+  #status::after { content:''; position:absolute; right:12px; top:50%; width:5px; height:5px; margin-top:-2.5px;
+    transform:rotate(45deg); background:var(--accent); box-shadow:0 0 8px var(--accent); animation:pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:.35; } 50% { opacity:1; } }
+  @media (prefers-reduced-motion: reduce) { #status::after { animation:none; opacity:.8; } }
   /* en Dev la barra de rombos ocupa el borde inferior: estado y música suben */
   body[data-mode="dev"] #status { bottom:126px; }
   body[data-mode="dev"] #audiobar { bottom:126px; }
@@ -81,12 +142,15 @@
   /* Control de música: visible y OPERATIVO en todos los modos. z-index por
      encima de #menu (30), que es un overlay a pantalla completa: si no, en el
      menú el control se ve pero no se puede clicar. */
-  #audiobar { position:fixed; z-index:40; right:12px; bottom:14px; display:flex; align-items:center; gap:8px;
-    background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:6px 10px; }
-  #audiobar button { background:transparent; border:0; color:var(--fg); font-size:14px; cursor:pointer; padding:0 2px; }
-  #audiobar button.off { color:var(--muted); }
+  #audiobar { position:fixed; z-index:40; right:12px; bottom:14px; display:flex; align-items:center; gap:9px;
+    background:var(--panel); border:1px solid var(--line); clip-path:var(--chamfer); padding:7px 12px;
+    box-shadow:inset 0 0 22px -13px var(--accent); }
+  #audiobar button { background:none; border:0; clip-path:none; color:var(--text); font-size:14px; cursor:pointer; padding:0 2px;
+    text-shadow:0 0 9px rgba(98,224,239,.5); }
+  #audiobar button:hover { box-shadow:none; }
+  #audiobar button.off { color:var(--muted); text-shadow:none; }
   #audiobar input[type=range] { width:92px; accent-color:var(--accent); }
-  #audiobar .lbl { font-size:10px; color:var(--muted); font-family:ui-monospace,monospace; }
+  #audiobar .lbl { font-size:9px; color:var(--muted); font-family:var(--mono); letter-spacing:.18em; }
 
   /* en juego/menú no hay chrome de desarrollo; exportar/importar BLOQUEADOS en juego */
   body[data-mode="game"] #devpanel, body[data-mode="menu"] #devpanel,

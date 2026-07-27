@@ -71,13 +71,15 @@
     { id: 'zone',  glyph: '▩', name: 'Zona',   stage: 'OBJP-1.1', hint: 'Zonas de trabajo / hitos de fase — OBJP-1.1, congelado' }
   ];
 
+  // Paleta alineada con el chrome (index.html): neutros sesgados a azul y el
+  // brillo reservado a lo ACTIVO. Cian = acento del kit del equipo.
   const PAL = {
-    rail: 'rgba(16,20,28,0.92)', railLine: '#2c3340',
-    slot: '#141a24', slotLine: '#3a4454', slotHover: '#4a5666',
-    accent: '#62e0ef', accentInk: '#06202a',
-    glyph: '#c7d2e0', glyphOff: '#4d5768',
-    key: '#8b95a6', locked: '#39415240',
-    text: '#e8eef4', muted: '#8b95a6'
+    rail: 'rgba(9,15,24,0.94)', railLine: '#1c3040', railGlow: 'rgba(98,224,239,0.20)',
+    slot: '#0d1622', slotDeep: '#0a121c', slotLine: '#24405a', slotHover: '#2c536b',
+    accent: '#62e0ef', accentDeep: '#3fc4d6', accentInk: '#04161d',
+    glyph: '#cfe2ec', glyphOff: '#3f5164',
+    key: '#7d94a8', locked: 'rgba(28,48,64,0.35)',
+    text: '#dceaf2', muted: '#7d94a8'
   };
 
   const byId = (id) => TOOLS.find(t => t.id === id) || null;
@@ -142,6 +144,19 @@
     return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
   }
 
+  /*
+   * Degradado vertical tolerante: si el contexto no sabe hacer gradientes
+   * (mocks, contextos reducidos), cae a color plano en vez de reventar.
+   * El dibujo nunca debe ser el motivo de que se caiga la suite.
+   */
+  function vgrad(ctx, x, y0, y1, from, to) {
+    if (typeof ctx.createLinearGradient !== 'function') return from;
+    const g = ctx.createLinearGradient(x, y0, x, y1);
+    if (!g || typeof g.addColorStop !== 'function') return from;
+    g.addColorStop(0, from); g.addColorStop(1, to);
+    return g;
+  }
+
   function diamond(ctx, s, inset) {
     const hw = s.hw - (inset || 0), hh = s.hh - (inset || 0);
     ctx.beginPath();
@@ -165,15 +180,25 @@
     const cxBar = lay.rail.x + lay.rail.w / 2;
 
     ctx.save();
-    // raíl
-    ctx.fillStyle = PAL.rail;
-    ctx.strokeStyle = PAL.railLine;
-    ctx.lineWidth = 1;
+    // raíl con chaflán (misma silueta que el chrome, tomada del kit)
     const r = lay.rail;
+    const cut = Math.max(6, Math.round(9 * lay.scale));
     ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.w, r.h, 9);
-    else ctx.rect(r.x, r.y, r.w, r.h);
-    ctx.fill(); ctx.stroke();
+    ctx.moveTo(r.x + cut, r.y);
+    ctx.lineTo(r.x + r.w, r.y);
+    ctx.lineTo(r.x + r.w, r.y + r.h - cut);
+    ctx.lineTo(r.x + r.w - cut, r.y + r.h);
+    ctx.lineTo(r.x, r.y + r.h);
+    ctx.lineTo(r.x, r.y + cut);
+    ctx.closePath();
+    ctx.fillStyle = PAL.rail;
+    ctx.fill();
+    ctx.strokeStyle = PAL.railLine; ctx.lineWidth = 1; ctx.stroke();
+    // filo superior encendido: el raíl parece alimentado
+    ctx.strokeStyle = PAL.railGlow;
+    ctx.beginPath();
+    ctx.moveTo(r.x + cut, r.y + 0.5); ctx.lineTo(r.x + r.w, r.y + 0.5);
+    ctx.stroke();
 
     for (const s of lay.slots) {
       const active = !s.locked && s.id === opts.active;
@@ -189,11 +214,24 @@
         ctx.stroke();
         ctx.setLineDash([]);
       } else {
-        ctx.fillStyle = active ? PAL.accent : PAL.slot;
+        if (active) {
+          ctx.fillStyle = vgrad(ctx, s.cx, s.cy - s.hh, s.cy + s.hh, PAL.accent, PAL.accentDeep);
+          ctx.shadowColor = PAL.accent; ctx.shadowBlur = 16 * lay.scale;
+        } else {
+          ctx.fillStyle = vgrad(ctx, s.cx, s.cy - s.hh, s.cy + s.hh, PAL.slot, PAL.slotDeep);
+        }
         ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.strokeStyle = active ? PAL.accent : (hover ? PAL.slotHover : PAL.slotLine);
         ctx.lineWidth = active ? 2 : 1;
         ctx.stroke();
+        // faceta interior: da volumen al rombo sin añadir ruido
+        if (!active) {
+          diamond(ctx, s, Math.max(3, 4 * lay.scale));
+          ctx.strokeStyle = hover ? 'rgba(98,224,239,0.30)' : 'rgba(98,224,239,0.09)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
 
       // glifo
@@ -218,12 +256,12 @@
       const blocked = hov && RESERVED.indexOf(hov) >= 0;
       const off = !blocked && show.sections && !isAvailable(show, { section });
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.font = '700 ' + Math.round(11.5 * lay.scale) + 'px ui-sans-serif, system-ui, sans-serif';
-      ctx.fillStyle = blocked || off ? PAL.muted : PAL.text;
+      ctx.font = '700 ' + Math.round(11 * lay.scale) + 'px ui-monospace, "DejaVu Sans Mono", monospace';
+      ctx.fillStyle = blocked || off ? PAL.muted : PAL.accent;
       const tag = show.name.toUpperCase() +
         (blocked ? '  ·  BLOQUEADO (' + show.stage + ')' : (show.key ? '  ·  [' + show.key + ']' : ''));
       ctx.fillText(tag, cxBar, r.y - 15);
-      ctx.font = Math.round(10.5 * lay.scale) + 'px ui-sans-serif, system-ui, sans-serif';
+      ctx.font = Math.round(10 * lay.scale) + 'px ui-monospace, "DejaVu Sans Mono", monospace';
       ctx.fillStyle = PAL.muted;
       ctx.fillText(off ? 'Solo en la sección DISEÑAR NEXO' : show.hint, cxBar, r.y - 2);
     }

@@ -131,6 +131,8 @@ console.log('UGS tools/toolbox tests\n');
   check('draw equilibra save/restore',
     calls.filter(c => c === 'save').length === calls.filter(c => c === 'restore').length);
   check('draw sin opciones no revienta', TB.draw(stub, 900, 600) !== null);
+  // contexto sin gradientes (mock reducido): degrada a color plano, no revienta
+  check('draw tolera un ctx sin createLinearGradient', TB.draw(stub, 1200, 700, { active: 'select' }) !== null);
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

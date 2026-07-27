@@ -67,6 +67,22 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **App:** abrir `index.html` en un navegador (o GitHub Pages del repo).
 - **Tests:** `npm test` (requiere solo Node ≥ 18).
 
+## Lenguaje visual (sci-fi de estación)
+
+Derivado del kit del equipo en `!_UGS/ux/`, no inventado aparte:
+
+- **Chaflán en vez de esquina redonda** — la silueta sale del botón hexagonal de
+  `botones.svg`; vive en la variable CSS `--chamfer` y la repite el raíl de la barra
+  de herramientas dibujado en canvas, para que HTML y canvas hablen igual.
+- **Cian `#62e0ef`** como único acento (el que ya usaba la suite). Ámbar y verde quedan
+  reservados a *estado* (aviso / correcto), no a decoración.
+- **Neutros sesgados a azul**, nunca gris puro: un gris neutro junto al cian se ve sucio.
+- **Etiquetas técnicas en monoespaciada** con tracking amplio; el texto corrido sigue
+  en sans para que se lea.
+- **El brillo marca lo ACTIVO**, no adorna: si algo brilla, es porque está seleccionado,
+  encendido o pidiendo atención.
+- Animación mínima y con `prefers-reduced-motion` respetado.
+
 ## Barra de herramientas (suite Dev)
 
 Fila de rombos en el borde inferior, una tecla fija por herramienta:
