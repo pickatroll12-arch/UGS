@@ -790,3 +790,39 @@ cansa; (3) confirmar que en modo Juego sigue sin haber vocabulario de desarrollo
 **Decisión pendiente:** (1) ¿se ratifica este lenguaje visual como el de la casa?;
 (2) ¿el chaflán a 7px es el correcto o lo queréis más marcado?; (3) ¿mantenemos el
 punto latiendo en la barra de estado o es ruido?
+
+
+### §6.17 — KIMI K3 (Rector) — Fix visual render3d: suelos y paredes sólidas — 2026-07-27
+**Observación:** reporte de -XONO con captura: en el renderer 3D las paredes «se
+ven transparentes» y el suelo no cambia de color al pintar. Tres causas raíz,
+todas en `render3d.js` (la UI de Claude NO tocaba el renderer — verificado en
+sus diffs):
+1. **Culling por winding espejado:** la matriz de proyección custom (fórmula 2D)
+   invierte la orientación de las caras respecto al winding por defecto de
+   OpenGL → los planos FrontSide del suelo quedaban culleados y NUNCA se
+   dibujaban (el «suelo negro» era el fondo + las líneas de panel). Fix:
+   DoubleSide en todos los materiales.
+2. **Suelo con material Lambert:** la iluminación aplastaba la paleta
+   (deck/dark/light indistinguibles). Fix: suelos MeshBasicMaterial sin iluminar
+   = color plano idéntico al 2D.
+3. **Paredes con un solo material claro + luz demasiado intensa:** laterales
+   casi blancos → efecto fantasma. Fix: materiales por grupo de ExtrudeGeometry
+   (tapa `#a9b3c6` sin iluminar + laterales `rgb(104,114,134)` Lambert) y modelo
+   de luz calibrado a la fórmula 2D (ambient 0.55 + direccional 0.45 casi
+   horizontal ⇒ laterales con el mismo f = 0.55+0.45·max(0,n·L) que el 2D).
+   Objetos y PCJ reciben el mismo tratamiento (tapa/laterales separados,
+   colores planos).
+**Evidencia:** A/B contra el renderer 2D en la misma página (franjas light/dark
+pintadas): paridad visual; clon limpio → **277 passed, ALL SUITES GREEN** (la
+suite toolbox de §6.15 ya va incluida); boot dev/juego sin errores de consola.
+Commit `fa90169`.
+**Riesgo:** DoubleSide duplica fill-rate (irrelevante a esta escala); dark/deck
+son sutiles también en 2D (paleta del proyecto); líneas de panel algo más
+tenues en 3D.
+**Recomendación:** -XONO reintenta el caso de su captura (pintar suelos, mirar
+paredes) — debe verse 1:1 con el 2D salvo el sombreado más suave (ventaja 3D).
+**Archivos afectados:** `src/render/render3d.js`, este documento.
+**Pruebas necesarias (humano):** (1) Dev: pintar franjas deck/dark/light → se
+distinguen; (2) paredes sólidas (tapa clara, lados oscuros) en los 4 yaws;
+(3) ponerse tras una pared: fade sigue funcionando.
+**Decisión pendiente:** ninguna nueva.
