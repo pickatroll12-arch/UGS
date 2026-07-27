@@ -826,3 +826,28 @@ paredes) — debe verse 1:1 con el 2D salvo el sombreado más suave (ventaja 3D)
 distinguen; (2) paredes sólidas (tapa clara, lados oscuros) en los 4 yaws;
 (3) ponerse tras una pared: fade sigue funcionando.
 **Decisión pendiente:** ninguna nueva.
+
+
+### §6.18 — KIMI K3 (Rector) — Contador FPS + tope ?fps=N + nota sobre GLB — 2026-07-27
+**Observación:** dos consultas de -XONO. (1) «¿soporta el proyecto GLB?»: NO hoy
+— los objetos son sprites/billboards + geometría procedural; con three.js se
+podría cargar .glb (GLTFLoader vía ESM/import map desde CDN; requeriría pipeline
+de arte en 3D y es candidato de milestone, NO autorizado aún). (2) «subir el cap
+de 60 a 144 fps»: el juego NO tenía tope artificial — requestAnimationFrame
+sigue al refresco de la pantalla (en un monitor de 144 Hz ya corre a 144). Se
+añade: **contador FPS en el HUD** (verificación visible en todo momento) y
+**tope opcional ?fps=N** (24-240) para limitar por debajo del nativo (ahorro de
+batería); sin parámetro corre al refresco nativo.
+**Evidencia:** boot nativo → «· 60fps» (display headless de 60 Hz); boot
+?fps=30 → «· 30fps»; cero errores de consola; clon limpio → **277 passed,
+ALL SUITES GREEN**. Commit `d30afea`.
+**Riesgo:** el contador mide la tasa de rAF (el juego solo repinta cuando hay
+cambios, a propósito — no es un indicador de carga); en SwiftShader fluctúa.
+**Recomendación:** si interesa GLB como pipeline de objetos 3D (un modelo por
+objeto en vez de 4 yaws en sprite), elevarlo a milestone con brief (formato,
+escala 0.62×0.62×0.34, loader por CDN con fallback a sprites).
+**Archivos afectados:** `src/app/app.js`, este documento.
+**Pruebas necesarias (humano):** (1) abrir el juego y leer el contador del HUD
+(en un monitor de 144 Hz debe marcar ~144); (2) comparar ?fps=60 vs ?fps=144.
+**Decisión pendiente:** ¿milestone GLB (modelos 3D reales) o seguimos con el
+spec de sprites v4?
