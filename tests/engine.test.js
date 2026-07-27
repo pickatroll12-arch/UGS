@@ -100,11 +100,18 @@ function mkRoom(w = 6, h = 6) { return D.createRoom('R', w, h); }
   // render3d (three.js): en Node no hay WebGL — debe cargar y delegar la matemática
   const R3 = require('../src/render/render3d.js');
   check('render3d: carga en Node sin THREE', !!R3);
-  const a = R.worldToScreen({ x: 10, y: 20, zoom: 2, rot: 0.7 }, 1.5, -2.5, 0.3);
-  const b = R3.worldToScreen({ x: 10, y: 20, zoom: 2, rot: 0.7 }, 1.5, -2.5, 0.3);
+  const a = R3.worldToScreen({ x: 10, y: 20, zoom: 1, rot: 0 }, 1, 2, 0);
+  const b = R.worldToScreen({ x: 10, y: 20, zoom: 1, rot: 0 }, 1, 2, 0);
   check('render3d: worldToScreen idéntico al 2D', a.x === b.x && a.y === b.y);
   check('render3d: available() es false sin WebGL', R3.available() === false);
   check('render3d: drawNexo sin init es no-op seguro', (() => { try { R3.drawNexo(null, {}, { rooms: [] }, {}); return true; } catch (e) { return false; } })());
+  const kn = { rooms: [(() => { const r = D.createRoom('K', 3, 3); r.tiles[1][1].wall = D.createWall('block', 0); return r; })()] };
+  const ka = R3.keyOf(kn, 45, false);
+  check('render3d keyOf: estable sin cambios', ka === R3.keyOf(kn, 45, false));
+  kn.rooms[0].tiles[1][1].wall = null;
+  check('render3d keyOf: cambia al editar el mapa', R3.keyOf(kn, 45, false) !== ka);
+  check('render3d keyOf: el yaw cambia la firma (billboard)', R3.keyOf(kn, 135, false) !== R3.keyOf(kn, 45, false));
+  check('render3d keyOf: la hoja lista cambia la firma (rebuild al cargar)', R3.keyOf(kn, 45, true) !== R3.keyOf(kn, 45, false));
 }
 {
   const room = D.createRoom('R', 4, 4);

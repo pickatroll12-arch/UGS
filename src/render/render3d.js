@@ -17,6 +17,13 @@
  *    consola = plano vertical recortado por la silueta hexagonal medida
  *    de la hoja v3 (misma técnica que el sprite 2D) mirando a la cámara.
  *
+ * RENDIMIENTO (§6.15): la escena NO se reconstruye por frame. Un firma
+ * estructural (keyOf) decide cuándo reconstruir el grupo estático
+ * (suelos/paredes/objetos): solo si cambia el MAPA o el yaw. El PCJ es
+ * persistente (se actualizan posiciones in-situ), el fade de paredes es
+ * un intercambio de materiales sobre meshes cacheados, y los marcadores
+ * dev son un grupo dinámico diminuto que se regenera por frame sucio.
+ *
  * Sin three.js (CDN caído) o sin WebGL → available() = false y app.js
  * usa el renderer 2D. En Node carga sin tocar DOM (para tests).
  */
@@ -38,8 +45,14 @@
   const CEL = Math.cos(EL);
 
   // ---- estado GL ------------------------------------------------------------
-  let gl = null;      // { renderer, scene, camera, group, canvas }
+  let gl = null;      // { renderer, scene, camera, canvas }
   let sheet = null;   // textura de la hoja de consolas v3 (o 'loading'/'error')
+  let sheetReady = false;
+  const viewGeo = {};            // yaw → ShapeGeometry horneada de la consola (compartida)
+  let stat = null;               // escena estática { key, group, geos, walls }
+  let dyn = null;                // marcadores dev { group, geos }
+  const pawns3 = new Map();      // pawnId → meshes persistentes del PCJ
+  let lastSize = { w: 0, h: 0 };
 
   function available() {
     if (typeof THREE === 'undefined' || typeof document === 'undefined') return false;
@@ -63,13 +76,15 @@
     sun.position.set(-0.45, 0.89, 0.35).normalize();
     scene.add(sun);
     const camera = new THREE.OrthographicCamera();
-    gl = { renderer, scene, camera, group: null, canvas };
+    gl = { renderer, scene, camera, canvas };
     // hoja de consolas (misma que el sprite 2D)
     sheet = 'loading';
     new THREE.TextureLoader().load(encodeURI(R2.CONSOLE_SPRITE.src), (t) => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = 4;
       sheet = t;
+      sheetReady = true;
+      stat = null;                    // la firma incluye sheetReady → reconstruye con sprite
       if (onReady) onReady();
     }, undefined, () => { sheet = 'error'; });
     return true;
@@ -97,7 +112,11 @@
     cam3.projectionMatrixInverse.copy(m).invert();
     cam3.matrixWorld.identity();
     cam3.matrixWorldInverse.identity();
-    gl.renderer.setSize(w, h, false);
+    // setSize resetea el buffer del canvas aunque el tamaño no cambie: solo si cambió
+    if (w !== lastSize.w || h !== lastSize.h) {
+      gl.renderer.setSize(w, h, false);
+      lastSize = { w, h };
+    }
   }
 
   // ---- materiales ------------------------------------------------------------
@@ -107,6 +126,13 @@
   const basic = (c, o) => new THREE.MeshBasicMaterial({
     color: c, transparent: o != null, opacity: o == null ? 1 : o, side: THREE.DoubleSide
   });
+  function wallMats(faded) {
+    return faded
+      ? [mat('wallCapFade', () => new THREE.MeshBasicMaterial({ color: COLORS.wallTop, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide })),
+         mat('wallSideFade', () => new THREE.MeshLambertMaterial({ color: 'rgb(104,114,134)', transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }))]
+      : [mat('wallCap', () => new THREE.MeshBasicMaterial({ color: COLORS.wallTop, side: THREE.DoubleSide })),
+         mat('wallSide', () => new THREE.MeshLambertMaterial({ color: 'rgb(104,114,134)', side: THREE.DoubleSide }))];
+  }
 
   function mesh(geo, material) {
     const m = new THREE.Mesh(geo, material);
@@ -114,12 +140,51 @@
     return m;
   }
 
-  // ---- piezas de escena (unidades = tiles, z-up) ------------------------------
-  function addFloor(g, room, x, y, tile) {
+  // ---- firma estructural del mapa ---------------------------------------------
+  // La escena estática solo se reconstruye cuando cambia ESTA firma (contenido
+  // del mapa + yaw de cámara + disponibilidad de la hoja). Pan/zoom y el
+  // movimiento del PCJ NO la tocan → esos frames cuestan ~nada.
+  function keyOf(nexo, yawDeg, sheetOk) {
+    let k = (sheetOk ? 'S' : 's') + '@' + yawDeg;
+    for (const room of nexo.rooms) {
+      const t = room.transform;
+      k += '|' + room.id + ',' + t.x + ',' + t.y + ',' + (t.rotation || 0) + ',' + room.size.w + 'x' + room.size.h;
+      for (let y = 0; y < room.size.h; y++) {
+        for (let x = 0; x < room.size.w; x++) {
+          const tile = room.tiles[y][x];
+          if (!tile) { k += ',.'; continue; }
+          k += ',' + tile.floor + (tile.wall ? ':' + tile.wall.kind + tile.wall.orientation : '');
+        }
+      }
+      for (const o of room.objects) k += ';' + o.type + o.x + ',' + o.y + (o.rotation || 0) + (o.open ? 1 : 0);
+    }
+    return k;
+  }
+
+  // ---- consola: geometría de vista horneada una vez por yaw -------------------
+  function consoleGeo(yaw) {
+    if (viewGeo[yaw]) return viewGeo[yaw];
+    const v = R2.CONSOLE_SPRITE.VIEWS[yaw];
+    const k3 = 0.62 * Math.SQRT2 / v.topW;        // mundo por px de hoja
+    const shape = new THREE.Shape(v.hex.map(p => new THREE.Vector2((p[0] - v.fp[0]) * k3, (v.fp[1] - p[1]) * k3)));
+    const geo = new THREE.ShapeGeometry(shape);
+    // UV: px de hoja → uv de textura (flipY por defecto)
+    const pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i) / k3 + v.fp[0], py = v.fp[1] - pos.getY(i) / k3;
+      uv.setXY(i, px / sheet.image.width, 1 - py / sheet.image.height);
+    }
+    geo.rotateX(Math.PI / 2);                     // y del sprite → z mundo
+    viewGeo[yaw] = geo;
+    return geo;
+  }
+
+  // ---- piezas de la escena estática (unidades = tiles, z-up) ------------------
+  function addFloor(g, track, room, x, y, tile) {
     const c = R2.tileCenterWorld(room, x, y);
     const color = (DATA.FLOORS[tile.floor] || DATA.FLOORS.deck).color;
     // sin iluminar: color plano de paleta, idéntico al 2D (deck/dark/light distinguibles)
-    const m = mesh(new THREE.PlaneGeometry(1, 1), mat('floor:' + color, () => new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })));
+    const m = track(mesh(new THREE.PlaneGeometry(1, 1), mat('floor:' + color, () => new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }))));
     m.position.set(c.x, c.y, 0);
     g.add(m);
     // línea de panel interior (detalle tipo Xenonauts)
@@ -131,10 +196,11 @@
       new THREE.BufferGeometry().setFromPoints(pts),
       mat('panel', () => new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07 })));
     line.frustumCulled = false;
+    track(line);
     g.add(line);
   }
 
-  function addWall(g, room, x, y, wall, alpha) {
+  function addWall(g, track, walls, room, x, y, wall) {
     const fpLocal = R2.wallFootprintWorld(x + 0.5, y + 0.5, wall.kind, wall.orientation);
     const wfp = fpLocal.map(p => R2.localToWorld(room, p.x, p.y));
     const shape = new THREE.Shape(wfp.map(p => new THREE.Vector2(p.x, p.y)));
@@ -142,36 +208,21 @@
     // dos materiales (grupos de ExtrudeGeometry: 0=tapas, 1=laterales):
     // tapa CLARA sin iluminar (#a9b3c6) y laterales OSCUROS con sombreado 3D,
     // el mismo contraste que el 2D — las paredes se leen sólidas, no fantasma.
-    const faded = alpha != null;
-    const capM = faded
-      ? mat('wallCapFade', () => new THREE.MeshBasicMaterial({ color: COLORS.wallTop, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }))
-      : mat('wallCap', () => new THREE.MeshBasicMaterial({ color: COLORS.wallTop, side: THREE.DoubleSide }));
-    const sideM = faded
-      ? mat('wallSideFade', () => new THREE.MeshLambertMaterial({ color: 'rgb(104,114,134)', transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }))
-      : mat('wallSide', () => new THREE.MeshLambertMaterial({ color: 'rgb(104,114,134)', side: THREE.DoubleSide }));
-    const m = mesh(geo, [capM, sideM]);
+    const m = track(mesh(geo, wallMats(false)));
     g.add(m);
+    // registro para el fade por intercambio de material (sin reconstruir)
+    walls.set(room.id + ':' + x + ':' + y, { mesh: m, c: R2.tileCenterWorld(room, x, y), faded: false });
   }
 
-  function addObject(g, room, o, cam) {
+  function addObject(g, track, room, o, cam) {
     const c = R2.tileCenterWorld(room, o.x, o.y);
-    if (o.type === 'console' && sheet && sheet !== 'loading' && sheet !== 'error') {
+    if (o.type === 'console' && sheetReady) {
       const yawDeg = Math.round((((cam.rot || 0) * 180 / Math.PI) % 360 + 360) % 360);
       const keys = [45, 135, 225, 315];
       let best = keys[0], bd = Infinity;
       for (const k of keys) { const dd = Math.abs(yawDeg - k); if (dd < bd) { bd = dd; best = k; } }
-      const v = R2.CONSOLE_SPRITE.VIEWS[best];
-      const k3 = 0.62 * Math.SQRT2 / v.topW;        // mundo por px de hoja
-      const shape = new THREE.Shape(v.hex.map(p => new THREE.Vector2((p[0] - v.fp[0]) * k3, (v.fp[1] - p[1]) * k3)));
-      const geo = new THREE.ShapeGeometry(shape);
-      // UV: px de hoja → uv de textura (flipY por defecto)
-      const pos = geo.attributes.position, uv = geo.attributes.uv;
-      for (let i = 0; i < pos.count; i++) {
-        const px = pos.getX(i) / k3 + v.fp[0], py = v.fp[1] - pos.getY(i) / k3;
-        uv.setXY(i, px / sheet.image.width, 1 - py / sheet.image.height);
-      }
-      const m = mesh(geo, new THREE.MeshBasicMaterial({ map: sheet, side: THREE.DoubleSide }));
-      m.geometry.rotateX(Math.PI / 2);              // y del sprite → z mundo
+      // geometría compartida (horneada por yaw): NO se trackea ni se dispone
+      const m = mesh(consoleGeo(best), mat('consSheet', () => new THREE.MeshBasicMaterial({ map: sheet, side: THREE.DoubleSide })));
       m.rotation.z = -(cam.rot || 0);               // eje x del sprite → eje x de pantalla
       // empuje leve HACIA la cámara (dirección de proyección d = (sin,cos,TILT)):
       // no mueve el sprite en pantalla (proyección oblícua) y evita que la
@@ -182,11 +233,11 @@
       return;
     }
     if (o.type === 'elevator') {
-      const pad = mesh(new THREE.CircleGeometry(0.42, 4), basic('#22333c'));
+      const pad = track(mesh(new THREE.CircleGeometry(0.42, 4), basic('#22333c')));
       pad.rotation.z = Math.PI / 4 + (o.rotation || 0) * Math.PI / 180;
       pad.position.set(c.x, c.y, 0.02);
       g.add(pad);
-      const ring = mesh(new THREE.RingGeometry(0.15, 0.19, 32), basic(COLORS.link));
+      const ring = track(mesh(new THREE.RingGeometry(0.15, 0.19, 32), basic(COLORS.link)));
       ring.position.set(c.x, c.y, 0.025);
       g.add(ring);
       return;
@@ -200,138 +251,166 @@
     // BoxGeometry: grupos 0-3 laterales, 4 = tapa (+z), 5 = base
     const sideM = mat('objSide:' + OCOL.side, () => new THREE.MeshLambertMaterial({ color: OCOL.side, side: THREE.DoubleSide }));
     const topM = mat('objTop:' + OCOL.top, () => new THREE.MeshBasicMaterial({ color: OCOL.top, side: THREE.DoubleSide }));
-    const m = mesh(new THREE.BoxGeometry(0.62, 0.62, h), [sideM, sideM, sideM, sideM, topM, sideM]);
+    const m = track(mesh(new THREE.BoxGeometry(0.62, 0.62, h), [sideM, sideM, sideM, sideM, topM, sideM]));
     m.rotation.z = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;
     m.position.set(c.x, c.y, h / 2);
     g.add(m);
     // tick luminoso superior
-    const tick = mesh(new THREE.PlaneGeometry(0.1, 0.05), basic(COLORS.objLine));
+    const tick = track(mesh(new THREE.PlaneGeometry(0.1, 0.05), basic(COLORS.objLine)));
     tick.position.set(c.x, c.y, h + 0.005);
     g.add(tick);
   }
 
-  function addPawn(g, nexo, p, selected) {
-    const room = nexo.rooms.find(r => r.id === p.roomId); if (!room) return;
-    const c = R2.localToWorld(room, p.x + 0.5, p.y + 0.5);
-    const sh = mesh(new THREE.CircleGeometry(0.15, 24), basic(0x000000, 0.35));
-    sh.position.set(c.x, c.y, 0.005);
-    g.add(sh);
-    const body = mesh(new THREE.CapsuleGeometry(0.086, 0.33, 4, 12),
-      basic(selected ? COLORS.pawnSel : COLORS.pawnBody));
-    body.geometry.rotateX(Math.PI / 2);             // eje de la cápsula → z
-    body.position.set(c.x, c.y, 0.29);
-    g.add(body);
-    const head = mesh(new THREE.SphereGeometry(0.1, 14, 10), basic(COLORS.pawnDark));
-    head.position.set(c.x, c.y, 0.6);
-    g.add(head);
-    // visor hacia el facing
-    const wf = R2.rotatePoint(p.facingLocal.x, p.facingLocal.y, room.transform.rotation || 0, { x: 0, y: 0 });
-    const l = Math.hypot(wf.x, wf.y) || 1;
-    const vg = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(c.x, c.y, 0.6),
-      new THREE.Vector3(c.x + (wf.x / l) * 0.11, c.y + (wf.y / l) * 0.11, 0.6)
-    ]);
-    const vis = new THREE.Line(vg, mat('visor', () => new THREE.LineBasicMaterial({ color: COLORS.pawnVisor })));
-    vis.frustumCulled = false;
-    g.add(vis);
-    if (selected) {
-      const ring = mesh(new THREE.RingGeometry(0.17, 0.2, 32), basic(COLORS.pawnSel));
-      ring.position.set(c.x, c.y, 0.008);
-      g.add(ring);
-    }
-  }
-
-  function addTrail(g, nexo, p) {
-    if (!p.path || !p.path.length) return;
-    const room = nexo.rooms.find(r => r.id === p.roomId); if (!room) return;
-    const pts = [];
-    const c0 = R2.localToWorld(room, p.x + 0.5, p.y + 0.5);
-    pts.push(new THREE.Vector3(c0.x, c0.y, 0.02));
-    for (const wp of p.path) {
-      const wr = (wp.roomId && nexo.rooms.find(r => r.id === wp.roomId)) || room;
-      const c = R2.tileCenterWorld(wr, wp.x, wp.y);
-      pts.push(new THREE.Vector3(c.x, c.y, 0.02));
-    }
-    // cinta plana (WebGL ignora lineWidth): quad por segmento
-    const HW = 0.024;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-      if (len < 1e-6) continue;
-      const nx = -dy / len * HW, ny = dx / len * HW;
-      const geo = new THREE.BufferGeometry();
-      const v = new Float32Array([
-        a.x + nx, a.y + ny, 0.02, b.x + nx, b.y + ny, 0.02, b.x - nx, b.y - ny, 0.02,
-        a.x + nx, a.y + ny, 0.02, b.x - nx, b.y - ny, 0.02, a.x - nx, a.y - ny, 0.02
-      ]);
-      geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
-      g.add(mesh(geo, mat('trail', () => basic(COLORS.path, 0.55))));
-    }
-  }
-
-  function flatQuad(g, corners, color, opacity, z) {
-    const shape = new THREE.Shape(corners.map(p => new THREE.Vector2(p.x, p.y)));
-    const m = mesh(new THREE.ShapeGeometry(shape), basic(color, opacity));
-    m.position.set(0, 0, z);
-    g.add(m);
-  }
-
-  // ---- API principal ----------------------------------------------------------
-  function drawNexo(_ctx, cam, nexo, opts) {
-    if (!gl) return;
-    opts = opts || {};
-    const canvas = gl.canvas;
-    updateCamera(cam, canvas.clientWidth, canvas.clientHeight);
-    // reconstruir la escena (drawNexo solo se llama cuando hay cambios)
-    if (gl.group) {
-      gl.scene.remove(gl.group);
-      gl.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  function rebuildStatic(nexo, cam, key) {
+    if (stat) {
+      gl.scene.remove(stat.group);
+      for (const geo of stat.geos) geo.dispose();
     }
     const g = new THREE.Group();
+    const geos = [];
+    const walls = new Map();
+    const track = (m) => { geos.push(m.geometry); return m; };
     // 1) suelos
     for (const room of nexo.rooms) {
       for (let y = 0; y < room.size.h; y++) {
         for (let x = 0; x < room.size.w; x++) {
           const tile = room.tiles[y][x];
           if (!tile || tile.floor === 'void') continue;
-          addFloor(g, room, x, y, tile);
+          addFloor(g, track, room, x, y, tile);
         }
       }
     }
-    // 2) paredes / objetos / PCJ (el z-buffer resuelve la oclusión; el fade
-    //    sigue la misma regla que en 2D)
+    // 2) paredes + objetos (el z-buffer resuelve la oclusión)
     for (const room of nexo.rooms) {
       for (let y = 0; y < room.size.h; y++) {
         for (let x = 0; x < room.size.w; x++) {
           const tile = room.tiles[y][x];
-          if (tile && tile.wall) {
-            let alpha = null;
-            if (opts.pawns) {
-              const wc = R2.tileCenterWorld(room, x, y);
-              for (const p of opts.pawns) {
-                const pr = nexo.rooms.find(r => r.id === p.roomId); if (!pr) continue;
-                const pc = R2.localToWorld(pr, p.x + 0.5, p.y + 0.5);
-                if (R2.wallFadesPawn(cam, wc, pc)) { alpha = 0.35; break; }
-              }
-            }
-            addWall(g, room, x, y, tile.wall, alpha);
-          }
+          if (tile && tile.wall) addWall(g, track, walls, room, x, y, tile.wall);
         }
       }
-      for (const o of room.objects) addObject(g, room, o, cam);
+      for (const o of room.objects) addObject(g, track, room, o, cam);
     }
-    if (opts.pawns) {
-      for (const p of opts.pawns) addPawn(g, nexo, p, opts.selectedPawnId === p.id);
-      for (const p of opts.pawns) addTrail(g, nexo, p);
+    stat = { key, group: g, geos, walls };
+    gl.scene.add(g);
+  }
+
+  // ---- fade de paredes: intercambio de material (sin reconstruir) --------------
+  function updateFades(cam, nexo, pawns) {
+    if (!stat) return;
+    const MN = wallMats(false), MF = wallMats(true);
+    for (const wm of stat.walls.values()) {
+      let faded = false;
+      for (const p of pawns) {
+        const pr = nexo.rooms.find(r => r.id === p.roomId); if (!pr) continue;
+        const pc = R2.localToWorld(pr, p.x + 0.5, p.y + 0.5);
+        if (R2.wallFadesPawn(cam, wm.c, pc)) { faded = true; break; }
+      }
+      if (faded !== wm.faded) { wm.faded = faded; wm.mesh.material = faded ? MF : MN; }
     }
-    // 3) marcadores
+  }
+
+  // ---- PCJ persistente: se crea una vez y se actualizan posiciones -------------
+  function makePawn3() {
+    const root = new THREE.Group();
+    const sh = mesh(new THREE.CircleGeometry(0.15, 24), basic(0x000000, 0.35));
+    sh.position.z = 0.005;
+    const bodyM = new THREE.MeshBasicMaterial({ color: COLORS.pawnBody, side: THREE.DoubleSide });
+    const body = mesh(new THREE.CapsuleGeometry(0.086, 0.33, 4, 12), bodyM);
+    body.geometry.rotateX(Math.PI / 2);             // eje de la cápsula → z
+    const head = mesh(new THREE.SphereGeometry(0.1, 14, 10), basic(COLORS.pawnDark));
+    const visGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0.1, 0, 0)]);
+    const vis = new THREE.Line(visGeo, mat('visor', () => new THREE.LineBasicMaterial({ color: COLORS.pawnVisor })));
+    vis.frustumCulled = false;
+    const ring = mesh(new THREE.RingGeometry(0.17, 0.2, 32), basic(COLORS.pawnSel));
+    ring.position.z = 0.008;
+    root.add(sh, body, head, vis, ring);
+    return { root, sh, body, bodyM, head, visGeo, ring, trail: null, trailKey: '' };
+  }
+
+  // trail como UNA geometría fusionada (WebGL ignora lineWidth): quad por segmento
+  function trailGeo(nexo, p) {
+    if (!p.path || !p.path.length) return null;
+    const room = nexo.rooms.find(r => r.id === p.roomId); if (!room) return null;
+    const pts = [];
+    pts.push(R2.localToWorld(room, p.x + 0.5, p.y + 0.5));
+    for (const wp of p.path) {
+      const wr = (wp.roomId && nexo.rooms.find(r => r.id === wp.roomId)) || room;
+      pts.push(R2.tileCenterWorld(wr, wp.x, wp.y));
+    }
+    const HW = 0.024, verts = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+      const nx = -dy / len * HW, ny = dx / len * HW;
+      verts.push(
+        a.x + nx, a.y + ny, 0.02, b.x + nx, b.y + ny, 0.02, b.x - nx, b.y - ny, 0.02,
+        a.x + nx, a.y + ny, 0.02, b.x - nx, b.y - ny, 0.02, a.x - nx, a.y - ny, 0.02
+      );
+    }
+    if (!verts.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+    return geo;
+  }
+
+  function syncPawns(nexo, list, selectedId) {
+    const seen = new Set();
+    for (const p of list) {
+      seen.add(p.id);
+      let pm = pawns3.get(p.id);
+      if (!pm) { pm = makePawn3(); pawns3.set(p.id, pm); gl.scene.add(pm.root); }
+      const room = nexo.rooms.find(r => r.id === p.roomId);
+      if (!room) { pm.root.visible = false; continue; }
+      pm.root.visible = true;
+      const c = R2.localToWorld(room, p.x + 0.5, p.y + 0.5);
+      pm.sh.position.set(c.x, c.y, 0.005);
+      pm.body.position.set(c.x, c.y, 0.29);
+      pm.head.position.set(c.x, c.y, 0.6);
+      // visor hacia el facing (actualizado in-situ, sin geometría nueva)
+      const wf = R2.rotatePoint(p.facingLocal.x, p.facingLocal.y, room.transform.rotation || 0, { x: 0, y: 0 });
+      const l = Math.hypot(wf.x, wf.y) || 1;
+      const pos = pm.visGeo.attributes.position;
+      pos.setXYZ(0, c.x, c.y, 0.6);
+      pos.setXYZ(1, c.x + (wf.x / l) * 0.11, c.y + (wf.y / l) * 0.11, 0.6);
+      pos.needsUpdate = true;
+      pm.bodyM.color.set(selectedId === p.id ? COLORS.pawnSel : COLORS.pawnBody);
+      pm.ring.visible = selectedId === p.id;
+      pm.ring.position.set(c.x, c.y, 0.008);
+      // trail: solo se regenera si cambió la ruta o la posición
+      const tk = (p.path ? p.path.length : 0) + '|' + p.x.toFixed(3) + ',' + p.y.toFixed(3);
+      if (tk !== pm.trailKey) {
+        pm.trailKey = tk;
+        if (pm.trail) { pm.root.remove(pm.trail); pm.trail.geometry.dispose(); pm.trail = null; }
+        const geo = trailGeo(nexo, p);
+        if (geo) { pm.trail = mesh(geo, mat('trail', () => basic(COLORS.path, 0.55))); pm.root.add(pm.trail); }
+      }
+    }
+    for (const [id, pm] of [...pawns3]) {
+      if (!seen.has(id)) {
+        gl.scene.remove(pm.root);
+        pm.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+        pawns3.delete(id);
+      }
+    }
+  }
+
+  // ---- marcadores dev (grupo dinámico diminuto, se regenera por frame sucio) ----
+  function rebuildMarkers(nexo, opts) {
+    if (dyn) {
+      gl.scene.remove(dyn.group);
+      for (const geo of dyn.geos) geo.dispose();
+      dyn = null;
+    }
+    const g = new THREE.Group();
+    const geos = [];
+    const put = (m) => { geos.push(m.geometry); g.add(m); return m; };
     if (opts.entry) {
       const room = nexo.rooms.find(r => r.id === opts.entry.roomId);
       if (room) {
         const c = R2.tileCenterWorld(room, opts.entry.x, opts.entry.y);
-        const ring = mesh(new THREE.RingGeometry(0.14, 0.17, 32), basic(COLORS.entry));
+        const ring = put(mesh(new THREE.RingGeometry(0.14, 0.17, 32), basic(COLORS.entry)));
         ring.position.set(c.x, c.y, 0.03);
-        g.add(ring);
       }
     }
     if (opts.linkMarkers) {
@@ -340,19 +419,20 @@
         const c = R2.tileCenterWorld(room, mk.x, mk.y);
         const s = 0.1;
         const shape = new THREE.Shape([new THREE.Vector2(0, s), new THREE.Vector2(s, 0), new THREE.Vector2(0, -s), new THREE.Vector2(-s, 0)]);
-        const m = mesh(new THREE.ShapeGeometry(shape), basic(COLORS.link));
+        const m = put(mesh(new THREE.ShapeGeometry(shape), basic(COLORS.link)));
         m.position.set(c.x, c.y, 0.03);
-        g.add(m);
       }
     }
     if (opts.hover) {
       const room = nexo.rooms.find(r => r.id === opts.hover.roomId);
       if (room) {
         const hx = opts.hover.lx, hy = opts.hover.ly;
-        flatQuad(g, [
+        const shape = new THREE.Shape([
           R2.localToWorld(room, hx, hy), R2.localToWorld(room, hx + 1, hy),
           R2.localToWorld(room, hx + 1, hy + 1), R2.localToWorld(room, hx, hy + 1)
-        ], 0xffffff, 0.14, 0.02);
+        ].map(p => new THREE.Vector2(p.x, p.y)));
+        const m = put(mesh(new THREE.ShapeGeometry(shape), basic(0xffffff, 0.14)));
+        m.position.set(0, 0, 0.02);
       }
     }
     if (opts.ghost) {
@@ -361,14 +441,30 @@
         const gh = opts.ghost;
         const x0 = Math.min(gh.x0, gh.x1), x1 = Math.max(gh.x0, gh.x1) + 1;
         const y0 = Math.min(gh.y0, gh.y1), y1 = Math.max(gh.y0, gh.y1) + 1;
-        flatQuad(g, [
+        const shape = new THREE.Shape([
           R2.localToWorld(room, x0, y0), R2.localToWorld(room, x1, y0),
           R2.localToWorld(room, x1, y1), R2.localToWorld(room, x0, y1)
-        ], COLORS.link, 0.16, 0.03);
+        ].map(p => new THREE.Vector2(p.x, p.y)));
+        const m = put(mesh(new THREE.ShapeGeometry(shape), basic(COLORS.link, 0.16)));
+        m.position.set(0, 0, 0.03);
       }
     }
-    gl.group = g;
+    dyn = { group: g, geos };
     gl.scene.add(g);
+  }
+
+  // ---- API principal ----------------------------------------------------------
+  function drawNexo(_ctx, cam, nexo, opts) {
+    if (!gl) return;
+    opts = opts || {};
+    const canvas = gl.canvas;
+    updateCamera(cam, canvas.clientWidth, canvas.clientHeight);
+    const yawDeg = Math.round((((cam.rot || 0) * 180 / Math.PI) % 360 + 360) % 360);
+    const key = keyOf(nexo, yawDeg, sheetReady);
+    if (!stat || stat.key !== key) rebuildStatic(nexo, cam, key);
+    updateFades(cam, nexo, opts.pawns || []);
+    syncPawns(nexo, opts.pawns || [], opts.selectedPawnId);
+    rebuildMarkers(nexo, opts);
     gl.renderer.render(gl.scene, gl.camera);
   }
 
@@ -378,6 +474,6 @@
   const dbg = () => gl;
   return Object.assign({}, R2, {
     TILE, TILT, WALL_H, OBJ_H, COLORS,
-    available, init, drawNexo, clear, dbg
+    available, init, drawNexo, clear, dbg, keyOf
   });
 });
