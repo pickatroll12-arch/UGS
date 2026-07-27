@@ -60,9 +60,15 @@ MODO DONDE OCURRIÓ: MENU / DEV / JUEGO
 EVIDENCIA: N/A
 DECISIÓN REQUERIDA: REALIZAR UNA REVISION DE POR QUE PASA, SI SE PUEDE ARREGLAR O SOLO REEMPLAZAR POR UN INDICADOR SIMPLE DE DESPLAZAMIENTO.
 
-
-
-
+-Fromo
+FEEDBACK #N1 | FECHA: 2026-07-25 | AUTOR:-FROMO 
+PRIORIDAD: ALTA 
+MODO DONDE OCURRIÓ: DEV-JUEGO
+¿QUÉ HICE?: empeze a construir y a mover al mono
+¿QUÉ ESPERABA?: una estabilidad en los fps   
+¿QUÉ PASÓ EN REALIDAD?: los FPS empezaron a bajar drasticamente de 100fps a 16fp, pensando que es solamente del modo juego paso igual en el modo DEV, como tambien pasando el cursor por encima de las zonas empezo a ir peor 
+EVIDENCIA: N/A
+DECISIÓN REQUERIDA: N/A — Es un bug de rendimiento/optimización técnico no una decisión de diseño.(Creo)
 
 
 
