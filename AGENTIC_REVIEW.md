@@ -687,3 +687,62 @@ clásico; (6) valorar tonos: ¿se ve más oscuro que antes?
 **Decisión pendiente:** (1) ¿se mantiene 3D como default tras la prueba?;
 (2) ¿vendorizar three.js (~600 KB) para independencia del CDN o se acepta la
 dependencia con fallback 2D?
+
+
+### §6.15 — CLAUDE — Barra de herramientas de rombos + utilidad Seleccionar — 2026-07-27
+**Observación:** por orden directa de -XONO ("re-diseñar las herramientas… deben ir en
+el inferior de la pantalla… cada una con hotkey numérica… algo que NO se puede perder es
+el DRAG BOX"), se rehace la selección de herramientas de la suite Dev.
+- **Capa nueva `src/tools/toolbox.js`** (catálogo + disponibilidad + teclas + geometría +
+  dibujo). No ejecuta ninguna edición: sigue haciéndola `engine/blueprint.js`. Como
+  audio/ y screens/: lógica pura sin DOM, corre en Node y tiene tests; `draw` solo lee.
+- **Barra de rombos en el borde inferior**, centrada en el ÁREA LIBRE (no bajo el panel
+  lateral), con el número de tecla impreso en cada rombo y una etiqueta con el nombre y
+  la pista de uso de la herramienta activa o apuntada.
+- **10 herramientas con tecla fija:** 1 Seleccionar · 2 Suelo · 3 Pared · 4 Borrar ·
+  5 Relleno · 6 Objeto · 7 Consola · 8 Entrada · 9 Ascensor · 0 Módulo.
+- **DRAG BOX preservado e inmunizado:** Suelo/Pared/Borrar siguen siendo arrastre de
+  rectángulo. Hay un bloque de tests que falla si algún día se degradan a click suelto,
+  y queda escrito como **contrato C5** en `PROMPT_MAESTRO.md` §3.
+- **Nuevo: Seleccionar (1)** — inspecciona el tile (sala, coords, suelo, pared, objeto)
+  y `Supr` retira el objeto seleccionado, con deshacer. Antes no había forma de quitar
+  un objeto suelto sin borrar el rectángulo entero.
+- **Nuevo: Consola (7)** — atajo del objeto consola, la pieza que se está construyendo
+  ahora (sprite v3 + módulo screens). No asigna pantalla todavía: screens sigue sin
+  cablear por decisión de §6.13.
+- **Etapas futuras según los documentos:** tres rombos **BLOQUEADOS** al final de la
+  barra — PNJ y Evento (OBJP-2), Zona/hitos (OBJP-1.1). Se declara el hueco en la UI,
+  NO la funcionalidad: ambas etapas siguen congeladas y ninguno gasta tecla.
+- La tecla **no se reasigna** al cambiar de sección: Entrada/Ascensor/Módulo salen
+  apagadas en DISEÑAR MÓDULOS pero conservan su número.
+**Evidencia:** `node tests/run.js` → **276 checks, ALL SUITES GREEN** (54 nuevos en
+`tests/toolbox.test.js`: guardián del DRAG BOX, unicidad y orden de teclas,
+disponibilidad por sección, reservados sin tecla ni función, centrado con y sin panel
+lateral, no solape de rombos, hit-test de rombo — incluida la comprobación de que las
+esquinas del bounding-box NO cuentan —, draw sin DOM). Smoke en Chromium **20/20 verde**:
+teclas, click en rombo, la barra se come el click y no pinta el mapa por debajo,
+**DRAG BOX borra 4 tiles de una pasada y Ctrl+Z los devuelve**, Consola coloca, Supr
+retira, la tecla 8 se apaga en Módulos y revive en Nexo, la barra desaparece en Juego,
+nada la tapa, **cero errores de consola**.
+**Fallo propio detectado y corregido durante la entrega:** al mover la selección de
+herramienta a la barra, los botones ⚑ Entrada y ⛓ Link del panel lateral se quedaron sin
+binding (muertos). Se retiraron del panel; su función vive en las teclas 8 y 9.
+**Riesgo / lo que NO se probó:** no lo he probado en GPU real ni con el renderer 3D
+activo — en este entorno el CDN de three.js está bloqueado por el proxy, así que todo el
+smoke corrió en 2D. La barra se dibuja en el mismo ctx que los overlays dev (que en 3D es
+`#gamefx`), así que debería salir igual, pero **hay que verlo con three.js cargado**.
+En pantallas muy estrechas la barra escala pero no se parte en dos filas. La herramienta
+Consola coloca el objeto pero aún no le asigna pantalla.
+**Archivos afectados:** `src/tools/toolbox.js` (nuevo), `tests/toolbox.test.js` (nuevo),
+`src/app/app.js` (setTool, Seleccionar, Consola, teclas, hit-test de barra, dibujo),
+`index.html` (script, panel sin botones de herramienta, estado y música suben en Dev),
+`README.md`, `PROMPT_MAESTRO.md` (tabla + contrato C5), este documento.
+**Pruebas necesarias (humano):** (1) Dev → pulsar 1..9,0 y ver el rombo activo cambiar;
+(2) **arrastrar con 2/3/4 y confirmar que el DRAG BOX sigue igual de bueno**; (3) clicar
+los rombos con el ratón; (4) con 1, clicar un objeto y pulsar Supr; (5) con 7, colocar
+una consola; (6) cambiar a DISEÑAR MÓDULOS: 8/9/0 se apagan y no roban su número;
+(7) pasar los rombos bloqueados y leer su etiqueta; (8) **abrir con three.js disponible
+y confirmar que la barra se ve igual sobre el renderer 3D**.
+**Decisión pendiente:** (1) ¿el orden de las 10 herramientas os sirve o preferís otro?;
+(2) ¿faltan herramientas para lo que viene?; (3) ¿los 3 huecos bloqueados se quedan a la
+vista o se ocultan hasta que se firmen sus etapas?
