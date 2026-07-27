@@ -635,3 +635,55 @@ Q/E: la consola rota con la cámara en los 4 ángulos; (3) zoom: el sprite escal
 limpio; (4) valorar si el tono oscuro de v3 encaja o preferís v1.
 **Decisión pendiente:** ¿v3 aprobada o iteramos a v1? ¿mismo tratamiento de
 sprite para el resto de objetos?
+
+
+### §6.14 — KIMI K3 (Rector) — CAMBIO DE RENDERER A THREE.JS (decisión 3/3) — 2026-07-26
+**Observación:** decisión de los 3 colaboradores (encuesta del grupo 3/3 +
+autorización expresa de Matías: «Hazlo / Te lo permito», 2026-07-26): el renderer
+migra a **three.js**. Implementado como capa NUEVA `src/render/render3d.js` sin
+tocar la lógica ni el renderer 2D (regla de oro): **3D es el default**,
+`?renderer=2d` fuerza el clásico, y si falta el CDN o WebGL cae a 2D
+automáticamente (probado). Higiene pendiente: firma retroactiva en
+`Feedback humano`.
+**Implementación:**
+- **Proyección idéntica a la 2D, al píxel:** la cámara no usa lookAt — la matriz
+  de proyección se construye directamente de la fórmula de render.js
+  (sx = rx·TILE·zoom + cam.x, sy = ry·TILE·TILT·zoom − z·TILE·zoom + cam.y) con
+  NDCz lineal para el z-buffer. El picking y TODA la matemática se delegan a
+  render.js (fuente de verdad única).
+- **Overlays dev en 2D** sobre un canvas apilado `#gamefx` (frontera de conexión
+  y ghost de colocación quedan pixel-perfect sin reescribirlos).
+- Escena: paredes extruidas desde las mismas huellas (ExtrudeGeometry), objetos
+  caja, PCJ cápsula + casco + visor, trail como cinta plana (WebGL ignora
+  lineWidth), marcadores ▣/entrada/hover/ghost, fade con la MISMA regla
+  wallFadesPawn, luz ambient + direccional como la de escena 2D.
+- Consola v3 como **billboard** con la misma silueta hexagonal medida y la misma
+  hoja (sin procesado de píxel — funciona bajo file://). Bug hallado en smoke:
+  un billboard «mirando a la cámara» es degenerado bajo proyección oblícua a 45°
+  (colapsa a una línea) → orientación por eje-x de pantalla + empuje hacia
+  cámara (la punta de la base no queda bajo el suelo).
+- three.js **0.160.0 vía CDN jsdelivr** (script clásico, sin build). No se
+  vendoriza por tamaño (~600 KB por el canal de pushes) — decisión abierta abajo.
+**Evidencia:** clon limpio → `node tests/run.js` → **222 passed, ALL SUITES
+GREEN** (+4 render3d: carga en Node, delegación idéntica, available() false,
+no-op seguro). Smokes WebGL (SwiftShader): escena a 4 yaws con sprite de consola
+correcto; boot real `?auto=game` → «· 3D» en HUD, click→ruta con movimiento,
+**cero errores de consola**; control `?renderer=2d` OK; **CDN bloqueado → cae a
+2D sin errores**. Commits `843c562`, `8bc33fc`, `a71b21d`.
+**Riesgo:** tonos ligeramente distintos al 2D (la iluminación 3D es más oscura —
+ajustable); probado en SwiftShader, no en GPU real; el trail es una cinta fina;
+dependencia externa del CDN (sin conexión arranca en 2D, todo lo demás igual).
+El spec v4 de sprites (§6.13) sigue vigente y es compatible (con fondo
+transparente se pasa a map con alfa).
+**Recomendación:** humanos prueban el checklist abajo. Si el 3D gusta, el 2D
+queda como fallback permanente; el sprite v4 se integra igual en ambos renderers.
+**Archivos afectados:** `src/render/render3d.js` (nuevo), `index.html`,
+`src/app/app.js`, `tests/engine.test.js`, este documento.
+**Pruebas necesarias (humano):** (1) abrir el juego: el HUD debe decir «· 3D»;
+(2) mover al PCJ, Q/E, zoom, pan — deben sentirse idénticos; (3) ponerse tras
+una pared: fade; (4) Dev: pintar/borrar, colocar módulo (ghost verde/rojo),
+frontera de conexión, pintar una consola → sprite; (5) `?renderer=2d` vuelve al
+clásico; (6) valorar tonos: ¿se ve más oscuro que antes?
+**Decisión pendiente:** (1) ¿se mantiene 3D como default tras la prueba?;
+(2) ¿vendorizar three.js (~600 KB) para independencia del CDN o se acepta la
+dependencia con fallback 2D?
