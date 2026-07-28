@@ -343,6 +343,13 @@
   }
   function refreshBpForm() {
     const bp = activeBp(); if (!bp) return;
+    // TW que aportan los OBJETOS de dentro (núcleos de reactor): se suman a
+    // los declarados a mano, así que el diseñador tiene que verlos. Va ANTES
+    // del guard: es lectura, no pisa nada de lo que se esté escribiendo.
+    const objTw = BP.energyFromObjects(bp.room);
+    $('bpObjEnergy').textContent = objTw
+      ? '+' + objTw + ' TW de núcleos colocados · total ' + (bp.provides.energy + objTw) + ' TW'
+      : 'sin núcleos de reactor dentro';
     if (document.activeElement && /^(bpName|bpCat|bpCost|bpEnergyUse|bpProvEnergy|bpProvStorage|bpProvPnj|bpW|bpH)$/.test(document.activeElement.id)) return; // no pisar mientras se escribe
     $('bpName').value = bp.name;
     $('bpCat').value = bp.category;
@@ -903,6 +910,9 @@
         setStatus('Link (ascensor) creado.');
       }
     }
+    // colocar/borrar un núcleo cambia los TW del módulo: el formulario tiene
+    // que reflejarlo sin esperar a que se reseleccione el blueprint
+    if (app.devSection === 'modules') refreshBpForm();
   }
 
   // ---- clicks por modo ------------------------------------------------------
@@ -1183,15 +1193,11 @@
       refreshBpForm();
       return setStatus('Tamaño rechazado: ' + res.reason + '.');
     }
+    // reencuadrar: si el módulo pasa de 6×6 a 20×20 la cámara tiene que
+    // seguirlo o la sala se sale de pantalla (-XONO: «no se auto ajusta»)
+    R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
     refreshBpList(); invalidate();
     setStatus('Tamaño aplicado: ' + w + '×' + h + ' (contenido recentrado).');
-  });
-  // plantilla Reactor (OBJP-1.1 · T2): 6×6 con mínimo duro 5×5 y 100 TW
-  bind('bpNewReactor', () => {
-    const bp = BP.createReactorBlueprint({ name: 'Reactor ' + (app.station.moduleLibrary.filter(b => b.category === 'energia').length + 1) });
-    app.station.moduleLibrary.push(bp);
-    selectBp(bp.id);
-    setStatus('Reactor creado: 100 TW, mínimo 5×5 (la suite rechaza tamaños menores).');
   });
   bind('bpExport', () => {
     downloadJson('ugs_modulos.json', { moduleLibrary: app.station.moduleLibrary });

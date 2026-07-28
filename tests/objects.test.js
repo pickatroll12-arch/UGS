@@ -76,31 +76,55 @@ console.log('UGS OBJP-1.1 · T1 librería de objetos + T2 Reactor\n');
   check('tras round-trip, la colisión se mantiene', NAV.walkable(r2, 2, 2) === true && NAV.walkable(r2, 1, 1) === false);
 }
 
-// ============ T2 — Reactor ===================================================
+/* ============ REACTOR = OBJETO, no sala =====================================
+ * -XONO, 2026-07-28: «el reactor debe ser un objeto no una sala como tal».
+ * Ya no existe plantilla de módulo-Reactor: el núcleo se coloca con la
+ * herramienta Objeto y es ÉL quien aporta los TW al módulo que lo contiene.
+ */
 {
-  const bp = BP.createReactorBlueprint();
-  check('el reactor nace a 6×6', bp.room.size.w === 6 && bp.room.size.h === 6);
-  check('el reactor es de categoría energía', bp.category === 'energia');
-  check('el reactor aporta 100 TW', bp.provides.energy === 100);
-  check('el reactor no consume TW', bp.energyUse === 0);
-  check('el reactor cuesta CRED', bp.cost > 0);
-  check('el reactor declara mínimo 5×5', bp.minSize.w === 5 && bp.minSize.h === 5);
-  check('el reactor lleva su núcleo en el centro',
-    bp.room.objects.some(o => o.type === 'reactor_core' && o.x === 3 && o.y === 3));
+  check('YA NO existe la plantilla de módulo-Reactor',
+    typeof BP.createReactorBlueprint === 'undefined');
   check('el núcleo existe en el catálogo T1', !!OL.byId('reactor_core'));
-  check('el reactor tiene anillo de paredes', !!bp.room.tiles[0][0].wall);
+  check('el núcleo declara los 100 TW', OL.byId('reactor_core').provides.energy === 100);
+  check('el núcleo es sólido (ocupa su tile)', OL.byId('reactor_core').solid === true);
+  check('data.js resuelve los TW del núcleo por tipo', D.objectEnergy('reactor_core') === 100);
+  check('un objeto normal no aporta TW', D.objectEnergy('bed') === 0);
+  check('un tipo desconocido no aporta TW', D.objectEnergy('no_existe') === 0);
 
+  // un módulo cualquiera se vuelve generador al meterle un núcleo
+  const bp = D.createModuleBlueprint({ name: 'Sala técnica', w: 8, h: 6 });
+  check('sin núcleos el módulo no genera', BP.energyFromObjects(bp.room) === 0);
+  check('sin núcleos toModuleDef da 0 TW', BP.toModuleDef(bp).provides.energy === 0);
+  bp.room.objects.push(D.createObjectInstance('reactor_core', 3, 3));
+  check('con un núcleo el módulo genera 100 TW', BP.energyFromObjects(bp.room) === 100);
+  check('toModuleDef lleva los TW del objeto a la capa estratégica',
+    BP.toModuleDef(bp).provides.energy === 100);
+  bp.room.objects.push(D.createObjectInstance('reactor_core', 5, 3));
+  check('dos núcleos suman 200 TW', BP.toModuleDef(bp).provides.energy === 200);
+  // los TW declarados a mano y los de los objetos SUMAN
+  bp.provides.energy = 50;
+  check('los TW del formulario y los de los núcleos se suman',
+    BP.toModuleDef(bp).provides.energy === 250);
+  // borrar el núcleo quita los TW: el módulo deja de ser generador
+  bp.room.objects = [];
+  bp.provides.energy = 0;
+  check('sin núcleos el módulo deja de generar', BP.toModuleDef(bp).provides.energy === 0);
+  check('energyFromObjects tolera una sala vacía o inválida',
+    BP.energyFromObjects(null) === 0 && BP.energyFromObjects({}) === 0);
+}
+
+// ============ T2 — minSize (mecanismo genérico por blueprint) ================
+{
+  const bp = D.createModuleBlueprint({ name: 'Con mínimo', w: 6, h: 6, minSize: { w: 5, h: 5 } });
   // la suite RECHAZA por debajo del mínimo, no recorta en silencio
   const bad = BP.resizeBlueprint(bp, 4, 4);
   check('rechaza 4×4', bad.ok === false && /5×5/.test(bad.reason));
   check('tras el rechazo la sala NO cambió', bp.room.size.w === 6 && bp.room.size.h === 6);
   check('rechaza también 5×4 (mínimo en ambos ejes)', BP.resizeBlueprint(bp, 5, 4).ok === false);
-  const ok5 = BP.resizeBlueprint(bp, 5, 5);
-  check('acepta exactamente 5×5', ok5.ok === true && bp.room.size.w === 5);
+  check('acepta exactamente 5×5', BP.resizeBlueprint(bp, 5, 5).ok === true && bp.room.size.w === 5);
   const ok9 = BP.resizeBlueprint(bp, 9, 7);
   check('acepta tamaños mayores', ok9.ok === true && bp.room.size.w === 9 && bp.room.size.h === 7);
 
-  // un blueprint normal no hereda el mínimo del reactor
   const plain = D.createModuleBlueprint({ name: 'Normal', w: 8, h: 6 });
   check('un módulo normal tiene mínimo 1×1', BP.minSizeOf(plain).w === 1);
   check('un módulo normal sí admite 2×2', BP.resizeBlueprint(plain, 2, 2).ok === true);
@@ -110,20 +134,19 @@ console.log('UGS OBJP-1.1 · T1 librería de objetos + T2 Reactor\n');
 // ============ T2 — los metadatos viajan en el save ===========================
 {
   const st = D.createStation('T2');
-  const bp = BP.createReactorBlueprint();
+  const bp = D.createModuleBlueprint({ name: 'Generador', w: 6, h: 6, minSize: { w: 5, h: 5 } });
+  bp.room.objects.push(D.createObjectInstance('reactor_core', 3, 3));
   st.moduleLibrary.push(bp);
   const back = S.deserialize(S.serialize(st));
-  const r = back.moduleLibrary.find(b => b.name === 'Reactor');
-  check('el reactor sobrevive al export/import', !!r);
-  check('provides.energy viaja en el save', r.provides.energy === 100);
+  const r = back.moduleLibrary.find(b => b.name === 'Generador');
+  check('el módulo sobrevive al export/import', !!r);
   check('minSize viaja en el save (la restricción no se pierde)', r.minSize.w === 5 && r.minSize.h === 5);
   check('el núcleo viaja en el save', r.room.objects.some(o => o.type === 'reactor_core'));
   check('tras reimportar sigue rechazando 4×4', BP.resizeBlueprint(r, 4, 4).ok === false);
-
-  // el puente a la capa estratégica ya existía: solo se comprueba que encaja
-  const def = BP.toModuleDef(r);
-  check('toModuleDef lleva los 100 TW a la capa estratégica', def.provides.energy === 100);
-  check('toModuleDef conserva el consumo 0', (def.energyUse || 0) === 0);
+  // los TW NO viajan en el save: los aporta el catálogo por tipo de objeto,
+  // así que reequilibrar el reactor no obliga a migrar saves viejos
+  check('tras reimportar el núcleo sigue aportando sus TW',
+    BP.toModuleDef(r).provides.energy === 100);
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

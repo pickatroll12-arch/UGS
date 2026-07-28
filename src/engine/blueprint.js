@@ -157,30 +157,17 @@
   }
 
   /*
-   * Plantilla REACTOR (OBJP-1.1 · T2): módulo de energía de 6×6 con mínimo
-   * duro 5×5, suelo técnico, anillo de paredes y el núcleo en el centro.
-   * Aporta 100 TW por `provides.energy`: el puente a la capa estratégica YA
-   * existe (toModuleDef → placeModule → recompute), así que no se toca
-   * station.js. Balance F1 del mapa mental: ~63-70 TW de consumo.
+   * TW que aporta una sala por los OBJETOS que contiene (-XONO, 2026-07-28:
+   * «el reactor debe ser un objeto no una sala como tal»). Ya no hay plantilla
+   * de módulo-Reactor: colocas núcleos con la herramienta Objeto y el módulo
+   * se vuelve generador. Data-driven: quien aporta y cuánto lo dice el
+   * catálogo (core/objects_lib → registerObjectDefs), no este archivo.
    */
-  function createReactorBlueprint(opts) {
-    opts = opts || {};
-    const w = Math.max(6, opts.w | 0 || 6), h = Math.max(6, opts.h | 0 || 6);
-    const bp = D.createModuleBlueprint({
-      name: opts.name || 'Reactor',
-      category: 'energia',
-      cost: opts.cost == null ? 1200 : opts.cost,
-      energyUse: 0,
-      provides: { energy: 100, storage: 0, pnjCapacity: 0 },
-      notes: 'Generador principal — 100 TW. Requiere 5×5 como mínimo.',
-      minSize: { w: 5, h: 5 },
-      w, h
-    });
-    paintFloorRect(bp.room, 0, 0, w - 1, h - 1, 'dark');
-    D.ringWalls(bp.room);
-    const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
-    bp.room.objects.push(D.createObjectInstance('reactor_core', cx, cy));
-    return bp;
+  function energyFromObjects(room) {
+    if (!room || !Array.isArray(room.objects)) return 0;
+    let tw = 0;
+    for (const o of room.objects) tw += D.objectEnergy(o.type);
+    return tw;
   }
 
   // ---- snapshots (deshacer / rehacer) ------------------------------------------
@@ -203,13 +190,16 @@
   // ---- puente blueprint → capa estratégica --------------------------------------
   // Def compatible con engine/station.js defineModule(): los campos extra
   // (layout, category, notes) viajan como datos y no molestan al runtime.
+  // La energía declarada a mano en el formulario y la que aportan los núcleos
+  // colocados dentro SUMAN: un módulo puede ser generador por diseño, por
+  // contenido, o por ambos.
   function toModuleDef(bp) {
     return {
       id: bp.id, name: bp.name,
       cost: Math.max(0, Number(bp.cost) | 0),
       energyUse: Math.max(0, Number(bp.energyUse) | 0),
       provides: {
-        energy: Math.max(0, Number(bp.provides && bp.provides.energy) | 0),
+        energy: Math.max(0, Number(bp.provides && bp.provides.energy) | 0) + energyFromObjects(bp.room),
         storage: Math.max(0, Number(bp.provides && bp.provides.storage) | 0),
         pnjCapacity: Math.max(0, Number(bp.provides && bp.provides.pnjCapacity) | 0)
       },
@@ -319,7 +309,7 @@
 
   return {
     paintFloorRect, paintWallOutline, eraseRect, floodFillFloor, clearRoom, resizeRoom,
-    minSizeOf, resizeBlueprint, createReactorBlueprint,
+    minSizeOf, resizeBlueprint, energyFromObjects,
     snapshotRoom, restoreRoom,
     toModuleDef, instantiateRoom,
     rectsOverlap, sharedEdge, placementCheck, openSharedEdge

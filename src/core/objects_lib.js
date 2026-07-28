@@ -66,9 +66,15 @@
     // en el selector, respetando su solid original (no sólido).
     { id: 'plant',         name: 'Planta',           h: 0.60, colorKey: 'organic', solid: false, colors: { top: '#5c9257', side: '#3d6640' },
       parts: [{ x:0, y:0, w:.32, d:.32, z:0, h:.16, tone:'dark' }, { x:0, y:0, w:.09, d:.09, z:.16, h:.18, tone:'body' }, { x:0, y:0, w:.42, d:.42, z:.34, h:.24, tone:'body' }] },
-    // Pieza central del Reactor (T2). Decorativa: la energía la aporta el
-    // MÓDULO vía provides.energy, no el objeto.
+    /*
+     * REACTOR (-XONO, 2026-07-28): «el reactor debe ser un objeto no una sala
+     * como tal». Ya no existe plantilla de módulo-Reactor: el núcleo es UN
+     * OBJETO que se coloca con la herramienta Objeto en cualquier módulo, y
+     * es él quien APORTA los 100 TW vía `provides.energy`. El módulo que lo
+     * contenga pasa a ser generador; el que lo pierda deja de serlo.
+     */
     { id: 'reactor_core',  name: 'Núcleo de reactor', h: 1.45, colorKey: 'energy', solid: true,  colors: { top: '#62e0ef', side: '#1d5c68' },
+      provides: { energy: 100 },
       parts: [{ x:0, y:0, w:.74, d:.74, z:0, h:.22, tone:'dark' }, { x:0, y:0, w:.36, d:.36, z:.22, h:.92, tone:'glow' }, { x:0, y:0, w:.56, d:.56, z:1.14, h:.20, tone:'body' }] },
   ];
 
@@ -126,8 +132,10 @@
 
   // Extiende la resolución de defs de data.js SIN pisar las base
   // (console/door/elevator/plant conservan su definición original).
+  // `provides` viaja en el registro: es lo que permite que un objeto (el núcleo
+  // de reactor) aporte TW al módulo que lo contiene, incluso tras releer un save.
   if (typeof D.registerObjectDefs === 'function') {
-    D.registerObjectDefs(CATALOG.map(d => ({ type: d.id, solid: d.solid, openable: false })));
+    D.registerObjectDefs(CATALOG.map(d => ({ type: d.id, solid: d.solid, openable: false, provides: d.provides })));
   }
 
   return { CATALOG, TONES, byId, ids, options, partColor, partsOf, heightOf };

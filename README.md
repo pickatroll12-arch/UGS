@@ -42,6 +42,8 @@ src/
     agents.js         el PCJ ("mono"): movimiento solo por click→ruta
   render/             [RENDERIZADOR GRÁFICO]
     render.js         canvas 2D, vista ¾ ortogonal tipo Xenonauts (C4): diamante, paredes extruidas, fade de oclusión
+    render3d.js       misma escena en WebGL (three.js), proyección y picking delegados a render.js.
+                      Todo grupo entra/sale de la escena por `swapGroup`: uno vivo por ranura, sin fantasmas
   audio/              [AUDIO]
     music.js          director: decide qué pista suena y con qué ganancia (crossfade de
                       potencia constante, orden barajado por rng.js). Sin DOM → Node-testeable
@@ -56,10 +58,11 @@ tests/
   station.test.js     capa estratégica: RNG, economía, módulos, hitos, expediciones
   blueprint.test.js   suite Dev: blueprints, ops de edición, puente a station.js
   audio.test.js       director musical: barajado, fundidos, crossfade, bucle infinito
-  objects.test.js     OBJP-1.1: catálogo de objetos + Reactor ≥5×5
+  objects.test.js     OBJP-1.1: catálogo de objetos + reactor como OBJETO (TW por núcleo)
   content_f1.test.js  OBJP-1.1: árbol de fases F1 + expedición minera determinista
   toolbox.test.js     barra de herramientas: DRAG BOX, teclas, geometría
   gamepad.test.js     mando: zona muerta, flancos, repetición, mapa de acciones
+  render3d.test.js    contabilidad de la escena 3D: un grupo por ranura, sin fantasmas
 vendor/three/         three.js r160 (MIT) vendorizado — ver su README.txt antes de actualizar
 ```
 
@@ -75,7 +78,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (483 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (506 checks hoy; solo crece).
 
 ## Cómo correr
 

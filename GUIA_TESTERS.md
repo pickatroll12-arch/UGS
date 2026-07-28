@@ -95,19 +95,22 @@ Entra en **Modo Dev** (botón 🛠 arriba o Back en el mando).
 
 ---
 
-## PASO 5 — Módulos y Reactor (6 min)
+## PASO 5 — Módulos y núcleo de reactor (6 min)
 
-Ve a **DISEÑAR MÓDULOS**.
+Ve a **DISEÑAR MÓDULOS**. **El reactor ya NO es una sala**: es un **objeto** que colocas
+donde quieras, y el módulo que lo contenga pasa a generar energía. Por eso ya no existe
+el botón «+ Reactor».
 
 | # | Qué hacer | Qué debe pasar |
 |---|---|---|
-| 5.1 | Pulsar **+ Reactor** | Se crea un módulo 6×6 de categoría energía con **100 TW** y un núcleo en el centro |
-| 5.2 | Poner tamaño **4×4** y aplicar | **RECHAZA** y explica «no admite menos de 5×5». **La sala no cambia** |
-| 5.3 | Poner **5×5** y aplicar | Lo acepta |
-| 5.4 | Poner **9×7** | Lo acepta (mayor sí se puede) |
-| 5.5 | **Exportar biblioteca**, borrar el reactor, **Importar** | Vuelve, y **sigue rechazando 4×4** |
-| 5.6 | Crear un módulo normal (+ Nuevo módulo) | Ese sí admite tamaños pequeños |
-| 5.7 | Borrar un módulo que esté colocado en un Nexo | Desaparece también **del Nexo**, no solo de la biblioteca |
+| 5.1 | **+ Nuevo módulo** y elegir **Núcleo de reactor** en OBJETO (tecla `6`) | Se coloca una columna alta y luminosa que ocupa su tile |
+| 5.2 | Mirar bajo «PROVEE ENERGÍA (TW)» | Aparece **+100 TW de núcleos colocados** |
+| 5.3 | Colocar un segundo núcleo | Sube a **+200 TW**: cada núcleo suma |
+| 5.4 | Borrarlos (herramienta `4` o `Supr`) | Vuelve a «sin núcleos de reactor dentro» |
+| 5.5 | **Exportar módulo** y volver a **Importar** | Vuelve con sus núcleos y sus TW |
+| 5.6 | Poner tamaño **20×20** y aplicar | La sala crece y **la cámara la reencuadra sola** (debe caber entera) |
+| 5.7 | Crear un segundo módulo de otro tamaño y **alternar entre los dos** | Solo se ve el módulo activo: **ni rastro del anterior** ⚠️ regresión conocida |
+| 5.8 | Borrar un módulo que esté colocado en un Nexo | Desaparece también **del Nexo**, no solo de la biblioteca |
 
 ---
 
@@ -206,7 +209,8 @@ Esto es lo que hay que jugar de principio a fin. Entra en **Juego**.
 - **Consola (`7`)** como herramienta dedicada.
 - **Librería de 12 objetos** con selector por nombre.
 - **Objetos con silueta propia** (2-4 piezas cada uno), idénticos en 2D y 3D.
-- **Reactor** con mínimo duro 5×5 que **rechaza y explica** en vez de recortar.
+- **Reactor como OBJETO**: el núcleo aporta 100 TW al módulo que lo contiene (ya no hay módulo-Reactor).
+- **Tamaño mínimo por módulo** que **rechaza y explica** en vez de recortar en silencio.
 - **Módulo `screens`** — pantallas de consola: existe pero **NO está conectado** (decisión vuestra pendiente).
 
 ### Presentación

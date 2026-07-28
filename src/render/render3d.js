@@ -24,6 +24,10 @@
  * un intercambio de materiales sobre meshes cacheados, y los marcadores
  * dev son un grupo dinámico diminuto que se regenera por frame sucio.
  *
+ * REGLA DE LA ESCENA (§6.28): la escena es la dueña de lo que se dibuja, no
+ * nuestras variables. Todo grupo entra y sale por `swapGroup`; poner una
+ * variable a null NO borra nada de la escena.
+ *
  * Sin three.js (CDN caído) o sin WebGL → available() = false y app.js
  * usa el renderer 2D. En Node carga sin tocar DOM (para tests).
  */
@@ -53,6 +57,28 @@
   let dyn = null;                // marcadores dev { group, geos }
   const pawns3 = new Map();      // pawnId → meshes persistentes del PCJ
   let lastSize = { w: 0, h: 0 };
+
+  /*
+   * ÚNICA puerta para meter/sacar un grupo de la escena (regresión 2026-07-28).
+   * Soltar la referencia a un grupo NO lo saca de la escena: three.js sigue
+   * dibujándolo para siempre. Aquel `stat = null` suelto dejó la sala anterior
+   * calcada encima de TODAS las vistas (módulos y nexos), y como el modelo no
+   * la contenía, clicar su suelo fantasma no movía al PCJ.
+   *
+   * Invariante: como mucho UN grupo vivo por ranura. Pasar `next = null`
+   * VACÍA la ranura (quitar + liberar), nunca la abandona.
+   * Puro salvo por scene.add/remove: `scene` solo necesita add/remove y cada
+   * geometría un dispose() — por eso se puede testear en Node sin three.js.
+   */
+  function swapGroup(scene, prev, next) {
+    if (prev === next) return next;
+    if (prev) {
+      if (scene) scene.remove(prev.group);
+      for (const geo of (prev.geos || [])) if (geo && geo.dispose) geo.dispose();
+    }
+    if (next && scene) scene.add(next.group);
+    return next || null;
+  }
 
   function available() {
     if (typeof THREE === 'undefined' || typeof document === 'undefined') return false;
@@ -84,7 +110,10 @@
       t.anisotropy = 4;
       sheet = t;
       sheetReady = true;
-      stat = null;                    // la firma incluye sheetReady → reconstruye con sprite
+      // la firma incluye sheetReady → hay que reconstruir con sprite. El grupo
+      // viejo se SACA de la escena aquí: soltar la referencia lo dejaría
+      // dibujándose para siempre (ver swapGroup).
+      stat = swapGroup(scene, stat, null);
       if (onReady) onReady();
     }, undefined, () => { sheet = 'error'; });
     return true;
@@ -316,10 +345,6 @@
   }
 
   function rebuildStatic(nexo, cam, key) {
-    if (stat) {
-      gl.scene.remove(stat.group);
-      for (const geo of stat.geos) geo.dispose();
-    }
     const g = new THREE.Group();
     const geos = [];
     const walls = new Map();
@@ -344,8 +369,7 @@
       }
       for (const o of room.objects) addObject(g, track, room, o, cam);
     }
-    stat = { key, group: g, geos, walls };
-    gl.scene.add(g);
+    stat = swapGroup(gl.scene, stat, { key, group: g, geos, walls });
   }
 
   // ---- fade de paredes: intercambio de material (sin reconstruir) --------------
@@ -451,11 +475,6 @@
 
   // ---- marcadores dev (grupo dinámico diminuto, se regenera por frame sucio) ----
   function rebuildMarkers(nexo, opts) {
-    if (dyn) {
-      gl.scene.remove(dyn.group);
-      for (const geo of dyn.geos) geo.dispose();
-      dyn = null;
-    }
     const g = new THREE.Group();
     const geos = [];
     const put = (m) => { geos.push(m.geometry); g.add(m); return m; };
@@ -503,8 +522,7 @@
         m.position.set(0, 0, 0.03);
       }
     }
-    dyn = { group: g, geos };
-    gl.scene.add(g);
+    dyn = swapGroup(gl.scene, dyn, { group: g, geos });
   }
 
   // ---- API principal ----------------------------------------------------------
@@ -528,6 +546,6 @@
   const dbg = () => gl;
   return Object.assign({}, R2, {
     TILE, TILT, WALL_H, OBJ_H, COLORS,
-    available, init, drawNexo, clear, dbg, keyOf
+    available, init, drawNexo, clear, dbg, keyOf, swapGroup
   });
 });
