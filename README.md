@@ -67,7 +67,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (429 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (447 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -123,14 +123,36 @@ para OBJP-2 y OBJP-1.1, sin funcionalidad hasta las 3 firmas.
 | Deshacer / Rehacer (dev) | `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`) |
 | Silenciar / volumen de música | control 🔊 abajo a la derecha (visible en todos los modos) |
 
+## Qué significa "F1"
+
+**F1 = Fase 1**, y va en el id y en el nombre para hacer explícito que son los módulos
+de **nivel 1**: `hangar_f1` / "Hangar F1" es el hangar básico, y más adelante habrá
+Hangar F2/F3/F4 — misma familia, mejor versión, atada a la fase que la desbloquea.
+No es un prefijo de organización de archivos: es el **tier** del módulo.
+Regla: todo módulo declara `tier` y su id termina en `_f<tier>`. Los **hitos** usan
+`f1_…` por la FASE a la que pertenecen, que es otra cosa.
+
 ## Economía (Fase 1)
 
 Se empieza con **0 CRED** y **1 nave extractora**. Los módulos de F1 son **gratis**:
 lo que se paga es el PROGRESO (los hitos, 1100 CRED en total). El dinero sale de la
 **venta**: cuando una expedición vuelve, su carga se convierte en CRED al precio de
 `content_f1.PRICES` (mineral base 100 CRED/UD, escala del mapa mental 100/250/500) y
-el almacén queda libre para el siguiente viaje. El **Almacén (30 UD) es el techo de lo
-que cabe traer**, así que ampliarlo es ampliar ingresos.
+el almacén queda libre para el siguiente viaje.
+
+### Impuesto UGS
+
+**UGS = Unión Galáctica del Sistema Sol** — de ahí el nombre del proyecto. Toda venta
+tributa: **un tercio del bruto se lo queda la UGS**, y se muestra desglosado al vender
+(`400 CRED brutos − 133 de impuesto UGS = +267`). No es una constante de balance
+cualquiera: es lore, y el jugador tiene que ver quién le cobra.
+
+### Ritmo (medido, no estimado)
+
+Una expedición falla el **40%** de las veces (10% por etapa × 5 etapas) y, cuando
+vuelve, deja **~194 CRED netos** de media. Con F1 costando 1100 CRED, completar la
+fase pide **~5,7 expediciones ≈ 28 minutos**. Las palancas para ajustarlo son los
+`min/max` de `ROUTES` y los `cost` de `HITOS`.
 
 ## Música
 

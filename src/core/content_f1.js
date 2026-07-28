@@ -31,20 +31,31 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // ---- módulos de F1 --------------------------------------------------------
-  // COSTE 0 por decisión de -XONO (2026-07-28): "los módulos iniciales deben
-  // ser gratis". Lo que se paga en F1 es el PROGRESO (los hitos), no el
-  // equipamiento de partida. Siguen gateados por hito: gratis ≠ disponible.
+  /*
+   * ---- QUÉ ES "F1" (definición oficial, -XONO 2026-07-28) ------------------
+   * F1 = **FASE 1**. El sufijo va en el id y en el nombre para hacer EXPLÍCITO
+   * que son los módulos de nivel 1: el "Hangar F1" es el hangar básico, y más
+   * adelante habrá "Hangar F2/F3/F4" — misma familia, mejor versión, atada a la
+   * fase que la desbloquea. No es un prefijo de organización de archivos: es el
+   * TIER del módulo. Cuando se diseñe la Fase 2, sus módulos serán `*_f2` y
+   * convivirán con estos.
+   * Regla: todo módulo declara `tier` y su id termina en `_f<tier>`.
+   */
+  const TIER = 1;
+
+  // COSTE 0 por decisión de -XONO: "los módulos iniciales deben ser gratis".
+  // Lo que se paga en F1 es el PROGRESO (los hitos), no el equipamiento de
+  // partida. Siguen gateados por hito: gratis ≠ disponible.
   const MODULES = [
-    { id: 'hangar',       name: 'Hangar',       cost: 0, energyUse: 0,  provides: { shipCap: 2 },
-      notes: 'Amarre para naves mineras. Pasivo: no consume TW.' },
-    { id: 'almacen',      name: 'Almacén',      cost: 0, energyUse: 0,  provides: { storage: 30 },
+    { id: 'hangar_f1',       tier: TIER, name: 'Hangar F1',       cost: 0, energyUse: 0,  provides: { shipCap: 2 },
+      notes: 'Amarre para 2 naves mineras. Pasivo: no consume TW.' },
+    { id: 'almacen_f1',      tier: TIER, name: 'Almacén F1',      cost: 0, energyUse: 0,  provides: { storage: 30 },
       notes: '30 UD de capacidad: es el tope de lo que una expedición puede traer.' },
-    { id: 'generador',    name: 'Generador',    cost: 0, energyUse: 0,  provides: { energy: 100 },
+    { id: 'generador_f1',    tier: TIER, name: 'Generador F1',    cost: 0, energyUse: 0,  provides: { energy: 100 },
       notes: '100 TW. Es lo que desbloquea el resto del consumo de la fase.' },
-    { id: 'radar',        name: 'Radar',        cost: 0, energyUse: 15, provides: {},
+    { id: 'radar_f1',        tier: TIER, name: 'Radar F1',        cost: 0, energyUse: 15, provides: {},
       notes: 'Detección de vetas y contactos.' },
-    { id: 'habitacional', name: 'Habitacional', cost: 0, energyUse: 20, provides: { pnjCapacity: 12 },
+    { id: 'habitacional_f1', tier: TIER, name: 'Habitacional F1', cost: 0, energyUse: 20, provides: { pnjCapacity: 12 },
       notes: '12 PNJ de aforo.' }
   ];
 
@@ -57,6 +68,19 @@
    * Es LA fuente de ingresos del juego: sin esto F1 no se puede pagar.
    */
   const PRICES = { mineral: 100, mineral_procesado: 250, mineral_enriquecido: 500 };
+
+  /*
+   * ---- IMPUESTO UGS (LORE, -XONO 2026-07-28) -------------------------------
+   * **UGS = Unión Galáctica del Sistema Sol**, y de ahí sale el nombre del
+   * proyecto. Toda venta de recursos tributa: **un tercio de la ganancia bruta
+   * se lo queda la UGS**. No es un modificador de balance que se pueda quitar
+   * alegremente — es la razón de ser del título y debe VERSE en la UI: el
+   * jugador tiene que notar quién le está cobrando.
+   * Se aplica sobre el bruto y se redondea a favor del jugador (Math.floor
+   * sobre el impuesto), para que un lote de 1 UD nunca se coma más de lo justo.
+   */
+  const UGS_TAX = 1 / 3;
+  const UGS_NAME = 'Unión Galáctica del Sistema Sol';
 
   /* Nave con la que se empieza la partida (una extractora, orden de -XONO). */
   const STARTER_SHIP = { id: 'nave-1', name: 'Extractora I', capacity: 20, state: 'idle' };
@@ -71,23 +95,23 @@
    */
   const HITOS = [
     { id: 'f1_hangar', name: 'Hangar operativo', phase: 1, cost: 0, requires: [],
-      grants: { modules: ['hangar'], abilities: ['expedicion_minera'] },
+      grants: { modules: ['hangar_f1'], abilities: ['expedicion_minera'] },
       rewards: { cred: 0, items: {} },
       desc: 'Habilita el hangar y el envío de naves extractoras.' },
     { id: 'f1_almacen', name: 'Bodega presurizada', phase: 1, cost: 150, requires: ['f1_hangar'],
-      grants: { modules: ['almacen'] },
+      grants: { modules: ['almacen_f1'] },
       rewards: { cred: 0, items: { mineral: 5 } },
       desc: '30 UD de almacenamiento. Sin bodega no hay dónde descargar.' },
     { id: 'f1_generador', name: 'Generador principal', phase: 1, cost: 300, requires: ['f1_almacen'],
-      grants: { modules: ['generador'] },
+      grants: { modules: ['generador_f1'] },
       rewards: { cred: 0, items: {} },
       desc: '100 TW: a partir de aquí se pueden colocar módulos que consumen.' },
     { id: 'f1_radar', name: 'Radar de sondeo', phase: 1, cost: 250, requires: ['f1_generador'],
-      grants: { modules: ['radar'], abilities: ['detectar_vetas'] },
+      grants: { modules: ['radar_f1'], abilities: ['detectar_vetas'] },
       rewards: { cred: 100, items: {} },
       desc: 'Detecta vetas y contactos alrededor de la estación.' },
     { id: 'f1_habitacional', name: 'Módulo habitacional', phase: 1, cost: 400, requires: ['f1_radar'],
-      grants: { modules: ['habitacional'], abilities: ['asignar_roles'] },
+      grants: { modules: ['habitacional_f1'], abilities: ['asignar_roles'] },
       rewards: { cred: 0, items: {} },
       desc: 'Aforo para 12 PNJ. Último hito de F1: al desbloquearlo, avanza la fase.' }
   ];
@@ -103,11 +127,11 @@
     name: 'Veta K-7',
     failChance: 0.1,
     stages: [
-      { duration: 60, yields: [{ chance: 1.00, item: 'mineral', min: 3, max: 5 }] },
-      { duration: 60, yields: [{ chance: 0.65, item: 'mineral', min: 3, max: 5 }] },
-      { duration: 60, yields: [{ chance: 0.40, item: 'mineral', min: 3, max: 5 }] },
-      { duration: 60, yields: [{ chance: 0.25, item: 'mineral', min: 3, max: 5 }] },
-      { duration: 60, yields: [{ chance: 0.15, item: 'mineral', min: 3, max: 5 }] }
+      { duration: 60, yields: [{ chance: 1.00, item: 'mineral', min: 1, max: 3 }] },
+      { duration: 60, yields: [{ chance: 0.65, item: 'mineral', min: 1, max: 3 }] },
+      { duration: 60, yields: [{ chance: 0.40, item: 'mineral', min: 1, max: 3 }] },
+      { duration: 60, yields: [{ chance: 0.25, item: 'mineral', min: 1, max: 3 }] },
+      { duration: 60, yields: [{ chance: 0.15, item: 'mineral', min: 1, max: 3 }] }
     ]
   }];
 
@@ -146,15 +170,18 @@
    * Devuelve { cred, sold:{item:UD} } para que la UI cuente lo ocurrido.
    */
   function sellCargo(st, station, delivered) {
-    const out = { cred: 0, sold: {} };
+    const out = { gross: 0, tax: 0, cred: 0, sold: {} };
     for (const [item, n] of Object.entries(delivered || {})) {
       const price = PRICES[item];
       if (!price || n <= 0) continue;                 // sin precio no se vende: se queda en el almacén
       const taken = st.removeItem(station, item, n);  // solo se cobra lo que de verdad había
       if (taken <= 0) continue;
       out.sold[item] = taken;
-      out.cred += taken * price;
+      out.gross += taken * price;
     }
+    // impuesto UGS: un tercio del bruto, redondeado a favor del jugador
+    out.tax = Math.floor(out.gross * UGS_TAX);
+    out.cred = out.gross - out.tax;
     if (out.cred > 0) st.earn(station, out.cred);
     return out;
   }
@@ -175,7 +202,7 @@
   const totalEnergyUse = () => MODULES.reduce((a, m) => a + (m.energyUse || 0), 0);
 
   return {
-    MODULES, HITOS, ROUTES, PRICES, STARTER_SHIP,
+    MODULES, HITOS, ROUTES, PRICES, STARTER_SHIP, UGS_TAX, UGS_NAME, TIER,
     register, applyRewards, sellCargo, valueOf,
     hitoById, moduleById, routeById, nextHito, totalEnergyUse
   };

@@ -1191,3 +1191,71 @@ ganado, pagar el hito del Almacén y seguir la cadena.
 **Decisión pendiente:** (1) **el balance de arriba** — ¿F1 en 1 expedición o subimos
 los hitos ×4?; (2) ¿la venta se queda automática o queréis vender a mano desde una
 consola?; (3) sigue pendiente de §6.20 las firmas retroactivas 3/3 de OBJP-1.1.
+
+
+### §6.25 — CLAUDE — Definición de F1, recolección estricta e IMPUESTO UGS — 2026-07-28
+**Observación:** tres precisiones de -XONO implementadas.
+
+**1. "F1" queda DEFINIDO — es el TIER del módulo, no un prefijo de archivo.**
+F1 = **Fase 1**: `hangar_f1` / "Hangar F1" es el hangar de nivel 1, y más adelante
+habrá Hangar F2/F3/F4 — misma familia, mejor versión, atada a la fase que la
+desbloquea. Se hace explícito en el modelo: todo módulo declara `tier` y su id
+termina en `_f<tier>`, con tests que fijan la convención para que el contenido de
+la Fase 2 no la rompa. **Ojo a la distinción:** los MÓDULOS llevan `_f1` por su
+tier; los HITOS llevan `f1_` por la FASE a la que pertenecen. Son dos cosas.
+
+**2. Recolección más estricta.** Los rendimientos bajan de 3-5 UD a **1-3 UD** por
+etapa lograda (las probabilidades decrecientes del mapa mental no se tocan).
+
+**3. IMPUESTO UGS — el lore que faltaba.** **UGS = Unión Galáctica del Sistema Sol**,
+y de ahí sale el nombre del proyecto. Toda venta tributa **un tercio del bruto**.
+Está implementado en `sellCargo` (que ahora devuelve `{gross, tax, cred, sold}`) y
+**se muestra desglosado al jugador**: `Venta: 4 UD de mineral · 400 CRED brutos −
+133 de impuesto UGS = +267 CRED`. Lo dejé documentado en el código como lore, no
+como constante de balance: quien lo toque tiene que saber que está tocando el
+nombre del juego. El redondeo del impuesto es `Math.floor`, o sea **a favor del
+jugador**.
+
+**RITMO MEDIDO, NO ESTIMADO.** En §6.24 os di 1,1 expediciones por fase; **esa cifra
+estaba mal** — calculé el rendimiento esperado ignorando que la nave puede fallar.
+Lo he medido con Monte Carlo de 600 expediciones sobre el runtime real:
+| | antes (§6.24) | ahora |
+|---|---|---|
+| fallo de expedición | 40% (no 10%: es 10% **por etapa** × 5) | 40% |
+| UD por lanzamiento | 5,67 | **2,90** |
+| CRED brutos | 567 | 290 |
+| impuesto UGS | — | **97** |
+| CRED netos | 567 | **194** |
+| expediciones para F1 | 1,9 | **5,7** |
+| tiempo por fase | ~10 min | **~28 min** |
+El test de ritmo no comprueba una constante: **simula 200 expediciones** y falla si
+F1 se puede completar en menos de 4 o hace falta más de 9. Si mañana alguien toca
+precios o rendimientos y se sale de esa horquilla, la suite lo para.
+
+**Evidencia:** `node tests/run.js` → **447 checks, ALL SUITES GREEN** (18 nuevos:
+convención de tier, impuesto exacto con su redondeo, `bruto = impuesto + neto` sin
+CRED perdido ni inventado, impuesto sobre cualquier recurso con precio, y el test
+de ritmo por simulación). Smoke en Chromium **28/28 verde**, con el desglose del
+impuesto verificado en la barra de estado. **Cero errores de consola.**
+
+**Riesgo / lo que NO se probó:** el ritmo de ~28 min por fase es mi propuesta a
+partir de vuestro "que cueste ganar créditos" — no lo habéis jugado. Si sigue
+sabiendo rápido o se hace pesado, las palancas son `min/max` de la ruta y `cost` de
+los hitos, y el test de ritmo os avisará si os salís de la horquilla. El impuesto
+es **fijo**: no hay exenciones, contrabando ni corrupción — si el lore pide que se
+pueda evadir, eso es mecánica nueva. Todo sigue verificado en **2D** (CDN de
+three.js bloqueado por el proxy, 403).
+
+**Archivos afectados:** `src/core/content_f1.js` (TIER + ids `_f1`, yields 1-3,
+UGS_TAX/UGS_NAME, sellCargo con impuesto), `src/app/app.js` (desglose del impuesto
+en el aviso de venta), `tests/content_f1.test.js`, `README.md` (secciones "Qué
+significa F1", "Impuesto UGS" y "Ritmo"), este documento.
+
+**Pruebas necesarias (humano):** (1) jugar una expedición y leer la barra: debe
+verse el bruto, el impuesto UGS y el neto por separado; (2) valorar si ~6
+expediciones por fase es el ritmo que queréis; (3) confirmar que la convención
+`*_f1` os sirve para cuando diseñemos los módulos F2.
+
+**Decisión pendiente:** (1) ¿el impuesto de 1/3 es fijo para siempre o cambia por
+fase/reputación con la UGS?; (2) ¿los módulos F2 serán mejoras in-situ del F1 o
+módulos aparte que sustituyen?; (3) siguen pendientes las firmas 3/3 de OBJP-1.1.

@@ -77,21 +77,21 @@ function roomAt(name, w, h, x, y) {
   for (const h of F1.HITOS) st.unlockHito(s, h.id);
 
   check('Hangar y Almacén son pasivos (0 TW) — si no, F1 no arrancaría',
-    F1.moduleById('hangar').energyUse === 0 && F1.moduleById('almacen').energyUse === 0);
+    F1.moduleById('hangar_f1').energyUse === 0 && F1.moduleById('almacen_f1').energyUse === 0);
 
-  const r1 = st.placeModule(s, nexo, 'hangar', roomAt('H', 10, 8, 12, 0));
+  const r1 = st.placeModule(s, nexo, 'hangar_f1', roomAt('H', 10, 8, 12, 0));
   check('el Hangar se puede colocar con capacidad 0', r1.ok === true);
-  const r2 = st.placeModule(s, nexo, 'radar', roomAt('R', 4, 4, 22, 0));
+  const r2 = st.placeModule(s, nexo, 'radar_f1', roomAt('R', 4, 4, 22, 0));
   check('el Radar NO se puede colocar todavía (sin generador)', !r2.ok && /energía/.test(r2.reason));
 
-  const r3 = st.placeModule(s, nexo, 'generador', roomAt('G', 6, 6, 12, 8));
+  const r3 = st.placeModule(s, nexo, 'generador_f1', roomAt('G', 6, 6, 12, 8));
   check('el Generador sí se coloca', r3.ok === true);
   check('la capacidad sube a 100 TW', s.state.energy.capacity === 100);
-  const r4 = st.placeModule(s, nexo, 'radar', roomAt('R2', 4, 4, 22, 0));
+  const r4 = st.placeModule(s, nexo, 'radar_f1', roomAt('R2', 4, 4, 22, 0));
   check('con generador, el Radar ya entra', r4.ok === true);
 
-  st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 14));
-  st.placeModule(s, nexo, 'habitacional', roomAt('Hb', 8, 6, 18, 14));
+  st.placeModule(s, nexo, 'almacen_f1', roomAt('A', 6, 5, 12, 14));
+  st.placeModule(s, nexo, 'habitacional_f1', roomAt('Hb', 8, 6, 18, 14));
   check('el consumo total de F1 cabe en 100 TW (' + s.state.energy.used + ' TW)',
     s.state.energy.used <= 100 && s.state.energy.used === F1.totalEnergyUse());
   check('sin brownout al terminar F1', s.state.blackout === false);
@@ -106,6 +106,8 @@ function roomAt(name, w, h, x, y) {
   const ch = F1.ROUTES[0].stages.map(e => e.yields[0].chance);
   check('rendimiento DECRECIENTE etapa a etapa', ch.every((c, i) => i === 0 || c < ch[i - 1]));
   check('las probabilidades son las del mapa mental', ch.join() === '1,0.65,0.4,0.25,0.15');
+  check('recolección ESTRICTA: 1-3 UD por etapa (orden de -XONO)',
+    F1.ROUTES[0].stages.every(e => e.yields[0].min === 1 && e.yields[0].max === 3));
   check('la primera etapa es segura (100%)', ch[0] === 1);
   check('10% de falla por etapa', F1.ROUTES[0].failChance === 0.1);
   check('todo lo que rinde es mineral en UD',
@@ -118,10 +120,10 @@ function roomAt(name, w, h, x, y) {
     const { st, s } = mkStation(3000, seed);
     const nexo = s.nexos[0];
     for (const h of F1.HITOS) st.unlockHito(s, h.id);
-    st.placeModule(s, nexo, 'generador', roomAt('G', 6, 6, 12, 0));
-    st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 6));
+    st.placeModule(s, nexo, 'generador_f1', roomAt('G', 6, 6, 12, 0));
+    st.placeModule(s, nexo, 'almacen_f1', roomAt('A', 6, 5, 12, 6));
     const hangar = roomAt('H', 10, 8, 18, 0);
-    st.placeModule(s, nexo, 'hangar', hangar);
+    st.placeModule(s, nexo, 'hangar_f1', hangar);
     const ship = { id: 'nave-1', name: 'Extractora', capacity: 20, state: 'idle' };
     st.addShip(s, ship, s.nexos);
     const launched = st.launchExpedition(s, 'veta_k7', 'nave-1');
@@ -163,7 +165,7 @@ function roomAt(name, w, h, x, y) {
   check('no se lanza una ruta inexistente', !r1.ok && /ruta/.test(r1.reason));
 
   const nexo = s.nexos[0];
-  st.placeModule(s, nexo, 'hangar', roomAt('H', 10, 8, 12, 0));
+  st.placeModule(s, nexo, 'hangar_f1', roomAt('H', 10, 8, 12, 0));
   st.addShip(s, { id: 'n1', capacity: 20, state: 'idle' }, s.nexos);
   check('la primera salida se acepta', st.launchExpedition(s, 'veta_k7', 'n1').ok === true);
   const dup = st.launchExpedition(s, 'veta_k7', 'n1');
@@ -177,7 +179,7 @@ function roomAt(name, w, h, x, y) {
   st.unlockHito(s, 'f1_hangar');
   st.unlockHito(s, 'f1_almacen');
   const nexo = s.nexos[0];
-  st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 0));   // hace falta almacén para guardar UD
+  st.placeModule(s, nexo, 'almacen_f1', roomAt('A', 6, 5, 12, 0));   // hace falta almacén para guardar UD
 
   const g = F1.applyRewards(st, s, 'f1_almacen');
   check('la recompensa de UD se entrega al almacén', (g.items.mineral || 0) === 5 && s.state.inventory.mineral === 5);
@@ -197,7 +199,7 @@ function roomAt(name, w, h, x, y) {
   check('nextHito tolera estado vacío', F1.nextHito(null).id === 'f1_hangar');
   check('totalEnergyUse suma el consumo de F1', F1.totalEnergyUse() === 35);
   check('moduleById / hitoById / routeById resuelven',
-    !!F1.moduleById('radar') && !!F1.hitoById('f1_radar') && !!F1.routeById('veta_k7'));
+    !!F1.moduleById('radar_f1') && !!F1.hitoById('f1_radar') && !!F1.routeById('veta_k7'));
   check('y devuelven null si no existe',
     F1.moduleById('x') === null && F1.hitoById('x') === null && F1.routeById('x') === null);
 }
@@ -221,20 +223,21 @@ function roomAt(name, w, h, x, y) {
   check('hay precio para el mineral base', F1.PRICES.mineral === 100);
   check('la escala del mapa mental está declarada (100/250/500)',
     F1.PRICES.mineral_procesado === 250 && F1.PRICES.mineral_enriquecido === 500);
-  check('valueOf calcula el valor de un lote', F1.valueOf({ mineral: 3 }) === 300);
+  check('valueOf da el BRUTO de un lote (antes de impuesto)', F1.valueOf({ mineral: 3 }) === 300);
   check('valueOf ignora lo que no tiene precio', F1.valueOf({ chatarra: 9 }) === 0);
   check('valueOf tolera lote vacío', F1.valueOf(null) === 0);
 
   const { st, s } = mkStation(2000);
   const nexo = s.nexos[0];
   for (const h of F1.HITOS) st.unlockHito(s, h.id);
-  st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 0));
+  st.placeModule(s, nexo, 'almacen_f1', roomAt('A', 6, 5, 12, 0));
   const credBase = s.state.cred;
   check('con los hitos pagados el almacén da 30 UD', s.state.storageCap === 30);
   check('guardar 7 UD de mineral', st.addItem(s, 'mineral', 7) === 7);
 
   const sale = F1.sellCargo(st, s, { mineral: 7 });
-  check('vender 7 UD da 700 CRED', sale.cred === 700 && s.state.cred === credBase + 700);
+  check('vender 7 UD: 700 brutos − 233 UGS = 467 netos',
+    sale.gross === 700 && sale.tax === 233 && sale.cred === 467 && s.state.cred === credBase + 467);
   check('la venta vacía el almacén (queda sitio para el próximo viaje)',
     (s.state.inventory.mineral || 0) === 0);
   check('informa de lo vendido', sale.sold.mineral === 7);
@@ -257,12 +260,12 @@ function roomAt(name, w, h, x, y) {
   check('el primer hito se paga con 0 CRED', st.unlockHito(s, 'f1_hangar').ok === true);
   check('el segundo NO se puede pagar todavía (hacen falta ingresos)',
     !st.hitoStatus(s, 'f1_almacen').ok);
-  check('el hangar se coloca gratis', st.placeModule(s, nexo, 'hangar', roomAt('H', 10, 8, 12, 0)).ok === true && s.state.cred === 0);
+  check('el hangar se coloca gratis', st.placeModule(s, nexo, 'hangar_f1', roomAt('H', 10, 8, 12, 0)).ok === true && s.state.cred === 0);
 
   // el almacén hace falta para traer carga; se fuerza construible para aislar
   // la economía de la cadena de hitos en este test
-  s.state.buildable.push('almacen');
-  check('el almacén también es gratis', st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 8)).ok === true && s.state.cred === 0);
+  s.state.buildable.push('almacen_f1');
+  check('el almacén también es gratis', st.placeModule(s, nexo, 'almacen_f1', roomAt('A', 6, 5, 12, 8)).ok === true && s.state.cred === 0);
 
   const ship = st.addShip(s, Object.assign({}, F1.STARTER_SHIP), s.nexos);
   check('la nave inicial cabe en el hangar', !!ship);
@@ -282,6 +285,76 @@ function roomAt(name, w, h, x, y) {
     check('(sin venta que comprobar en esta rama)', true);
     check('(bucle no evaluable en esta rama)', true);
   }
+}
+
+// ============ DEFINICIÓN DE F1 (tier de módulo) ==============================
+// F1 = FASE 1. El sufijo es el TIER del módulo: habrá Hangar F2/F3/F4 más
+// adelante. Estos tests fijan la convención para que nadie la rompa al añadir
+// los módulos de la Fase 2.
+{
+  check('todos los módulos declaran tier 1', F1.MODULES.every(m => m.tier === 1));
+  check('todo id de módulo termina en _f1', F1.MODULES.every(m => /_f1$/.test(m.id)));
+  check('todo nombre visible lleva el sufijo F1', F1.MODULES.every(m => / F1$/.test(m.name)));
+  check('el id concuerda con el tier declarado',
+    F1.MODULES.every(m => m.id.endsWith('_f' + m.tier)));
+  check('TIER se exporta para el contenido de fases futuras', F1.TIER === 1);
+  // los hitos son de la FASE, no del módulo: mantienen su prefijo f1_
+  check('los hitos usan prefijo f1_ (fase, no tier de módulo)',
+    F1.HITOS.every(h => /^f1_/.test(h.id)));
+}
+
+// ============ IMPUESTO UGS (lore: Unión Galáctica del Sistema Sol) ===========
+{
+  check('el impuesto es un tercio', Math.abs(F1.UGS_TAX - 1 / 3) < 1e-9);
+  check('el lore está declarado en el código', /Unión Galáctica/.test(F1.UGS_NAME));
+
+  const { st, s } = mkStation(0);
+  s.state.storageCap = 999;
+
+  st.addItem(s, 'mineral', 3);
+  const v = F1.sellCargo(st, s, { mineral: 3 });
+  check('3 UD: 300 brutos', v.gross === 300);
+  check('la UGS se lleva 100', v.tax === 100);
+  check('al jugador le quedan 200', v.cred === 200 && s.state.cred === 200);
+  check('bruto = impuesto + neto (no se pierde ni se inventa CRED)', v.gross === v.tax + v.cred);
+
+  // redondeo A FAVOR DEL JUGADOR: con 1 UD (100), 1/3 = 33.33 → impuesto 33
+  st.addItem(s, 'mineral', 1);
+  const v1 = F1.sellCargo(st, s, { mineral: 1 });
+  check('1 UD: el impuesto redondea a la baja (33, no 34)', v1.tax === 33 && v1.cred === 67);
+
+  // sin venta no hay impuesto
+  const v0 = F1.sellCargo(st, s, {});
+  check('sin carga no hay impuesto', v0.gross === 0 && v0.tax === 0 && v0.cred === 0);
+
+  // el impuesto se aplica a CUALQUIER recurso con precio, no solo al mineral
+  s.state.inventory.mineral_procesado = 2;
+  const v2 = F1.sellCargo(st, s, { mineral_procesado: 2 });
+  check('el impuesto también grava el mineral procesado (500 brutos)',
+    v2.gross === 500 && v2.tax === 166 && v2.cred === 334);
+}
+
+// ============ RITMO ECONÓMICO (que cueste ganar CRED) ========================
+// Simulación real sobre el runtime: 200 expediciones con semillas distintas.
+{
+  function oneRun(seed) {
+    const { st, s } = mkStation(0, seed);
+    s.state.storageCap = 999;
+    st.addShip(s, Object.assign({}, F1.STARTER_SHIP));
+    st.launchExpedition(s, 'veta_k7', F1.STARTER_SHIP.id);
+    let t = 0;
+    while (t < 400 && s.state.ships[0].state === 'out') { st.update(s, 1); t++; }
+    const ud = s.state.inventory.mineral || 0;
+    return F1.sellCargo(st, s, { mineral: ud }).cred;
+  }
+  let net = 0; const N = 200;
+  for (let i = 0; i < N; i++) net += oneRun('ritmo-' + i);
+  const medio = net / N;
+  const costeF1 = F1.HITOS.reduce((a, h) => a + h.cost, 0);
+  const expediciones = costeF1 / medio;
+  check('una expedición deja un neto modesto (' + medio.toFixed(0) + ' CRED)', medio > 100 && medio < 320);
+  check('F1 exige VARIAS expediciones (' + expediciones.toFixed(1) + '), no una',
+    expediciones >= 4 && expediciones <= 9);
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

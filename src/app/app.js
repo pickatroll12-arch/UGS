@@ -47,10 +47,13 @@
   // Al volver, la carga se VENDE y entra como CRED (orden de -XONO): es la
   // fuente de ingresos del juego. El almacén queda libre para el siguiente viaje.
   engine.bus.on('station:expedition:done', ({ delivered }) => {
-    const sale = F1 ? F1.sellCargo(station, app.station, delivered) : { cred: 0, sold: {} };
+    const sale = F1 ? F1.sellCargo(station, app.station, delivered) : { gross: 0, tax: 0, cred: 0, sold: {} };
     const carga = Object.entries(sale.sold).map(([it, n]) => n + ' UD de ' + it).join(', ');
-    setStatus(sale.cred > 0
-      ? 'Expedición de vuelta: ' + carga + ' vendido por ' + sale.cred + ' CRED (total ' + app.station.state.cred + ').'
+    // El impuesto UGS se muestra SIEMPRE y por separado: el jugador tiene que
+    // ver quién le está cobrando (es el nombre del juego).
+    setStatus(sale.gross > 0
+      ? 'Venta: ' + carga + ' · ' + sale.gross + ' CRED brutos − ' + sale.tax +
+        ' de impuesto UGS = +' + sale.cred + ' CRED (saldo ' + app.station.state.cred + ')'
       : 'Expedición de vuelta sin carga vendible.');
     syncShipObjects(); invalidate();
   });
