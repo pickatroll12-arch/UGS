@@ -11,6 +11,8 @@ de runtime: **three.js vendorizado** en `vendor/three/` (no CDN) para el rendere
 2. **`PROMPT_MAESTRO.md`** — la estructura del código y las reglas de trabajo para TODO agente (actual o futuro). Es el "prompt" que cualquier IA debe seguir.
 3. **`AGENTIC_REVIEW.md`** — registro de coordinación entre agentes (handoffs, veredictos del Rector).
 4. **`Feedback humano`** — canal exclusivo de los 3 colaboradores humanos. Los agentes solo leen.
+5. **`GUIA_TESTERS.md`** — recorrido paso a paso para -FROMO y -BX: qué probar, qué debe pasar
+   y lista de todo lo añadido en el ciclo vigente.
 
 ## Estructura del código
 
