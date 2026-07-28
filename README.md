@@ -1,6 +1,7 @@
 # UGS — Station Builder
 
-Constructor de estaciones espaciales en el navegador. **Vanilla JS + Canvas 2D, sin build, sin dependencias de runtime.**
+Constructor de estaciones espaciales en el navegador. **Vanilla JS, sin build.** Única dependencia
+de runtime: **three.js vendorizado** en `vendor/three/` (no CDN) para el renderer 3D.
 
 > ⚠️ **ESTADO: REVAMP TOTAL (2026-07-24).** Todo el código anterior fue purgado por decisión de los 3 colaboradores humanos. Esta es la base nueva, construida desde cero siguiendo `REVISION MAESTRA 2` y la filosofía de estructura de `PROMPT_MAESTRO.md`. Léelos antes de tocar nada.
 
@@ -26,6 +27,9 @@ src/
                       registra sus defs en data.js para que `solid` sobreviva al save
     content_f1.js     CONTENIDO de la Fase 1: árbol de hitos, módulos y ruta minera
                       veta_k7 (OBJP-1.1 K3+K4). Datos puros: el runtime está en station.js
+  input/              [ENTRADA]
+    gamepad.js        mando estándar (Odin 2 Portal): zona muerta radial, flancos,
+                      auto-repetición y mapa de acciones. Sin DOM → Node-testeable
   engine/             [COMPONENTES LÓGICOS — juego]
     engine.js         runtime PRE-CARGADO POR NEXO (eventos declarativos de sala)
     nav.js            A* click→ruta (4-dir, determinista)
@@ -53,6 +57,8 @@ tests/
   objects.test.js     OBJP-1.1: catálogo de objetos + Reactor ≥5×5
   content_f1.test.js  OBJP-1.1: árbol de fases F1 + expedición minera determinista
   toolbox.test.js     barra de herramientas: DRAG BOX, teclas, geometría
+  gamepad.test.js     mando: zona muerta, flancos, repetición, mapa de acciones
+vendor/three/         three.js r160 (MIT) vendorizado — ver su README.txt antes de actualizar
 ```
 
 El kit del equipo se referencia **in-situ** (cero duplicación binaria): `!_UGS/ux/` para la
@@ -67,7 +73,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (447 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (481 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -104,6 +110,29 @@ La tecla **no se reasigna** al cambiar de sección: Entrada/Ascensor/Módulo sol
 DISEÑAR NEXO y allí se ven apagadas, pero su número no se lo queda otra herramienta.
 Al final de la barra hay tres rombos **bloqueados** (PNJ, Evento, Zona): hueco reservado
 para OBJP-2 y OBJP-1.1, sin funcionalidad hasta las 3 firmas.
+
+## Mando (Odin 2 Portal y cualquier gamepad estándar)
+
+El juego se apunta con el ratón, así que el mando mueve un **cursor virtual**: todo lo que
+ya funcionaba (caminar, puertas, ascensores, colocar) sirve igual sin lógica duplicada.
+Se detecta solo al conectarlo.
+
+| Control | Acción |
+|---|---|
+| Stick izq | mover cursor |
+| Stick der | paneo de cámara |
+| A | confirmar / caminar / colocar |
+| B | cancelar (ESC) |
+| X | expedir nave a la veta (en juego) |
+| Y | pausa |
+| LB / RB | rotar vista ∓90° |
+| LT / RT | alejar / acercar |
+| D-pad ← → | herramienta anterior / siguiente (en Dev) |
+| Back | cambiar Dev ↔ Juego |
+| Start | menú |
+
+El mapa vive en `input/gamepad.js` como **datos**, así que la tabla de arriba y el
+comportamiento no se pueden desincronizar.
 
 ## Controles (base actual)
 

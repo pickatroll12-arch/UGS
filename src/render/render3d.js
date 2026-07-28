@@ -269,6 +269,30 @@
       g.add(ring);
       return;
     }
+    /*
+     * Objetos del catálogo (core/objects_lib): mismas PIEZAS que en el 2D, aquí
+     * como cajas de three. El renderer no conoce ningún objeto por su nombre —
+     * lee datos. Si el 2D y el 3D difieren visualmente, es que uno de los dos
+     * no está leyendo la misma def.
+     */
+    const lib = (typeof window !== 'undefined' && window.UGS && window.UGS.objectsLib) || null;
+    const def = lib && lib.byId(o.type);
+    if (def && def.parts && def.parts.length) {
+      const rot = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;
+      const cr = Math.cos(rot), sr = Math.sin(rot);
+      for (const pt of def.parts) {
+        const col = lib.partColor(def, pt);
+        const sideCss = 'rgb(' + col.side.join(',') + ')';
+        const sM = mat('pSide:' + sideCss, () => new THREE.MeshLambertMaterial({ color: sideCss, side: THREE.DoubleSide }));
+        const tM = mat('pTop:' + col.top, () => new THREE.MeshBasicMaterial({ color: col.top, side: THREE.DoubleSide }));
+        const bx = track(mesh(new THREE.BoxGeometry(pt.w, pt.d, pt.h), [sM, sM, sM, sM, tM, sM]));
+        bx.rotation.z = rot;
+        bx.position.set(c.x + pt.x * cr - pt.y * sr, c.y + pt.x * sr + pt.y * cr, pt.z + pt.h / 2);
+        g.add(bx);
+      }
+      return;
+    }
+
     const OCOL = {
       door: o.open ? { top: '#3f6b52', side: 'rgb(42,74,56)' } : { top: '#5c6675', side: 'rgb(70,78,92)' },
       console: { top: '#3c4c5c', side: 'rgb(44,56,70)' },
