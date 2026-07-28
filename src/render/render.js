@@ -147,9 +147,13 @@
   }
   // extrusión de un polígono de suelo: caras visibles + tapa
   // hiddenEdges[i] = true fuerza ocultar la cara i (pared vecina compartida)
-  function extrude(ctx, cam, footprint, h, topColor, sideRGB, lineColor, alpha, hiddenEdges) {
-    const base = footprint.map(p => worldToScreen(cam, p.x, p.y, 0));
-    const top = footprint.map(p => worldToScreen(cam, p.x, p.y, h));
+  // z0 = altura de la BASE del prisma (0 = apoyado en el suelo). Permite piezas
+  // flotantes — un tablero sobre su pedestal, una luz en la pared — sin las
+  // cuales todo objeto acaba pareciendo una caja.
+  function extrude(ctx, cam, footprint, h, topColor, sideRGB, lineColor, alpha, hiddenEdges, z0) {
+    z0 = z0 || 0;
+    const base = footprint.map(p => worldToScreen(cam, p.x, p.y, z0));
+    const top = footprint.map(p => worldToScreen(cam, p.x, p.y, z0 + h));
     const cx = footprint.reduce((a, p) => a + p.x, 0) / footprint.length;
     const cy = footprint.reduce((a, p) => a + p.y, 0) / footprint.length;
     ctx.save();
@@ -302,6 +306,34 @@
       ctx.beginPath(); ctx.ellipse(s.x, s.y, 12 * cam.zoom, 12 * TILT * cam.zoom, 0, 0, Math.PI * 2); ctx.stroke();
       return;
     }
+    /*
+     * Objetos del catálogo (core/objects_lib): se dibujan por PIEZAS, no como
+     * caja. El renderer no sabe qué es una cama — solo apila prismas según los
+     * datos de la def. Las piezas se ordenan por profundidad (y rotada) y
+     * luego por altura, para que la de delante tape a la de detrás.
+     */
+    const lib = (typeof root !== 'undefined' && root.UGS && root.UGS.objectsLib) ||
+                (typeof window !== 'undefined' && window.UGS && window.UGS.objectsLib) || null;
+    const def = lib && lib.byId(o.type);
+    if (def && def.parts && def.parts.length) {
+      const ar = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;
+      const car = Math.cos(ar), sar = Math.sin(ar);
+      const placed = def.parts.map((pt) => {
+        const hw = pt.w / 2, hd = pt.d / 2;
+        const fp = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, ly]) => {
+          const ox = lx + pt.x, oy = ly + pt.y;
+          return { x: c.x + ox * car - oy * sar, y: c.y + ox * sar + oy * car };
+        });
+        const mid = rotatedXY(cam, c.x + pt.x * car - pt.y * sar, c.y + pt.x * sar + pt.y * car);
+        return { pt, fp, key: mid.ry * 1000 + pt.z };
+      }).sort((a, b) => a.key - b.key);
+      for (const q of placed) {
+        const col = lib.partColor(def, q.pt);
+        extrude(ctx, cam, q.fp, q.pt.h, col.top, col.side, COLORS.wallLine, null, null, q.pt.z);
+      }
+      return;
+    }
+
     const h = o.openable && o.open ? 0.1 : OBJ_H;
     const half = 0.31;
     const a = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;

@@ -667,6 +667,100 @@
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
 
+  /* ---- MANDO (Odin 2 Portal y cualquier gamepad estándar) -------------------
+   * El juego se apunta con ratón, así que el mando mueve un CURSOR VIRTUAL con
+   * el stick izquierdo y A hace clic donde esté: así todo lo que ya funciona
+   * (caminar, puertas, ascensores, colocar) sirve igual sin duplicar lógica.
+   * El mapa de botones vive en input/gamepad.js (dato, no código).
+   */
+  const GP = window.UGS.gamepad;
+  const padIn = GP ? GP.create() : null;
+  const cursor = { x: 0, y: 0, active: false, speed: 900 };
+
+  function readPads() {
+    if (!navigator.getGamepads) return [];
+    try { return Array.from(navigator.getGamepads() || []); } catch (_) { return []; }
+  }
+  function doPadAction(act) {
+    switch (act) {
+      case 'click':    handleClick(cursor.x, cursor.y); break;
+      case 'cancel':
+        if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); setStatus('Colocación cancelada.'); }
+        app.pendingLink = null; invalidate();
+        break;
+      case 'rotL':     rotateCam(-Math.PI / 2); break;
+      case 'rotR':     rotateCam(Math.PI / 2); break;
+      case 'zoomIn':   zoomAt(1.08, cursor.x, cursor.y); break;
+      case 'zoomOut':  zoomAt(1 / 1.08, cursor.x, cursor.y); break;
+      case 'expedite': launchMining(); break;
+      case 'pause':
+        app.paused = !app.paused;
+        setStatus(app.paused ? 'Pausa' : 'Click: caminar · X expedir nave · Q/E rotar 90°');
+        break;
+      case 'toolPrev': case 'toolNext': {
+        const usable = TB.TOOLS.filter(t => TB.isAvailable(t, { section: app.devSection }));
+        if (!usable.length) break;
+        let i = usable.findIndex(t => t.id === app.tool);
+        if (i < 0) i = 0;
+        else i = (i + (act === 'toolNext' ? 1 : -1) + usable.length) % usable.length;
+        setTool(usable[i].id);
+        break;
+      }
+      case 'menu':     setMode('menu'); break;
+      case 'mode':     setMode(app.mode === 'game' ? 'dev' : 'game'); break;
+    }
+  }
+  function updatePad(dt) {
+    if (!padIn) return;
+    const st = padIn.poll(readPads(), dt);
+    if (!st.connected) { if (cursor.active) { cursor.active = false; invalidate(); } return; }
+    if (!cursor.active) {                       // primer frame con mando: centra el cursor
+      cursor.active = true;
+      cursor.x = canvas.clientWidth / 2; cursor.y = canvas.clientHeight / 2;
+      setStatus('Mando conectado: stick izq mueve el cursor · A confirma · B cancela · LB/RB rotan.');
+    }
+    // stick izquierdo: cursor · stick derecho: paneo de cámara
+    if (st.axes.lm > 0) {
+      cursor.x = CORE.clamp(cursor.x + st.axes.lx * cursor.speed * dt, 0, canvas.clientWidth);
+      cursor.y = CORE.clamp(cursor.y + st.axes.ly * cursor.speed * dt, 0, canvas.clientHeight);
+      mouse.x = cursor.x; mouse.y = cursor.y;   // el hover reutiliza la posición del ratón
+      app.hover = app.mode === 'dev' ? R.pick(app.cam, viewNexo(), cursor.x, cursor.y) : null;
+      invalidate();
+    }
+    if (st.axes.rm > 0) {
+      app.cam.x -= st.axes.rx * 700 * dt;
+      app.cam.y -= st.axes.ry * 700 * dt;
+      invalidate();
+    }
+    // zoom continuo mientras se mantienen los gatillos
+    for (const b of st.held) {
+      const a = GP.actionFor(b, app.mode);
+      if (a === 'zoomIn' || a === 'zoomOut') doPadAction(a);
+    }
+    // el resto de acciones, por flanco (con auto-repetición donde toca)
+    for (const b of st.repeated) {
+      const a = GP.actionFor(b, app.mode);
+      if (!a || a === 'zoomIn' || a === 'zoomOut') continue;
+      doPadAction(a);
+    }
+  }
+  /* cursor del mando: cruz fina, solo cuando hay mando conectado */
+  function drawPadCursor() {
+    if (!cursor.active) return;
+    const x = cursor.x, y = cursor.y, r = 11;
+    ctx.save();
+    ctx.strokeStyle = '#62e0ef'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - r, y); ctx.lineTo(x - 3, y);
+    ctx.moveTo(x + 3, y); ctx.lineTo(x + r, y);
+    ctx.moveTo(x, y - r); ctx.lineTo(x, y - 3);
+    ctx.moveTo(x, y + 3); ctx.lineTo(x, y + r);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = '#62e0ef'; ctx.fill();
+    ctx.restore();
+  }
+
   // ---- barra de herramientas (rombos, abajo) ---------------------------------
   // El catálogo, las teclas y la geometría viven en tools/toolbox.js; aquí solo
   // se conecta con el estado de la app. `app.tool` sigue siendo la única fuente
@@ -911,6 +1005,7 @@
     // la música corre en TODOS los modos (menú incluido) y con dt real: es
     // presentación, no simulación — no pasa por el paso fijo del engine.
     player.update(dt);
+    updatePad(dt);
     // hangar: re-sync de placeholders si cambió algo (eventos, retiradas manuales)
     if (app.mode !== 'menu') {
       let ph = 0;
@@ -939,6 +1034,7 @@
       drawPlacementGhost();
       drawSelection();
       drawToolbar();
+      drawPadCursor();
       hudEl.textContent = hudText();
       hudFpsShown = fpsNow;
     }
@@ -1142,6 +1238,7 @@
   window.UGS._agents = agents;
   window.UGS._station = station;
   window.UGS._rng = rng;
+  window.UGS._pad = cursor;
   window.UGS._music = music;
   window.UGS._player = player;
 })();

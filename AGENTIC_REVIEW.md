@@ -1302,3 +1302,76 @@ por defecto (3D) para validar lo que el smoke de Claude solo vio en 2D.
 expediciones/fase o se ajusta? (§6.25); (3) impuesto UGS fijo o variable (§6.25);
 (4) módulos F2: mejora in-situ o sustitución (§6.25); (5) GLB vs sprites v4,
 sprite de consola v3 vs v1, vendorizar three.js (RELEVO_CLAUDE §5).
+
+
+### §6.27 — CLAUDE — three.js vendorizado · objetos con silueta · soporte de mando — 2026-07-28
+**Observación:** tres encargos de -XONO en una entrega.
+
+**1. three.js VENDORIZADO (cierra la decisión abierta de §6.14).** Antes de tocar nada
+comprobé de dónde venía el bloqueo: bajé three@0.160.0 del registro de npm (accesible
+desde mi entorno, a diferencia de jsdelivr), lo serví en local y arranqué el juego →
+`THREE r160`, `available(): true`, HUD "· 3D", 60fps, **cero errores**. Conclusión: el
+renderer de Kimi **no tenía ningún fallo**; el único bloqueo era el CDN. Vendorizado en
+`vendor/three/` (670 KB) con su LICENSE (MIT) y un README que avisa de lo importante:
+**r160 es la última versión que publica `build/three.min.js`**; desde r161 solo hay ESM,
+así que subir de versión exige migrar a import map + module scripts. Con esto desaparece
+también el problema de SRI que señalé (ya no hay origen de terceros) y el juego arranca
+en 3D sin conexión. **Elegí la opción A (UMD vendorizado) y no la B (ESM+importmap)**
+porque B obliga a reordenar el boot: los module scripts van diferidos y `window.THREE`
+quedaría definido DESPUÉS de app.js, rompiendo la detección de 3D. B sigue siendo el
+camino para GLB (§6.18) pero es una migración aparte, no un cambio de `<script>`.
+
+**2. Objetos con SILUETA, no cajas.** Cada def del catálogo declara ahora `parts`: 2-4
+prismas con posición, tamaño, altura de base y `tone` (body/dark/accent/glow). **Los
+renderers no conocen ningún objeto por su nombre**: leen datos y apilan piezas, así que
+añadir un objeto nuevo es añadir datos, cero código — y el 2D y el 3D salen idénticos
+por construcción. Para que las piezas puedan flotar (un tablero sobre su pedestal, una
+luz en la pared) `extrude()` gana un parámetro `z0` de base, por defecto 0 y compatible
+con todas las llamadas existentes. Nivel de detalle: **semi-placeholder** deliberado —
+lo justo para que un tester distinga una cama de una taquilla sin leer la etiqueta.
+Esto cierra la mitad de la "Integración pendiente Rector" de §6.22 (colores y altura ya
+se usan; el mapeo `colorKey`→paleta de escena sigue disponible si lo quieres reordenar).
+
+**3. Soporte de MANDO (Odin 2 Portal).** Capa nueva `src/input/gamepad.js`: traduce el
+estado crudo de la Gamepad API a acciones. Sin DOM → corre en Node y tiene tests, que es
+donde se cazan los bugs de entrada. Incluye zona muerta **radial** con re-escalado,
+detección de flancos (mantener A no encadena clics), auto-repetición solo en los botones
+de navegación, y gatillos analógicos con umbral. El mapa de botones es **dato**, así que
+la ayuda en pantalla y el comportamiento no se pueden desincronizar. En app.js el mando
+mueve un **cursor virtual** y A hace clic donde esté: todo lo que ya funcionaba sirve
+igual, sin duplicar lógica de juego.
+
+**Fallo real que cazaron los tests:** la zona muerta repartía el módulo por eje, así que
+en diagonal el vector llegaba a 1.41 — el clásico "las diagonales van un 41% más
+rápido". Corregido limitando el módulo antes de repartirlo en ejes.
+
+**Evidencia:** `node tests/run.js` → **481 checks, ALL SUITES GREEN** (34 nuevos de
+mando). Smokes en Chromium: mando emulado **10/10** (detección al conectar, stick que
+mueve el cursor, RB rota 90°, RT hace zoom, A ordena caminar, X expide, Back cambia de
+modo, d-pad cambia herramienta), economía F1 **28/28**, barra de herramientas **21/21**.
+Capturas de los 13 objetos en fila, en 2D y en 3D, con las siluetas coincidiendo.
+**Cero errores de consola en todos.**
+
+**Riesgo / lo que NO se probó:** el mando está probado con un **Odin 2 emulado**
+(inyectando `navigator.getGamepads`), no con el aparato real — la geometría de los
+sticks, el umbral de los gatillos y la velocidad del cursor (900 px/s) casi seguro
+piden ajuste al probarlo en mano. No hay vibración ni navegación del panel lateral por
+mando: en Dev el panel HTML sigue siendo de dedo/ratón. Las siluetas son mi criterio de
+diseño, no arte aprobado: si alguna no se entiende, se cambian números en
+`objects_lib.js`. La colocación multi-tile sigue sin implementarse.
+
+**Archivos afectados:** `vendor/three/` (nuevo: three.min.js + LICENSE + README),
+`index.html` (script local + gamepad), `src/core/objects_lib.js` (parts, tones,
+partColor/partsOf/heightOf), `src/render/render.js` (z0 en extrude + dibujo por piezas),
+`src/render/render3d.js` (mismas piezas en WebGL), `src/input/gamepad.js` (nuevo),
+`src/app/app.js` (cursor virtual, acciones de mando), `tests/gamepad.test.js` (nuevo),
+`README.md`, este documento.
+
+**Pruebas necesarias (humano):** (1) abrir el juego y confirmar que el HUD dice **· 3D**
+sin conexión; (2) colocar varios objetos y decir si se entienden a simple vista;
+(3) **-XONO con el Odin 2 real**: conectar, mover el cursor, A para caminar, LB/RB,
+gatillos, y decirme si la velocidad del cursor y las zonas muertas van finas.
+
+**Decisión pendiente:** (1) ¿la velocidad del cursor (900 px/s) y la zona muerta (0.22)
+os sirven o las ajusto?; (2) ¿queréis que el mando navegue también el panel lateral de
+Dev?; (3) ¿migramos a ESM+importmap para desbloquear GLB (§6.18)?
