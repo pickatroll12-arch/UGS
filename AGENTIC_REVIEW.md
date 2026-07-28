@@ -967,3 +967,338 @@ con capacidad N", `n` → nave amarrada (placeholder), tecla `n` hasta el tope �
 rechazo; (3) exportar/reimportar: capacidad y amarres persisten.
 **Decisión pendiente:** las listadas en RELEVO_CLAUDE.md §5 (GLB vs sprites v4,
 sprite consola v3 vs v1, vendorizar three.js, wiring de pantallas sigue denegado).
+
+
+### §6.22 — CLAUDE — OBJP-1.1 T1 (librería de objetos) + T2 (Reactor ≥5×5) — 2026-07-28
+**Observación:** ejecutado el `BRIEF_CLAUDE_OBJP11.md` (commit `9b9717f`) bajo el
+desbloqueo de OBJP-1.1 de §6.20. Respetada la frontera del split: NO se ha tocado
+`station.js`, `nav.js`, `render.js`, `render3d.js`, los wall kinds / OBJECT_DEFS base
+ni los tests de engine/station.
+
+**T1 — Librería de objetos (`src/core/objects_lib.js`, nuevo):** 12 defs de atrezo
+(cama, taquilla, mesa, silla, rack de datos, servidor, panel de control, luz de pared,
+contenedor, válvula, jardinera, planta) + `reactor_core` para T2. Datos puros, sin DOM,
+cargable en Node. Cada def trae `{id, name, footprint, h, colors{top,side}, colorKey,
+solid, cat}`. El sub-selector de la herramienta Objeto (tecla 6) se puebla del catálogo
+y muestra nombres legibles. **La consola sigue siendo herramienta dedicada (tecla 7) y
+está FUERA del catálogo**, con tres tests que lo vigilan (orden de -XONO).
+
+**PROBLEMA REAL ENCONTRADO Y RESUELTO — merece vuestra atención:** `normalizeRoom`
+reconstruye cada objeto desde su `type` con `OBJECT_DEFS`, así que **cualquier objeto de
+la librería volvía como SÓLIDO tras exportar/importar**, aunque naciera atravesable.
+Eso rompe el contrato C2 y el pathfinding de forma silenciosa: colocas una luz de pared,
+guardas, recargas, y el PCJ ya no puede pasar por ahí. Solución mínima y aditiva en
+`data.js`: `registerObjectDefs()` + `objectDef()` — un punto de extensión que la librería
+usa al cargarse y que **NUNCA pisa las defs base**. Es el único cambio que he hecho en
+`data.js` aparte del campo `minSize`, y no toca wall kinds ni OBJECT_DEFS base (terreno
+de K2). Con test de regresión de round-trip.
+
+**T2 — Reactor (`engine/blueprint.js`):** `createReactorBlueprint()` → módulo 6×6,
+categoría energía, `provides.energy = 100` TW, `energyUse = 0`, 1200 CRED, suelo técnico,
+anillo de paredes y núcleo en el centro. Botón **"+ Reactor"** junto a "+ Nuevo módulo".
+Mínimo duro **5×5** vía `minSize` (campo nuevo en `createModuleBlueprint`, viaja en el
+save): `resizeBlueprint()` **RECHAZA y explica**, no recorta en silencio — y el rechazo
+no deja basura en la pila de deshacer. El puente a la capa estratégica no se tocó:
+`toModuleDef()` ya lleva los 100 TW a `recompute()`.
+
+**INTEGRACIÓN PENDIENTE RECTOR:** las 12 defs traen `colors{top,side}` y `colorKey`
+('fabric', 'metal', 'tech', 'screen', 'light', 'cargo', 'organic', 'energy') pero
+`render.js`/`render3d.js` siguen dibujándolas con `COLORS.objTop/objSide` por defecto —
+todas se ven iguales. Falta el mapa colorKey→paleta y usar `h` como altura de extrusión
+(hoy todas se extruyen igual). Es tuyo por el split.
+
+**Evidencia:** `node tests/run.js` → **327 checks, ALL SUITES GREEN** (46 nuevos en
+`tests/objects.test.js`). Smoke en Chromium **15/15 verde**: selector poblado con 13
+opciones y nombres legibles, sin consola en la lista, colocación de `wall_lamp`
+respetando `solid:false`, la tecla 7 sigue colocando consola, botón + Reactor → 6×6 con
+100 TW y núcleo, **rechazo de 4×4 desde la UI con el motivo en pantalla**, aceptación de
+5×5, deshacer limpio, **cero errores de consola**.
+
+**Riesgo / lo que NO se probó:** el smoke corrió en **2D** — el CDN de three.js está
+bloqueado por el proxy de este entorno (403), así que no he visto los objetos nuevos
+sobre el renderer 3D; como hoy usan la paleta por defecto, no espero sorpresas, pero es
+deducción, no comprobación. La colocación **multi-tile no está implementada**: el esquema
+admite `footprint` mayor pero las 12 defs son 1×1 a propósito, y hay un test que impide
+declarar una def que la suite no sepa colocar. No hay iconos por objeto en el selector
+(solo texto). El `minSize` solo lo aplica la suite: `placeModule()` no lo revalida
+(no toqué station.js).
+
+**Archivos afectados:** `src/core/objects_lib.js` (nuevo), `tests/objects.test.js`
+(nuevo), `src/core/data.js` (registerObjectDefs/objectDef + minSize en blueprint),
+`src/engine/blueprint.js` (minSizeOf, resizeBlueprint, createReactorBlueprint),
+`src/app/app.js` (selector poblado, botón Reactor, guarda de resize), `index.html`
+(script + botón + selector vacío), `README.md`, este documento.
+
+**Pruebas necesarias (humano):** (1) Dev → tecla 6 y desplegar el selector: deben salir
+los 12 objetos con nombre; (2) colocar una "Luz de pared" y comprobar que el PCJ pasa por
+encima en modo Juego; (3) exportar la estación, reimportarla y **volver a comprobar que
+sigue pasando** (ese era el bug); (4) DISEÑAR MÓDULOS → "+ Reactor", intentar
+redimensionar a 4×4 (debe rechazar y decir por qué) y luego a 5×5 (debe aceptar);
+(5) exportar/importar la biblioteca y confirmar que el Reactor sigue rechazando 4×4;
+(6) confirmar que la tecla 7 sigue colocando consolas.
+
+**Decisión pendiente:** (1) ¿los 12 objetos son los que queríais o falta/sobra alguno?;
+(2) ¿coste del Reactor 1200 CRED y tamaño por defecto 6×6 os cuadran con el balance F1?;
+(3) ¿queréis iconos por objeto en el selector (habría que mapear el kit `IconD01-15`)?
+
+
+### §6.23 — CLAUDE — OBJP-1.1 K3 (ruta minera) + K4 (árbol F1), relevados del Rector — 2026-07-28
+**Observación:** ejecutadas las tareas que `RELEVO_CLAUDE.md` §4 me traspasa.
+Todo el contenido va en un archivo NUEVO de datos puros `src/core/content_f1.js`
+(la opción que el propio relevo prefería). **No se ha tocado `station.js`**: el
+runtime ya existía y solo se le da de comer.
+
+**K4 — Árbol de fases F1:** los 5 hitos del mapa mental §6.4 encadenados —
+Hangar → Almacén(30 UD) → Generador(100 TW) → Radar → Habitacional(12 PNJ) —
+cada uno requiriendo el anterior, con `grants.modules` que los hacen
+construibles y habilidades (`expedicion_minera`, `detectar_vetas`,
+`asignar_roles`). Al desbloquear el quinto, el runtime avanza a Fase 2.
+
+**K3 — Ruta minera `veta_k7`:** 5 etapas × 60 s con rendimiento decreciente
+1.00 / 0.65 / 0.40 / 0.25 / 0.15 (mapa mental), 3-5 UD de mineral por etapa
+lograda, `failChance 0.1`. **UI de lanzamiento:** tecla **X** en modo juego manda
+la primera nave libre; el HUD muestra `⛏Veta K-7 etapa 2/5` mientras está fuera,
+y avisa si hay naves dañadas. Cuando no se puede expedir, dice POR QUÉ (sin
+habilidad / sin naves / todas fuera / dañadas), nunca falla en silencio.
+
+**DOS PROBLEMAS DE DISEÑO QUE ENCONTRÉ Y QUE NECESITAN DECISIÓN HUMANA:**
+
+1. **El orden del mapa mental choca con la energía.** La estación arranca con
+   `capacity = 0` y `placeModule` rechaza todo lo que consuma. Como Hangar y
+   Almacén van ANTES del Generador en la cadena, si consumieran TW **nadie
+   podría colocarlos** y F1 quedaría bloqueada en el primer paso. Los he
+   declarado PASIVOS (0 TW), así que el consumo de F1 queda en **35 TW**
+   (Radar 15 + Habitacional 20) de los 100 del Generador — **por debajo de los
+   63-70 TW que dice el mapa mental**. Alternativa si preferís esa cifra: mover
+   el Generador al primer hito y devolverle consumo a Hangar/Almacén. Es
+   cambiar dos números en `content_f1.js`, cero motor.
+
+2. **F1 todavía NO es completable económicamente.** Coste total: 1100 CRED de
+   hitos + 2100 CRED de módulos = **3200 CRED**. Ingresos existentes: **0**. La
+   minería entrega mineral en **UD**, y la cadena de procesamiento del mapa
+   mental (base 100 → procesado 250 → enriquecido 500 CRED) **no existe en el
+   runtime**: no hay forma de convertir UD en CRED. Con los tests pongo CRED a
+   mano; un jugador real se quedaría atascado tras el primer hito (que por eso
+   cuesta 0). Hace falta decidir: ¿vender mineral a precio fijo, la cadena de
+   procesamiento completa, o CRED inicial de partida? Yo no lo he inventado
+   porque es diseño y toca `station.js`, que no es mío.
+
+**Además:** el runtime de `unlockHito` solo aplica `grants.modules` y
+`grants.abilities` — **CRED y UD los ignora**. Para no declarar premios que
+nadie entrega, las recompensas viven en `content_f1.applyRewards()` (función
+pura, testeable) y app.js la llama al oír `station:hito`.
+
+**Evidencia:** `node tests/run.js` → **404 checks, ALL SUITES GREEN** (60 nuevos
+en `tests/content_f1.test.js`: cadena y completabilidad de F1, avance de fase,
+el orden energético que permite construir, probabilidades exactas de la ruta,
+expedición completa **determinista** — misma semilla, mismo mineral y mismo
+tiempo —, rechazos de lanzamiento, recompensas). Smoke en Chromium **20/20
+verde**: registro al arranque, X sin habilidad avisa, cadena de 5 hitos con
+avance a Fase 2, colocación de generador/almacén/hangar, amarre de nave,
+**X lanza y el HUD marca la etapa**, X con la nave fuera avisa, expedición
+completa en 300 s entregando 8 UD en el almacén, **cero errores de consola**.
+
+**Riesgo / lo que NO se probó:** el smoke corrió en **2D** (el CDN de three.js
+sigue bloqueado por el proxy de este entorno, 403) — no he visto nada de esto
+sobre el renderer 3D. La UI de expedición es **una tecla**, no un panel: sin
+lista de naves ni de rutas, y con una sola ruta no hace falta elegir. No he
+probado a mano el ciclo completo con reparación de nave dañada (sí por test).
+El balance de CRED/coste es mío y está sin validar por vosotros.
+
+**Archivos afectados:** `src/core/content_f1.js` (nuevo),
+`tests/content_f1.test.js` (nuevo), `src/app/app.js` (registro, recompensas por
+bus, tecla X, HUD de expedición), `index.html` (script), `README.md`,
+este documento (§6.21 transcrita + esta entrada).
+
+**Pruebas necesarias (humano):** (1) Juego → pulsar X sin nada: debe explicar
+que falta el hito; (2) desbloquear la cadena y colocar Generador + Almacén +
+Hangar; (3) amarrar nave con `n` y pulsar **X**: el HUD debe marcar
+`⛏Veta K-7 etapa N/5`; (4) esperar (o acelerar) hasta el retorno y ver el
+mineral en el almacén; (5) volver a pulsar X con la nave fuera: debe avisar;
+(6) comprobar que al completar los 5 hitos la fase pasa a 2.
+
+**Decisión pendiente (las tres importantes):** (1) **¿de dónde salen los CRED?**
+— sin esto F1 no se puede terminar jugando; (2) ¿balance energético 35 TW como
+está, o movemos el Generador al primer hito para llegar a los 63-70 del mapa?;
+(3) ¿la expedición se queda en la tecla X o queréis un panel de naves/rutas?
+**Sigue pendiente de §6.20:** las firmas retroactivas 3/3 de OBJP-1.1 en
+`Feedback humano`.
+
+
+### §6.24 — CLAUDE — Economía F1: módulos gratis, nave inicial y VENTA — 2026-07-28
+**Observación:** -XONO responde a las dos preguntas abiertas de §6.23 con tres
+decisiones, y se implementan tal cual:
+1. **Los módulos iniciales son gratis** — los 5 de F1 pasan a `cost: 0`. Siguen
+   gateados por hito: gratis no es lo mismo que disponible. Lo que se paga en F1
+   es el PROGRESO (los hitos, 1100 CRED), no el equipamiento de partida.
+2. **Se empieza con 1 nave minera** — `STARTER_SHIP` (Extractora I, capacidad 20)
+   se añade al entrar en juego, sin gating de amarre porque al principio no hay
+   hangar. Cuando se construye uno, la nave **toma plaza sola**.
+3. **VENTA: la carga se convierte en CRED al volver** — `content_f1.sellCargo()`
+   saca del almacén lo que la expedición entregó y lo abona en CRED al precio de
+   `PRICES` (mineral base **100 CRED/UD**, con la escala 100/250/500 del mapa
+   mental §6.4 ya declarada para cuando exista el procesamiento). El almacén
+   queda libre para el siguiente viaje.
+
+**Esto cierra el bucle jugable que faltaba en §6.23:** empiezas con 0 CRED y una
+nave → el primer hito cuesta 0 → colocas Hangar (gratis) → **X** expide la nave →
+vuelve con mineral → se vende → con ese CRED pagas el siguiente hito. Hay un test
+que recorre exactamente esa cadena de principio a fin.
+
+Detalle de diseño: el **Almacén es el techo de lo que se puede traer** (el runtime
+solo guarda lo que cabe), así que ampliar almacenamiento = ampliar ingresos. Eso le
+da un papel económico real a un módulo que si no sería decorativo.
+
+**AVISO DE BALANCE (número concreto, decisión vuestra):** con estos precios una
+expedición rinde ~9,8 UD → **~980 CRED**, y F1 entera cuesta 1100 CRED. Es decir,
+**F1 se completa en ~1,1 expediciones (unos 6 minutos)**. Funciona, pero una fase
+entera dura menos que una canción. Si queréis que F1 dure ~5 expediciones, la
+palanca más limpia es **subir los costes de hito ×4** (150→600, 300→1200, 250→1000,
+400→1600) y dejar el precio del mineral como está, que es el que documenta el mapa
+mental. Está todo en dos constantes de `content_f1.js`; cero motor.
+
+**Fallo real encontrado por el smoke:** al construir un hangar, la nave inicial no
+tomaba plaza hasta que ocurriera otro evento cualquiera — el placeholder no
+aparecía. Corregido escuchando `station:module` (que el runtime ya emitía) para
+resincronizar. Sin tocar station.js.
+
+**Evidencia:** `node tests/run.js` → **429 checks, ALL SUITES GREEN** (25 nuevos:
+módulos gratis pero gateados, precios y escala del mapa, `sellCargo` que no cobra
+lo que no hay ni regala lo que no tiene precio, y el **bucle económico completo**
+0 CRED → hito 0 → hangar → expedición → venta → pagar el hito siguiente). Smoke en
+Chromium **27/27 verde**: se arranca con 1 nave y 0 CRED, los módulos no cobran, la
+nave adopta plaza en el hangar nuevo, X lanza, el HUD sigue la etapa, y al volver
+**"8 UD de mineral vendido por 800 CRED"** con el almacén vacío y CRED suficiente
+para seguir. **Cero errores de consola.**
+
+**Riesgo / lo que NO se probó:** la venta es **automática** al volver — no hay
+decisión de "cuándo vender" ni precios variables; si queréis mercado o regateo, es
+otra mecánica. Todo sigue verificado en **2D** (el CDN de three.js sigue bloqueado
+por el proxy, 403). El balance de arriba es mío y está sin validar por vosotros.
+La nave inicial solo se crea si el save no trae naves: un save antiguo NO recibe
+nave de regalo (decisión mía para no alterar partidas existentes).
+
+**Archivos afectados:** `src/core/content_f1.js` (costes a 0, PRICES,
+STARTER_SHIP, sellCargo, valueOf), `src/app/app.js` (nave inicial, adopción de
+amarre, venta al volver, listener `station:module`), `tests/content_f1.test.js`,
+`README.md` (sección Economía), este documento.
+
+**Pruebas necesarias (humano):** (1) entrar en Juego: debe haber 1 nave y 0 CRED;
+(2) desbloquear el hito Hangar (0 CRED) y colocar el Hangar — no debe cobrar nada;
+(3) pulsar **X** y esperar el retorno: la barra debe decir cuánto se vendió y por
+cuántos CRED; (4) comprobar que el almacén queda vacío tras la venta; (5) con lo
+ganado, pagar el hito del Almacén y seguir la cadena.
+
+**Decisión pendiente:** (1) **el balance de arriba** — ¿F1 en 1 expedición o subimos
+los hitos ×4?; (2) ¿la venta se queda automática o queréis vender a mano desde una
+consola?; (3) sigue pendiente de §6.20 las firmas retroactivas 3/3 de OBJP-1.1.
+
+
+### §6.25 — CLAUDE — Definición de F1, recolección estricta e IMPUESTO UGS — 2026-07-28
+**Observación:** tres precisiones de -XONO implementadas.
+
+**1. "F1" queda DEFINIDO — es el TIER del módulo, no un prefijo de archivo.**
+F1 = **Fase 1**: `hangar_f1` / "Hangar F1" es el hangar de nivel 1, y más adelante
+habrá Hangar F2/F3/F4 — misma familia, mejor versión, atada a la fase que la
+desbloquea. Se hace explícito en el modelo: todo módulo declara `tier` y su id
+termina en `_f<tier>`, con tests que fijan la convención para que el contenido de
+la Fase 2 no la rompa. **Ojo a la distinción:** los MÓDULOS llevan `_f1` por su
+tier; los HITOS llevan `f1_` por la FASE a la que pertenecen. Son dos cosas.
+
+**2. Recolección más estricta.** Los rendimientos bajan de 3-5 UD a **1-3 UD** por
+etapa lograda (las probabilidades decrecientes del mapa mental no se tocan).
+
+**3. IMPUESTO UGS — el lore que faltaba.** **UGS = Unión Galáctica del Sistema Sol**,
+y de ahí sale el nombre del proyecto. Toda venta tributa **un tercio del bruto**.
+Está implementado en `sellCargo` (que ahora devuelve `{gross, tax, cred, sold}`) y
+**se muestra desglosado al jugador**: `Venta: 4 UD de mineral · 400 CRED brutos −
+133 de impuesto UGS = +267 CRED`. Lo dejé documentado en el código como lore, no
+como constante de balance: quien lo toque tiene que saber que está tocando el
+nombre del juego. El redondeo del impuesto es `Math.floor`, o sea **a favor del
+jugador**.
+
+**RITMO MEDIDO, NO ESTIMADO.** En §6.24 os di 1,1 expediciones por fase; **esa cifra
+estaba mal** — calculé el rendimiento esperado ignorando que la nave puede fallar.
+Lo he medido con Monte Carlo de 600 expediciones sobre el runtime real:
+| | antes (§6.24) | ahora |
+|---|---|---|
+| fallo de expedición | 40% (no 10%: es 10% **por etapa** × 5) | 40% |
+| UD por lanzamiento | 5,67 | **2,90** |
+| CRED brutos | 567 | 290 |
+| impuesto UGS | — | **97** |
+| CRED netos | 567 | **194** |
+| expediciones para F1 | 1,9 | **5,7** |
+| tiempo por fase | ~10 min | **~28 min** |
+El test de ritmo no comprueba una constante: **simula 200 expediciones** y falla si
+F1 se puede completar en menos de 4 o hace falta más de 9. Si mañana alguien toca
+precios o rendimientos y se sale de esa horquilla, la suite lo para.
+
+**Evidencia:** `node tests/run.js` → **447 checks, ALL SUITES GREEN** (18 nuevos:
+convención de tier, impuesto exacto con su redondeo, `bruto = impuesto + neto` sin
+CRED perdido ni inventado, impuesto sobre cualquier recurso con precio, y el test
+de ritmo por simulación). Smoke en Chromium **28/28 verde**, con el desglose del
+impuesto verificado en la barra de estado. **Cero errores de consola.**
+
+**Riesgo / lo que NO se probó:** el ritmo de ~28 min por fase es mi propuesta a
+partir de vuestro "que cueste ganar créditos" — no lo habéis jugado. Si sigue
+sabiendo rápido o se hace pesado, las palancas son `min/max` de la ruta y `cost` de
+los hitos, y el test de ritmo os avisará si os salís de la horquilla. El impuesto
+es **fijo**: no hay exenciones, contrabando ni corrupción — si el lore pide que se
+pueda evadir, eso es mecánica nueva. Todo sigue verificado en **2D** (CDN de
+three.js bloqueado por el proxy, 403).
+
+**Archivos afectados:** `src/core/content_f1.js` (TIER + ids `_f1`, yields 1-3,
+UGS_TAX/UGS_NAME, sellCargo con impuesto), `src/app/app.js` (desglose del impuesto
+en el aviso de venta), `tests/content_f1.test.js`, `README.md` (secciones "Qué
+significa F1", "Impuesto UGS" y "Ritmo"), este documento.
+
+**Pruebas necesarias (humano):** (1) jugar una expedición y leer la barra: debe
+verse el bruto, el impuesto UGS y el neto por separado; (2) valorar si ~6
+expediciones por fase es el ritmo que queréis; (3) confirmar que la convención
+`*_f1` os sirve para cuando diseñemos los módulos F2.
+
+**Decisión pendiente:** (1) ¿el impuesto de 1/3 es fijo para siempre o cambia por
+fase/reputación con la UGS?; (2) ¿los módulos F2 serán mejoras in-situ del F1 o
+módulos aparte que sustituyen?; (3) siguen pendientes las firmas 3/3 de OBJP-1.1.
+
+
+### §6.26 — KIMI K3 (Rector) — VEREDICTO PR #24: conflicto resuelto + RATIFICACIÓN — 2026-07-28
+**Observación:** retomo el relevo por orden de -XONO. El PR #24 quedó bloqueado
+(`dirty`) por un conflicto **puramente documental**: main incorporó §6.21
+(`0c0baee`) mientras la rama la había transcrito por la caída del servidor — y la
+transcripción llegaba **incompleta** (faltaban "Pruebas necesarias (humano)" y
+"Decisión pendiente"). Resolución: se conserva la §6.21 **canónica completa** y,
+a continuación, §6.22-§6.25; la nota de transcripción queda obsoleta al existir
+el original. Revisada la frontera del split en el código: `data.js` solo recibe
+`registerObjectDefs()/objectDef()` + `minSize` (aditivo, no pisa defs base ni
+wall kinds) y `station.js`/`nav.js`/`render*.js` quedan intactos en lo prohibido.
+**Veredicto: PR #24 RATIFICADO** — T1 (librería de objetos), T2 (Reactor ≥5×5),
+K3 (ruta `veta_k7` + UI de lanzamiento), K4 (árbol F1), economía F1 e impuesto
+UGS pasan a `main`.
+**Evidencia:** `node tests/run.js` sobre el merge → **447 checks, ALL SUITES
+GREEN** (audio 49, blueprint 56, content_f1 103, core 26, engine 66, objects 46,
+station 46, toolbox 55). Además, desde este sandbox el CDN de three.js **sí
+responde** (en el de Claude daba 403), así que ejecuté el smoke 3D que faltaba:
+**13/13 verde** — renderer 3D activo por defecto, selector de objetos con 13
+defs sin consola, tecla 6 = Objeto y 7 = Consola dedicada, botón + Reactor
+presente, HUD en Juego con `⚡0/0TW` + `⛏X: expedir nave`, 60 fps estables y
+**cero errores de consola**. Con esto queda cerrado el "no probado en 3D"
+declarado en §6.22-§6.25.
+**Riesgo:** los objetos nuevos se dibujan con la paleta por defecto en 2D y 3D —
+la integración `colorKey`→paleta y la altura `h` como extrusión sigue pendiente
+y es **mía** (Rector, marcada en §6.22). El smoke 3D cubrió arranque/UI, no una
+expedición completa en 3D; el runtime es agnóstico de renderer y está cubierto
+por los tests de `content_f1`.
+**Recomendación:** mergear PR #24 de inmediato (hecho en este mismo acto).
+Siguiente tarea del Rector: integración de paleta por `colorKey` y extrusión por
+`h` en `render.js`/`render3d.js`, en rama propia. Ningún agente toque
+`Feedback humano`: las firmas retroactivas de OBJP-1.1 las ponen los humanos.
+**Archivos afectados:** `AGENTIC_REVIEW.md` (resolución + esta entrada).
+**Pruebas necesarias (humano):** las checklists de §6.22, §6.23, §6.24 y §6.25
+siguen vigentes íntegras; añadir: repetir la expedición completa con el renderer
+por defecto (3D) para validar lo que el smoke de Claude solo vio en 2D.
+**Decisión pendiente:** (1) firmas retroactivas 3/3 de OBJP-1.1 en
+`Feedback humano` (arrastra desde §6.20); (2) balance F1: ¿se mantiene ~5,7
+expediciones/fase o se ajusta? (§6.25); (3) impuesto UGS fijo o variable (§6.25);
+(4) módulos F2: mejora in-situ o sustitución (§6.25); (5) GLB vs sprites v4,
+sprite de consola v3 vs v1, vendorizar three.js (RELEVO_CLAUDE §5).
