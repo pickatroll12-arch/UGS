@@ -136,6 +136,53 @@
     return room;
   }
 
+  /*
+   * Tamaño mínimo de un blueprint (OBJP-1.1 · T2). La suite debe RECHAZAR
+   * redimensionar por debajo, no recortar en silencio: si el usuario pide 4×4
+   * en un Reactor, se le dice por qué y no se toca la sala.
+   */
+  function minSizeOf(bp) {
+    const m = bp && bp.minSize;
+    return { w: Math.max(1, Number(m && m.w) || 1), h: Math.max(1, Number(m && m.h) || 1) };
+  }
+  function resizeBlueprint(bp, w, h) {
+    if (!bp || !bp.room) return { ok: false, reason: 'blueprint inválido' };
+    const min = minSizeOf(bp);
+    w = w | 0; h = h | 0;
+    if (w < min.w || h < min.h) {
+      return { ok: false, reason: bp.name + ' no admite menos de ' + min.w + '×' + min.h, min };
+    }
+    resizeRoom(bp.room, w, h);
+    return { ok: true, size: { w: bp.room.size.w, h: bp.room.size.h }, min };
+  }
+
+  /*
+   * Plantilla REACTOR (OBJP-1.1 · T2): módulo de energía de 6×6 con mínimo
+   * duro 5×5, suelo técnico, anillo de paredes y el núcleo en el centro.
+   * Aporta 100 TW por `provides.energy`: el puente a la capa estratégica YA
+   * existe (toModuleDef → placeModule → recompute), así que no se toca
+   * station.js. Balance F1 del mapa mental: ~63-70 TW de consumo.
+   */
+  function createReactorBlueprint(opts) {
+    opts = opts || {};
+    const w = Math.max(6, opts.w | 0 || 6), h = Math.max(6, opts.h | 0 || 6);
+    const bp = D.createModuleBlueprint({
+      name: opts.name || 'Reactor',
+      category: 'energia',
+      cost: opts.cost == null ? 1200 : opts.cost,
+      energyUse: 0,
+      provides: { energy: 100, storage: 0, pnjCapacity: 0 },
+      notes: 'Generador principal — 100 TW. Requiere 5×5 como mínimo.',
+      minSize: { w: 5, h: 5 },
+      w, h
+    });
+    paintFloorRect(bp.room, 0, 0, w - 1, h - 1, 'dark');
+    D.ringWalls(bp.room);
+    const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+    bp.room.objects.push(D.createObjectInstance('reactor_core', cx, cy));
+    return bp;
+  }
+
   // ---- snapshots (deshacer / rehacer) ------------------------------------------
   function snapshotRoom(room) {
     return JSON.parse(JSON.stringify({
@@ -272,6 +319,7 @@
 
   return {
     paintFloorRect, paintWallOutline, eraseRect, floodFillFloor, clearRoom, resizeRoom,
+    minSizeOf, resizeBlueprint, createReactorBlueprint,
     snapshotRoom, restoreRoom,
     toModuleDef, instantiateRoom,
     rectsOverlap, sharedEdge, placementCheck, openSharedEdge

@@ -597,6 +597,8 @@
     } else if (g.tool === 'object' || g.tool === 'console') {
       // 'console' es un atajo de 'object' fijado al tipo consola: es la pieza
       // que se está construyendo ahora (sprite v3 + módulo screens).
+      // 'console' es herramienta dedicada (tecla 7) y NO está en el catálogo;
+      // 'object' (tecla 6) usa el sub-selector poblado desde core/objects_lib.
       const type = g.tool === 'console' ? 'console' : $('objSel').value;
       if (!NAV.walkable(room, g.x0, g.y0) || room.objects.some(o => o.x === g.x0 && o.y === g.y0)) return setStatus('Ahí no cabe el objeto.');
       pushUndo(room);
@@ -881,9 +883,22 @@
     const w = CORE.clamp(Number($('bpW').value) || bp.room.size.w, 1, 64);
     const h = CORE.clamp(Number($('bpH').value) || bp.room.size.h, 1, 64);
     pushUndo(bp.room);
-    BP.resizeRoom(bp.room, w, h);
+    // el mínimo por blueprint RECHAZA, no recorta en silencio (T2)
+    const res = BP.resizeBlueprint(bp, w, h);
+    if (!res.ok) {
+      app.undoStack.pop();
+      refreshBpForm();
+      return setStatus('Tamaño rechazado: ' + res.reason + '.');
+    }
     refreshBpList(); invalidate();
     setStatus('Tamaño aplicado: ' + w + '×' + h + ' (contenido recentrado).');
+  });
+  // plantilla Reactor (OBJP-1.1 · T2): 6×6 con mínimo duro 5×5 y 100 TW
+  bind('bpNewReactor', () => {
+    const bp = BP.createReactorBlueprint({ name: 'Reactor ' + (app.station.moduleLibrary.filter(b => b.category === 'energia').length + 1) });
+    app.station.moduleLibrary.push(bp);
+    selectBp(bp.id);
+    setStatus('Reactor creado: 100 TW, mínimo 5×5 (la suite rechaza tamaños menores).');
   });
   bind('bpExport', () => {
     downloadJson('ugs_modulos.json', { moduleLibrary: app.station.moduleLibrary });
@@ -927,6 +942,17 @@
   resize();
   refreshSlots();
   refreshBpList();
+  // sub-selector de la herramienta Objeto, poblado desde el catálogo (T1).
+  // La consola NO entra aquí: tiene herramienta propia.
+  (function fillObjectSelector() {
+    const sel = $('objSel'); if (!sel || !window.UGS.objectsLib) return;
+    sel.innerHTML = '';
+    for (const o of window.UGS.objectsLib.options()) {
+      const opt = document.createElement('option');
+      opt.value = o.id; opt.textContent = o.name;
+      sel.appendChild(opt);
+    }
+  })();
   loadMusicPrefs();
   applyMusicPrefs();
   player.start();                 // suena en cuanto el navegador lo permita (unlock)

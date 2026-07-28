@@ -22,6 +22,8 @@ src/
     data.js           modelo: Estación → Nexo → Sala → Tile/Pared/Objeto (+contratos C1-C3),
                       blueprints de módulo, moduleLibrary, station.state
     save.js           persistencia JSON (formato v1, sin legacy)
+    objects_lib.js    catálogo data-driven de objetos decorativos (OBJP-1.1 T1);
+                      registra sus defs en data.js para que `solid` sobreviva al save
   engine/             [COMPONENTES LÓGICOS — juego]
     engine.js         runtime PRE-CARGADO POR NEXO (eventos declarativos de sala)
     nav.js            A* click→ruta (4-dir, determinista)
@@ -46,6 +48,8 @@ tests/
   station.test.js     capa estratégica: RNG, economía, módulos, hitos, expediciones
   blueprint.test.js   suite Dev: blueprints, ops de edición, puente a station.js
   audio.test.js       director musical: barajado, fundidos, crossfade, bucle infinito
+  objects.test.js     OBJP-1.1: catálogo de objetos + Reactor ≥5×5
+  toolbox.test.js     barra de herramientas: DRAG BOX, teclas, geometría
 ```
 
 El kit del equipo se referencia **in-situ** (cero duplicación binaria): `!_UGS/ux/` para la
@@ -60,7 +64,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (210 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (327 checks hoy; solo crece).
 
 ## Cómo correr
 

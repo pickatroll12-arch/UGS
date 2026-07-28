@@ -200,7 +200,7 @@
   <section id="secModules" style="display:none">
     <h3>BIBLIOTECA DE MÓDULOS</h3>
     <div id="bpList"></div>
-    <div class="row"><button id="bpNew">+ Nuevo módulo</button></div>
+    <div class="row"><button id="bpNew">+ Nuevo módulo</button><button id="bpNewReactor" title="Módulo de energía: 100 TW, mínimo 5×5">+ Reactor</button></div>
     <div id="bpForm" style="display:none">
       <h3 style="margin-top:10px">MÓDULO ACTIVO<img id="bpFormIcon" class="bpicon inline" src="" alt=""></h3>
       <label class="field">Nombre <input id="bpName" type="text"></label>
@@ -237,7 +237,7 @@
     <h3>OPCIONES DE HERRAMIENTA</h3>
     <label class="field">Suelo <select id="floorSel"><option value="deck">deck</option><option value="dark">dark</option><option value="light">light</option></select></label>
     <label class="field">Pared <select id="wallSel"><option value="block">block</option><option value="diagonal">diagonal</option><option value="rounded">rounded</option></select></label>
-    <label class="field">Objeto <select id="objSel"><option value="console">console</option><option value="door">door</option><option value="elevator">elevator</option><option value="plant">plant</option></select></label>
+    <label class="field">Objeto <select id="objSel" title="Catálogo de core/objects_lib.js"></select></label>
     <h3 style="margin-top:10px">ACCIONES DE SALA</h3>
     <div class="row"><button id="tRing">▢ Auto-bordes</button><button id="tClear">✕ Vaciar</button></div>
     <div class="row"><button id="tUndo">↩ Deshacer</button><button id="tRedo">↪ Rehacer</button></div>
@@ -260,6 +260,7 @@
 <script src="src/core/core.js"></script>
 <script src="src/core/rng.js"></script>
 <script src="src/core/data.js"></script>
+<script src="src/core/objects_lib.js"></script>
 <script src="src/core/save.js"></script>
 <script src="src/audio/music.js"></script>
 <script src="src/audio/player.js"></script>

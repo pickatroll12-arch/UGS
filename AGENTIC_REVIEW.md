@@ -921,3 +921,76 @@ render a los dos archivos del Rector.
 **Archivos afectados:** `BRIEF_CLAUDE_OBJP11.md` (nuevo), este documento.
 **Pruebas necesarias (humano):** ninguna todavía — habrá checklist por entrega.
 **Decisión pendiente:** firmas retroactivas OBJP-1.1 (3/3) en `Feedback humano`.
+
+
+### §6.22 — CLAUDE — OBJP-1.1 T1 (librería de objetos) + T2 (Reactor ≥5×5) — 2026-07-28
+**Observación:** ejecutado el `BRIEF_CLAUDE_OBJP11.md` (commit `9b9717f`) bajo el
+desbloqueo de OBJP-1.1 de §6.20. Respetada la frontera del split: NO se ha tocado
+`station.js`, `nav.js`, `render.js`, `render3d.js`, los wall kinds / OBJECT_DEFS base
+ni los tests de engine/station.
+
+**T1 — Librería de objetos (`src/core/objects_lib.js`, nuevo):** 12 defs de atrezo
+(cama, taquilla, mesa, silla, rack de datos, servidor, panel de control, luz de pared,
+contenedor, válvula, jardinera, planta) + `reactor_core` para T2. Datos puros, sin DOM,
+cargable en Node. Cada def trae `{id, name, footprint, h, colors{top,side}, colorKey,
+solid, cat}`. El sub-selector de la herramienta Objeto (tecla 6) se puebla del catálogo
+y muestra nombres legibles. **La consola sigue siendo herramienta dedicada (tecla 7) y
+está FUERA del catálogo**, con tres tests que lo vigilan (orden de -XONO).
+
+**PROBLEMA REAL ENCONTRADO Y RESUELTO — merece vuestra atención:** `normalizeRoom`
+reconstruye cada objeto desde su `type` con `OBJECT_DEFS`, así que **cualquier objeto de
+la librería volvía como SÓLIDO tras exportar/importar**, aunque naciera atravesable.
+Eso rompe el contrato C2 y el pathfinding de forma silenciosa: colocas una luz de pared,
+guardas, recargas, y el PCJ ya no puede pasar por ahí. Solución mínima y aditiva en
+`data.js`: `registerObjectDefs()` + `objectDef()` — un punto de extensión que la librería
+usa al cargarse y que **NUNCA pisa las defs base**. Es el único cambio que he hecho en
+`data.js` aparte del campo `minSize`, y no toca wall kinds ni OBJECT_DEFS base (terreno
+de K2). Con test de regresión de round-trip.
+
+**T2 — Reactor (`engine/blueprint.js`):** `createReactorBlueprint()` → módulo 6×6,
+categoría energía, `provides.energy = 100` TW, `energyUse = 0`, 1200 CRED, suelo técnico,
+anillo de paredes y núcleo en el centro. Botón **"+ Reactor"** junto a "+ Nuevo módulo".
+Mínimo duro **5×5** vía `minSize` (campo nuevo en `createModuleBlueprint`, viaja en el
+save): `resizeBlueprint()` **RECHAZA y explica**, no recorta en silencio — y el rechazo
+no deja basura en la pila de deshacer. El puente a la capa estratégica no se tocó:
+`toModuleDef()` ya lleva los 100 TW a `recompute()`.
+
+**INTEGRACIÓN PENDIENTE RECTOR:** las 12 defs traen `colors{top,side}` y `colorKey`
+('fabric', 'metal', 'tech', 'screen', 'light', 'cargo', 'organic', 'energy') pero
+`render.js`/`render3d.js` siguen dibujándolas con `COLORS.objTop/objSide` por defecto —
+todas se ven iguales. Falta el mapa colorKey→paleta y usar `h` como altura de extrusión
+(hoy todas se extruyen igual). Es tuyo por el split.
+
+**Evidencia:** `node tests/run.js` → **327 checks, ALL SUITES GREEN** (46 nuevos en
+`tests/objects.test.js`). Smoke en Chromium **15/15 verde**: selector poblado con 13
+opciones y nombres legibles, sin consola en la lista, colocación de `wall_lamp`
+respetando `solid:false`, la tecla 7 sigue colocando consola, botón + Reactor → 6×6 con
+100 TW y núcleo, **rechazo de 4×4 desde la UI con el motivo en pantalla**, aceptación de
+5×5, deshacer limpio, **cero errores de consola**.
+
+**Riesgo / lo que NO se probó:** el smoke corrió en **2D** — el CDN de three.js está
+bloqueado por el proxy de este entorno (403), así que no he visto los objetos nuevos
+sobre el renderer 3D; como hoy usan la paleta por defecto, no espero sorpresas, pero es
+deducción, no comprobación. La colocación **multi-tile no está implementada**: el esquema
+admite `footprint` mayor pero las 12 defs son 1×1 a propósito, y hay un test que impide
+declarar una def que la suite no sepa colocar. No hay iconos por objeto en el selector
+(solo texto). El `minSize` solo lo aplica la suite: `placeModule()` no lo revalida
+(no toqué station.js).
+
+**Archivos afectados:** `src/core/objects_lib.js` (nuevo), `tests/objects.test.js`
+(nuevo), `src/core/data.js` (registerObjectDefs/objectDef + minSize en blueprint),
+`src/engine/blueprint.js` (minSizeOf, resizeBlueprint, createReactorBlueprint),
+`src/app/app.js` (selector poblado, botón Reactor, guarda de resize), `index.html`
+(script + botón + selector vacío), `README.md`, este documento.
+
+**Pruebas necesarias (humano):** (1) Dev → tecla 6 y desplegar el selector: deben salir
+los 12 objetos con nombre; (2) colocar una "Luz de pared" y comprobar que el PCJ pasa por
+encima en modo Juego; (3) exportar la estación, reimportarla y **volver a comprobar que
+sigue pasando** (ese era el bug); (4) DISEÑAR MÓDULOS → "+ Reactor", intentar
+redimensionar a 4×4 (debe rechazar y decir por qué) y luego a 5×5 (debe aceptar);
+(5) exportar/importar la biblioteca y confirmar que el Reactor sigue rechazando 4×4;
+(6) confirmar que la tecla 7 sigue colocando consolas.
+
+**Decisión pendiente:** (1) ¿los 12 objetos son los que queríais o falta/sobra alguno?;
+(2) ¿coste del Reactor 1200 CRED y tamaño por defecto 6×6 os cuadran con el balance F1?;
+(3) ¿queréis iconos por objeto en el selector (habría que mapear el kit `IconD01-15`)?

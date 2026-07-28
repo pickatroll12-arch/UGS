@@ -46,6 +46,27 @@
     plant:    { type: 'plant',    solid: false, openable: false }
   };
 
+  /*
+   * Defs EXTRA registradas por catálogos externos (core/objects_lib.js).
+   * Existe para que `createObjectInstance` resuelva `solid` correctamente
+   * también al RELEER un save: normalizeRoom reconstruye cada objeto desde su
+   * `type`, así que sin este registro un objeto de la librería volvería como
+   * sólido por defecto y rompería el pathfinding (contrato C2).
+   * Nunca pisa las defs base: si el tipo ya existe, se ignora.
+   */
+  const EXTRA_OBJECT_DEFS = {};
+  function registerObjectDefs(defs) {
+    let n = 0;
+    for (const d of (Array.isArray(defs) ? defs : [])) {
+      if (!d || !d.type) continue;
+      if (OBJECT_DEFS[d.type] || EXTRA_OBJECT_DEFS[d.type]) continue;
+      EXTRA_OBJECT_DEFS[d.type] = { type: d.type, solid: !!d.solid, openable: !!d.openable };
+      n++;
+    }
+    return n;
+  }
+  const objectDef = (type) => OBJECT_DEFS[type] || EXTRA_OBJECT_DEFS[type] || null;
+
   // ---- constructores -------------------------------------------------------
   function createTile(floor) { return { floor: floor || 'deck', wall: null }; }
 
@@ -56,7 +77,7 @@
   }
 
   function createObjectInstance(type, x, y) {
-    const def = OBJECT_DEFS[type] || { type, solid: true, openable: false };
+    const def = objectDef(type) || { type, solid: true, openable: false };
     return { id: CORE.uid('obj'), type, x: x | 0, y: y | 0, rotation: 0, solid: def.solid, openable: def.openable, open: false };
   }
 
@@ -123,6 +144,13 @@
         pnjCapacity: Math.max(0, Number(p.pnjCapacity) | 0)
       },
       notes: String(opts.notes || ''),
+      // Tamaño mínimo de la sala del módulo. Algunos módulos no tienen sentido
+      // por debajo de cierta huella (el Reactor exige 5×5, OBJP-1.1 T2); viaja
+      // en el save para que la restricción sobreviva a export/import.
+      minSize: {
+        w: Math.max(1, Number(opts.minSize && opts.minSize.w) || 1),
+        h: Math.max(1, Number(opts.minSize && opts.minSize.h) || 1)
+      },
       room
     };
   }
@@ -247,6 +275,7 @@
   return {
     SAVE_FORMAT, NEXO_SLOTS, FLOORS, WALL_KINDS, OBJECT_DEFS,
     createTile, createWall, createObjectInstance, createRoomEvent, createRoom, createNexo, createLink, createStation, createState, ringWalls,
+    registerObjectDefs, objectDef,
     createModuleBlueprint, normalizeModuleBlueprint, normalizeModuleLibraryInput,
     normalizeWall, normalizeTile, normalizeRoom, normalizeNexo, normalizeStation, normalizeState
   };
