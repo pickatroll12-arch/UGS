@@ -28,6 +28,15 @@ function mkRoom(w = 6, h = 6) { return D.createRoom('R', w, h); }
 }
 {
   const r = mkRoom();
+  r.tiles[2][2].wall = D.createWall('bay', 0);
+  check('K2: muralla bay se crea y sigue bloqueando al PCJ (C1)', r.tiles[2][2].wall.kind === 'bay' && !NAV.walkable(r, 2, 2));
+  const fp = R.wallFootprintWorld(2.5, 2.5, 'bay', 0);
+  check('K2: bay tiene huella propia (4 puntos)', Array.isArray(fp) && fp.length === 4);
+  const w2 = D.normalizeWall({ kind: 'bay', orientation: 90 });
+  check('K2: normalizeWall conserva bay (save round-trip del kind)', w2.kind === 'bay');
+}
+{
+  const r = mkRoom();
   const door = D.createObjectInstance('door', 3, 1);
   r.objects.push(door);
   check('C2: puerta cerrada bloquea', !NAV.walkable(r, 3, 1));

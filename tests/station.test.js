@@ -178,5 +178,52 @@ function mkRoomAt(name, w, h, x, y) {
   check('save viejo sin state se repara', (() => { const b2 = S.deserialize(JSON.stringify({ name: 'x', nexos: [] })); return b2.state && b2.state.phase === 1 && b2.state.cred === 0; })());
 }
 
+// ---- energía TW: agregado, brownout y evento (K1 · OBJP-1.1) -------------------
+{
+  const bus = new CORE.EventBus();
+  const st = mkEngine(bus);
+  const s = mkStation(1000);
+  const nexo = s.nexos[0];   // sala main 12×9 en (0,0)
+  let boEvt = null;
+  bus.on('station:blackout', e => { boEvt = e.blackout; });
+  check('reactor aporta capacidad TW',
+    st.placeModule(s, nexo, 'gen', mkRoomAt('Gen', 4, 4, 12, 0)).ok && s.state.energy.capacity === 100);
+  check('módulo consumidor suma uso sin brownout',
+    st.placeModule(s, nexo, 'almacen', mkRoomAt('Alm', 4, 4, 16, 0)).ok && s.state.energy.used === 5 && !s.state.blackout);
+  // perder el reactor CON consumo activo (retirada como hace la app: splice + recompute)
+  s.state.modules = s.state.modules.filter(m => m.defId !== 'gen');
+  st.recompute(s);
+  check('perder el reactor → brownout + evento', s.state.blackout === true && boEvt === true);
+  const rt = S.deserialize(S.serialize(s));
+  check('blackout sobrevive al save', rt.state.blackout === true && rt.state.energy.used === 5);
+  const r = st.placeModule(s, nexo, 'almacen', mkRoomAt('A2', 4, 4, 12, 5));
+  check('gating: sin capacidad no se coloca consumo', !r.ok && r.reason === 'energía insuficiente');
+  s.state.modules = s.state.modules.filter(m => m.defId !== 'almacen');
+  st.recompute(s);
+  check('brownout se restablece al quitar consumo', s.state.blackout === false && boEvt === false && s.state.energy.used === 0);
+}
+
+// ---- hangar: capacidad de naves seteable (K2 · OBJP-1.1) ------------------------
+{
+  const st = mkEngine();
+  st.defineModule({ id: 'hangar', name: 'Hangar', cost: 0, free: true, energyUse: 10, provides: { shipCap: 2 } });
+  const s = mkStation(1000);
+  const nexo = s.nexos[0];
+  st.placeModule(s, nexo, 'gen', mkRoomAt('Gen', 4, 4, 12, 0));        // energía para el hangar
+  st.placeModule(s, nexo, 'hangar', mkRoomAt('Hangar', 8, 6, 12, 4));
+  const hroom = nexo.rooms.find(r => r.name === 'Hangar');
+  check('capacidad de naves desde provides.shipCap', st.shipCapacity(s, [nexo]) === 2);
+  const s1 = st.addShip(s, { capacity: 5 }, [nexo]);
+  const s2 = st.addShip(s, { capacity: 5 }, [nexo]);
+  check('dos naves caben en el hangar', s1 && s2 && s.state.ships.length === 2);
+  check('amarre asignado a la sala del hangar', s1.hangarRoomId === hroom.id);
+  check('sin amarre libre: tercera nave rechazada', st.addShip(s, {}, [nexo]) === null);
+  check('override por sala (seteable): shipCap=1', (() => { hroom.shipCap = 1; return st.shipCapacity(s, [nexo]) === 1; })());
+  hroom.shipCap = 2;
+  s.state.ships[0].state = 'out';
+  check('una nave fuera libera su amarre', st.freeBerth(s, [nexo]) !== null);
+  check('sin nexos (tests puros): addShip no gatea', !!st.addShip(s, { id: 'libre' }));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

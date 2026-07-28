@@ -38,12 +38,13 @@
     dark:  { id: 'dark',  color: '#39404d', line: '#3a4250' },
     light: { id: 'light', color: '#5d6880', line: '#5a6678' }
   };
-  const WALL_KINDS = ['block', 'diagonal', 'rounded'];
+  const WALL_KINDS = ['block', 'diagonal', 'rounded', 'bay'];   // bay: muralla de hangar (apertura para naves; C1 sigue bloqueando al PCJ)
   const OBJECT_DEFS = {
     console:  { type: 'console',  solid: true,  openable: false },
     door:     { type: 'door',     solid: true,  openable: true  },
     elevator: { type: 'elevator', solid: false, openable: false },   // viaje entre Nexos (OBJP-1)
-    plant:    { type: 'plant',    solid: false, openable: false }
+    plant:    { type: 'plant',    solid: false, openable: false },
+    ship:     { type: 'ship',     solid: false, openable: false }    // placeholder de nave en hangar (sync desde station.ships)
   };
 
   /*
@@ -211,6 +212,8 @@
     const room = createRoom(r && r.name, r && r.size && r.size.w, r && r.size && r.size.h);
     if (r && r.id) room.id = String(r.id);
     if (r && r.bpId) room.bpId = String(r.bpId);
+    if (r && r.hangar === true) room.hangar = true;                       // K2: marcador de hangar
+    if (r && typeof r.shipCap === 'number') room.shipCap = r.shipCap;     // K2: capacidad de naves (seteable)
     if (r && r.transform) room.transform = {
       x: Number(r.transform.x) || 0, y: Number(r.transform.y) || 0,
       rotation: ((Number(r.transform.rotation) || 0) % 360 + 360) % 360,
@@ -222,6 +225,7 @@
     room.objects = (r && Array.isArray(r.objects) ? r.objects : []).map(o => {
       const inst = createObjectInstance(o.type, o.x, o.y);
       if (o.id) inst.id = String(o.id);
+      if (o.shipId) inst.shipId = String(o.shipId);                       // K2: vínculo placeholder↔nave
       inst.rotation = ((Number(o.rotation) || 0) % 360 + 360) % 360;
       inst.open = !!o.open;
       return inst;

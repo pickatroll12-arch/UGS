@@ -201,6 +201,33 @@
   }
 
   function addWall(g, track, walls, room, x, y, wall) {
+    // muralla de hangar (K2 · OBJP-1.1): apertura oscura + marco luminoso
+    if (wall.kind === 'bay') {
+      const c00 = R2.localToWorld(room, x, y), c10 = R2.localToWorld(room, x + 1, y);
+      const c11 = R2.localToWorld(room, x + 1, y + 1), c01 = R2.localToWorld(room, x, y + 1);
+      const dark = track(mesh(new THREE.ShapeGeometry(new THREE.Shape(
+        [c00, c10, c11, c01].map(p => new THREE.Vector2(p.x, p.y)))),
+        mat('bayDark', () => new THREE.MeshBasicMaterial({ color: '#05070c', side: THREE.DoubleSide }))));
+      dark.position.set(0, 0, 0.005);
+      g.add(dark);
+      const post3 = (a, b, h) => {
+        const dx = b.x - a.x, dy = b.y - a.y, nl = Math.hypot(dx, dy) || 1;
+        const ox = -dy / nl * 0.045, oy = dx / nl * 0.045;
+        const shp = new THREE.Shape([
+          new THREE.Vector2(a.x + ox, a.y + oy), new THREE.Vector2(b.x + ox, b.y + oy),
+          new THREE.Vector2(b.x - ox, b.y - oy), new THREE.Vector2(a.x - ox, a.y - oy)
+        ]);
+        const m = track(mesh(new THREE.ExtrudeGeometry(shp, { depth: h, bevelEnabled: false }),
+          mat('bayFrame', () => new THREE.MeshBasicMaterial({ color: '#d8f4ff', side: THREE.DoubleSide }))));
+        g.add(m);
+      };
+      post3(c00, c10, WALL_H);
+      post3(c00, c01, WALL_H);
+      post3(c10, c11, WALL_H);
+      post3(c01, c11, 0.12);
+      // la apertura NO entra en el mapa de fades: una boca de hangar no se desvanece
+      return;
+    }
     const fpLocal = R2.wallFootprintWorld(x + 0.5, y + 0.5, wall.kind, wall.orientation);
     const wfp = fpLocal.map(p => R2.localToWorld(room, p.x, p.y));
     const shape = new THREE.Shape(wfp.map(p => new THREE.Vector2(p.x, p.y)));
@@ -245,7 +272,8 @@
     const OCOL = {
       door: o.open ? { top: '#3f6b52', side: 'rgb(42,74,56)' } : { top: '#5c6675', side: 'rgb(70,78,92)' },
       console: { top: '#3c4c5c', side: 'rgb(44,56,70)' },
-      plant: { top: '#4a6b44', side: 'rgb(58,84,52)' }
+      plant: { top: '#4a6b44', side: 'rgb(58,84,52)' },
+      ship: { top: '#3a4a5e', side: 'rgb(40,52,68)' }
     }[o.type] || { top: COLORS.objTop, side: 'rgb(56,64,78)' };
     const h = o.openable && o.open ? 0.1 : OBJ_H;
     // BoxGeometry: grupos 0-3 laterales, 4 = tapa (+z), 5 = base
@@ -255,10 +283,12 @@
     m.rotation.z = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;
     m.position.set(c.x, c.y, h / 2);
     g.add(m);
-    // tick luminoso superior
-    const tick = track(mesh(new THREE.PlaneGeometry(0.1, 0.05), basic(COLORS.objLine)));
-    tick.position.set(c.x, c.y, h + 0.005);
-    g.add(tick);
+    // tick luminoso superior (las naves no lo llevan, como en el 2D)
+    if (o.type !== 'ship') {
+      const tick = track(mesh(new THREE.PlaneGeometry(0.1, 0.05), basic(COLORS.objLine)));
+      tick.position.set(c.x, c.y, h + 0.005);
+      g.add(tick);
+    }
   }
 
   function rebuildStatic(nexo, cam, key) {
