@@ -40,8 +40,10 @@
   const station = window.UGS.station.create({ bus: engine.bus, rng });
   engine.bus.on('station:event', ({ id }) => setStatus('Evento de estación: ' + id));
   engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
-  engine.bus.on('station:expedition:done', ({ delivered }) => setStatus('Expedición de vuelta: ' + JSON.stringify(delivered)));
+  engine.bus.on('station:expedition:done', ({ delivered }) => { setStatus('Expedición de vuelta: ' + JSON.stringify(delivered)); syncShipObjects(); invalidate(); });
   engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
+  engine.bus.on('station:expedition:launch', () => { syncShipObjects(); invalidate(); });
+  engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); });
   engine.bus.on('station:blackout', ({ blackout }) => {
     const e = app.station.state.energy;
     setStatus(blackout ? '⚠ BROWNOUT: el consumo (' + e.used + ' TW) supera la capacidad (' + e.capacity + ' TW)' : 'Energía restablecida.');
@@ -369,6 +371,38 @@
     return out;
   }
 
+  // ---- hangar: placeholders de nave ↔ station.ships (K2 · OBJP-1.1) ------------
+  // Una nave amarrada (idle/damaged) tiene un objeto 'ship' en su sala de hangar;
+  // al zarpar desaparece (fuera de pantalla) y al volver reaparece.
+  function hangarRooms() {
+    const out = [];
+    for (const n of app.station.nexos) for (const r of n.rooms) if (r.hangar || typeof r.shipCap === 'number') out.push(r);
+    return out;
+  }
+  function syncShipObjects() {
+    const docked = app.station.state.ships.filter(sh => sh.state !== 'out');
+    const rooms = hangarRooms();
+    for (const r of rooms) r.objects = r.objects.filter(o => o.type !== 'ship' || docked.some(sh => sh.id === o.shipId));
+    for (const sh of docked) {
+      const room = rooms.find(r => r.id === sh.hangarRoomId) || rooms[0];
+      if (!room) continue;
+      if (room.objects.some(o => o.type === 'ship' && o.shipId === sh.id)) continue;
+      for (let y = 0; y < room.size.h; y++) {
+        let put = false;
+        for (let x = 0; x < room.size.w; x++) {
+          if (NAV.walkable(room, x, y) && !room.objects.some(o => o.x === x && o.y === y)) {
+            const obj = D.createObjectInstance('ship', x, y);
+            obj.shipId = sh.id;
+            room.objects.push(obj);
+            put = true;
+            break;
+          }
+        }
+        if (put) break;
+      }
+    }
+  }
+
   // ---- cámara RTS ----------------------------------------------------------
   function rotateCam(drot) {
     const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2;
@@ -507,7 +541,30 @@
       invalidate();
       return;
     }
-    if (k === 'q') rotateCam(-Math.PI / 2);            // C4: yaw en pasos de 90°
+    else if (k === 'b' && app.mode === 'dev') {
+      // ciclar el tipo de pared del pincel (incluye 'bay', la muralla de hangar)
+      const kinds = D.WALL_KINDS;
+      const i = (kinds.indexOf(app.brush.wallKind) + 1) % kinds.length;
+      app.brush.wallKind = kinds[i];
+      setStatus('Pared: ' + kinds[i] + (kinds[i] === 'bay' ? ' (muralla de hangar: apertura para naves)' : ''));
+    }
+    else if ((k === '[' || k === ']') && app.mode === 'dev') {
+      // capacidad de hangar seteable sobre la sala seleccionada/actual
+      const room = (app.selection && viewNexo().rooms.find(r => r.id === app.selection.roomId)) || currentEditRoom();
+      if (!room) return;
+      const cur = typeof room.shipCap === 'number' ? room.shipCap : 0;
+      const next = Math.max(0, cur + (k === ']' ? 1 : -1));
+      if (next === 0) { delete room.shipCap; delete room.hangar; setStatus(room.name + ' ya no es hangar.'); }
+      else { room.shipCap = next; room.hangar = true; setStatus(room.name + ': hangar con capacidad de ' + next + ' nave(s).'); }
+      syncShipObjects(); invalidate();
+    }
+    else if (k === 'n' && app.mode !== 'menu') {
+      const sh = station.addShip(app.station, { capacity: 5 }, app.station.nexos);
+      if (!sh) { setStatus('Sin amarre libre: marca capacidad de hangar en una sala con [ ].'); return; }
+      syncShipObjects(); invalidate();
+      setStatus('Nave amarrada (' + app.station.state.ships.length + '/' + station.shipCapacity(app.station, app.station.nexos) + ' amarres).');
+    }
+    else if (k === 'q') rotateCam(-Math.PI / 2);            // C4: yaw en pasos de 90°
     else if (k === 'e') rotateCam(Math.PI / 2);
     else if (k === 'escape') {
       if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); }
@@ -732,13 +789,13 @@
   }
   // ---- fps: contador en HUD + tope opcional ?fps=N ----------------------------
   // El juego NO tiene tope artificial: requestAnimationFrame sigue al refresco
-  // de la pantalla (60/120/144 Hz según el monitor). ?fps=N (24..240) limita
+  // de la pantalla (60/120/144 Hz según el monitor). ?fps=N (24-240) limita
   // por debajo del refresco nativo (p. ej. ahorro de batería).
   const FPS_CAP = (() => {
     const v = parseInt(new URLSearchParams(location.search).get('fps') || '0', 10);
     return v >= 24 && v <= 240 ? v : 0;
   })();
-  let fpsFrames = 0, fpsAt = performance.now(), fpsNow = 0, lastFrame = 0, hudFpsShown = -1;
+  let fpsFrames = 0, fpsAt = performance.now(), fpsNow = 0, lastFrame = 0, hudFpsShown = -1, shipSig = '';
   function hudText() {
     const view = viewNexo();
     const e = app.station.state.energy;
@@ -758,6 +815,13 @@
     // la música corre en TODOS los modos (menú incluido) y con dt real: es
     // presentación, no simulación — no pasa por el paso fijo del engine.
     player.update(dt);
+    // hangar: re-sync de placeholders si cambió algo (eventos, retiradas manuales)
+    if (app.mode !== 'menu') {
+      let ph = 0;
+      for (const n of app.station.nexos) for (const r of n.rooms) for (const o of r.objects) if (o.type === 'ship') ph++;
+      const sig = app.station.state.ships.length + ':' + app.station.state.ships.map(sh => sh.state).join(',') + ':' + ph;
+      if (sig !== shipSig) { shipSig = sig; syncShipObjects(); invalidate(); }
+    }
     if (app.mode === 'game' && !app.paused) {
       sim.advance(dt, (fdt) => { engine.update(nexo(), fdt); station.update(app.station, fdt); });
       if (engine.activeCount() > 0 || agents.pawns.some(p => p.moving)) invalidate();
@@ -949,6 +1013,7 @@
   const auto = qs.get('auto');
   setMode(auto === 'dev' || auto === 'game' ? auto : 'menu');
   if (auto === 'dev' && qs.get('sec') === 'modules') setDevSection('modules');
+  syncShipObjects();
   requestAnimationFrame(frame);
 
   // hook de depuración/tests
@@ -958,4 +1023,5 @@
   window.UGS._station = station;
   window.UGS._rng = rng;
   window.UGS._music = music;
+  window.UGS._player = player;
 })();
