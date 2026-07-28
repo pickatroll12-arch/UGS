@@ -210,10 +210,43 @@
       }
     }
 
-    // ---- expediciones (fuera de pantalla) -------------------------------------------
-    function addShip(station, ship) {
+    // ---- hangar: capacidad de naves (K2 · OBJP-1.1) ----------------------------------
+    // Una sala actúa de hangar si (a) su def declara provides.shipCap, o (b) tiene
+    // room.shipCap explícito (seteable en dev, viaja en el save; tiene prioridad).
+    function roomCapOf(room, s) {
+      if (!room) return 0;
+      if (typeof room.shipCap === 'number') return room.shipCap;
+      const m = s.modules.find(mm => mm.roomId === room.id);
+      const def = m && moduleDefs.get(m.defId);
+      return (def && def.provides && def.provides.shipCap) || 0;
+    }
+    function shipCapacity(station, nexos) {
       const s = ensure(station);
+      let cap = 0;
+      for (const n of (nexos || [])) for (const r of n.rooms) cap += roomCapOf(r, s);
+      return cap;
+    }
+    // primera sala de hangar con amarre libre (para asignar nave nueva)
+    function freeBerth(station, nexos) {
+      const s = ensure(station);
+      for (const n of (nexos || [])) {
+        for (const room of n.rooms) {
+          const cap = roomCapOf(room, s);
+          if (!cap) continue;
+          const docked = s.ships.filter(sh => sh.hangarRoomId === room.id && sh.state !== 'out').length;
+          if (docked < cap) return { roomId: room.id, room };
+        }
+      }
+      return null;
+    }
+
+    // ---- expediciones (fuera de pantalla) -------------------------------------------
+    function addShip(station, ship, nexos) {
+      const s = ensure(station);
+      if (nexos && s.ships.length >= shipCapacity(station, nexos)) return null;   // sin amarre libre
+      const berth = nexos ? freeBerth(station, nexos) : null;
       const sh = Object.assign({ id: CORE.uid('ship'), state: 'idle', capacity: 5, cargo: null }, ship);
+      if (berth && !sh.hangarRoomId) sh.hangarRoomId = berth.roomId;
       s.ships.push(sh);
       return sh;
     }
@@ -297,6 +330,7 @@
       hitoStatus, unlockHito, nexoLimit,
       rectsTouch, placeModule,
       addTimer, addShip, launchExpedition, repairShip,
+      shipCapacity, freeBerth,
       update
     };
   }
