@@ -38,12 +38,40 @@
   // sus eventos solo se anuncian en la barra de estado.
   const rng = window.UGS.rng.create('ugs-station');
   const station = window.UGS.station.create({ bus: engine.bus, rng });
+  // CONTENIDO F1 (OBJP-1.1 · K3+K4, relevados del Rector): árbol de hitos,
+  // módulos y ruta minera. Son DATOS — el runtime ya existe en station.js.
+  const F1 = window.UGS.contentF1;
+  if (F1) F1.register(station);
   engine.bus.on('station:event', ({ id }) => setStatus('Evento de estación: ' + id));
   engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
-  engine.bus.on('station:expedition:done', ({ delivered }) => { setStatus('Expedición de vuelta: ' + JSON.stringify(delivered)); syncShipObjects(); invalidate(); });
+  // Al volver, la carga se VENDE y entra como CRED (orden de -XONO): es la
+  // fuente de ingresos del juego. El almacén queda libre para el siguiente viaje.
+  engine.bus.on('station:expedition:done', ({ delivered }) => {
+    const sale = F1 ? F1.sellCargo(station, app.station, delivered) : { gross: 0, tax: 0, cred: 0, sold: {} };
+    const carga = Object.entries(sale.sold).map(([it, n]) => n + ' UD de ' + it).join(', ');
+    // El impuesto UGS se muestra SIEMPRE y por separado: el jugador tiene que
+    // ver quién le está cobrando (es el nombre del juego).
+    setStatus(sale.gross > 0
+      ? 'Venta: ' + carga + ' · ' + sale.gross + ' CRED brutos − ' + sale.tax +
+        ' de impuesto UGS = +' + sale.cred + ' CRED (saldo ' + app.station.state.cred + ')'
+      : 'Expedición de vuelta sin carga vendible.');
+    syncShipObjects(); invalidate();
+  });
   engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
   engine.bus.on('station:expedition:launch', () => { syncShipObjects(); invalidate(); });
+  // al colocar un módulo puede aparecer un hangar: las naves sin plaza la toman
+  engine.bus.on('station:module', () => { syncShipObjects(); invalidate(); });
   engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); });
+  // El runtime no reparte CRED/UD por hito: lo hace el contenido (applyRewards).
+  engine.bus.on('station:hito', ({ hitoId }) => {
+    if (!F1) return;
+    const def = F1.hitoById(hitoId);
+    const given = F1.applyRewards(station, app.station, hitoId);
+    const extra = [];
+    if (given.cred) extra.push('+' + given.cred + ' CRED');
+    for (const [it, n] of Object.entries(given.items)) extra.push('+' + n + ' UD de ' + it);
+    setStatus('Hito desbloqueado: ' + ((def && def.name) || hitoId) + (extra.length ? ' · ' + extra.join(' · ') : ''));
+  });
   engine.bus.on('station:blackout', ({ blackout }) => {
     const e = app.station.state.energy;
     setStatus(blackout ? '⚠ BROWNOUT: el consumo (' + e.used + ' TW) supera la capacidad (' + e.capacity + ' TW)' : 'Energía restablecida.');
@@ -174,8 +202,10 @@
     if (mode === 'game') {
       engine.start(nexo());
       spawnAtEntry();
+      ensureStarterShip();          // se empieza con una nave minera
+      syncShipObjects();
       app.paused = false;
-      setStatus('Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°');
+      setStatus('Click: caminar · puerta: abrir · ascensor: viajar · X expedir nave · Q/E rotar 90°');
     } else {
       engine.stop();
       agents.clear();
@@ -379,7 +409,68 @@
     for (const n of app.station.nexos) for (const r of n.rooms) if (r.hangar || typeof r.shipCap === 'number') out.push(r);
     return out;
   }
+  /*
+   * Expedición minera (K3): manda la primera nave libre a la veta. La salida y
+   * el retorno los gestiona el runtime; los placeholders del hangar se
+   * sincronizan solos por los eventos (K2 del Rector).
+   */
+  function launchMining() {
+    if (!F1) return;
+    const s = app.station.state;
+    if (!s.abilities.includes('expedicion_minera')) return setStatus('Aún no tienes la habilidad de expedición minera (hito Hangar).');
+    const ship = s.ships.find(sh => sh.state === 'idle');
+    if (!ship) {
+      const out = s.ships.filter(sh => sh.state === 'out').length;
+      const bad = s.ships.filter(sh => sh.state === 'damaged').length;
+      if (!s.ships.length) return setStatus('No hay naves amarradas en el hangar.');
+      return setStatus(out ? 'Todas las naves están fuera (' + out + ' en ruta).' : bad + ' nave(s) dañada(s): hay que repararlas.');
+    }
+    const route = F1.routeById('veta_k7');
+    const r = station.launchExpedition(app.station, 'veta_k7', ship.id);
+    if (!r.ok) return setStatus('No se pudo expedir: ' + r.reason + '.');
+    setStatus('Nave en ruta a ' + route.name + ' — ' + route.stages.length + ' etapas de sondeo.');
+  }
+  /* resumen de expediciones para el HUD (solo en juego) */
+  function expeditionHud() {
+    const s = app.station.state;
+    if (!F1 || !s.ships.length) return '';
+    const out = s.ships.filter(sh => sh.state === 'out');
+    if (out.length) {
+      const sh = out[0];
+      const route = F1.routeById(sh.routeId);
+      const total = route ? route.stages.length : 5;
+      return '  ⛏' + (route ? route.name : sh.routeId) + ' etapa ' + Math.min(sh.stage + 1, total) + '/' + total +
+        (out.length > 1 ? ' (+' + (out.length - 1) + ')' : '');
+    }
+    const bad = s.ships.filter(sh => sh.state === 'damaged').length;
+    if (bad) return '  ⛏' + bad + ' nave(s) dañada(s)';
+    return '  ⛏X: expedir nave';
+  }
+
+  /*
+   * Nave inicial (orden de -XONO): se empieza la partida con una extractora.
+   * Se añade SIN gating de amarre — al principio no hay hangar todavía — y
+   * `adoptHomelessShips` le asigna plaza en cuanto exista uno.
+   */
+  function ensureStarterShip() {
+    if (!F1) return;
+    const s = app.station.state;
+    if (s.ships.length) return;                       // save cargado: respeta sus naves
+    station.addShip(app.station, Object.assign({}, F1.STARTER_SHIP));
+  }
+  /* asigna hangar a las naves que aún no tienen plaza (p.ej. la inicial) */
+  function adoptHomelessShips() {
+    const s = app.station.state;
+    for (const sh of s.ships) {
+      if (sh.hangarRoomId || sh.state === 'out') continue;
+      const berth = station.freeBerth(app.station, app.station.nexos);
+      if (!berth) break;
+      sh.hangarRoomId = berth.roomId;
+    }
+  }
+
   function syncShipObjects() {
+    adoptHomelessShips();
     const docked = app.station.state.ships.filter(sh => sh.state !== 'out');
     const rooms = hangarRooms();
     for (const r of rooms) r.objects = r.objects.filter(o => o.type !== 'ship' || docked.some(sh => sh.id === o.shipId));
@@ -570,7 +661,9 @@
       if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); }
       app.pendingLink = null;
     }
-    else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°'); }
+    // X = expedir nave a la veta (K3). En juego, con una nave amarrada e idle.
+    else if (k === 'x' && app.mode === 'game') { e.preventDefault(); launchMining(); }
+    else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · X expedir nave · Q/E rotar 90°'); }
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
 
@@ -661,6 +754,8 @@
     } else if (g.tool === 'object' || g.tool === 'console') {
       // 'console' es un atajo de 'object' fijado al tipo consola: es la pieza
       // que se está construyendo ahora (sprite v3 + módulo screens).
+      // 'console' es herramienta dedicada (tecla 7) y NO está en el catálogo;
+      // 'object' (tecla 6) usa el sub-selector poblado desde core/objects_lib.
       const type = g.tool === 'console' ? 'console' : $('objSel').value;
       if (!NAV.walkable(room, g.x0, g.y0) || room.objects.some(o => o.x === g.x0 && o.y === g.y0)) return setStatus('Ahí no cabe el objeto.');
       pushUndo(room);
@@ -801,6 +896,7 @@
     const e = app.station.state.energy;
     const tw = ' · ⚡' + e.used + '/' + e.capacity + 'TW' + (app.station.state.blackout ? ' ¡BROWNOUT!' : '');
     return app.station.name + ' · ' + view.name + tw +
+      (app.mode === 'game' ? expeditionHud() : '') +
       (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
       '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
       (fxCanvas ? ' · 3D' : ' · 2D') + ' · ' + fpsNow + 'fps';
@@ -958,9 +1054,22 @@
     const w = CORE.clamp(Number($('bpW').value) || bp.room.size.w, 1, 64);
     const h = CORE.clamp(Number($('bpH').value) || bp.room.size.h, 1, 64);
     pushUndo(bp.room);
-    BP.resizeRoom(bp.room, w, h);
+    // el mínimo por blueprint RECHAZA, no recorta en silencio (T2)
+    const res = BP.resizeBlueprint(bp, w, h);
+    if (!res.ok) {
+      app.undoStack.pop();
+      refreshBpForm();
+      return setStatus('Tamaño rechazado: ' + res.reason + '.');
+    }
     refreshBpList(); invalidate();
     setStatus('Tamaño aplicado: ' + w + '×' + h + ' (contenido recentrado).');
+  });
+  // plantilla Reactor (OBJP-1.1 · T2): 6×6 con mínimo duro 5×5 y 100 TW
+  bind('bpNewReactor', () => {
+    const bp = BP.createReactorBlueprint({ name: 'Reactor ' + (app.station.moduleLibrary.filter(b => b.category === 'energia').length + 1) });
+    app.station.moduleLibrary.push(bp);
+    selectBp(bp.id);
+    setStatus('Reactor creado: 100 TW, mínimo 5×5 (la suite rechaza tamaños menores).');
   });
   bind('bpExport', () => {
     downloadJson('ugs_modulos.json', { moduleLibrary: app.station.moduleLibrary });
@@ -1004,6 +1113,17 @@
   resize();
   refreshSlots();
   refreshBpList();
+  // sub-selector de la herramienta Objeto, poblado desde el catálogo (T1).
+  // La consola NO entra aquí: tiene herramienta propia.
+  (function fillObjectSelector() {
+    const sel = $('objSel'); if (!sel || !window.UGS.objectsLib) return;
+    sel.innerHTML = '';
+    for (const o of window.UGS.objectsLib.options()) {
+      const opt = document.createElement('option');
+      opt.value = o.id; opt.textContent = o.name;
+      sel.appendChild(opt);
+    }
+  })();
   loadMusicPrefs();
   applyMusicPrefs();
   player.start();                 // suena en cuanto el navegador lo permita (unlock)
