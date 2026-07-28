@@ -54,6 +54,10 @@
    * `type`, así que sin este registro un objeto de la librería volvería como
    * sólido por defecto y rompería el pathfinding (contrato C2).
    * Nunca pisa las defs base: si el tipo ya existe, se ignora.
+   *
+   * `provides` (opcional) es lo que el OBJETO aporta al módulo que lo contiene
+   * — hoy solo TW, para el núcleo de reactor. Viaja aquí y no en el save: el
+   * save guarda qué objeto hay, el catálogo dice cuánto vale.
    */
   const EXTRA_OBJECT_DEFS = {};
   function registerObjectDefs(defs) {
@@ -61,12 +65,20 @@
     for (const d of (Array.isArray(defs) ? defs : [])) {
       if (!d || !d.type) continue;
       if (OBJECT_DEFS[d.type] || EXTRA_OBJECT_DEFS[d.type]) continue;
-      EXTRA_OBJECT_DEFS[d.type] = { type: d.type, solid: !!d.solid, openable: !!d.openable };
+      EXTRA_OBJECT_DEFS[d.type] = {
+        type: d.type, solid: !!d.solid, openable: !!d.openable,
+        provides: { energy: Math.max(0, Number(d.provides && d.provides.energy) | 0) }
+      };
       n++;
     }
     return n;
   }
   const objectDef = (type) => OBJECT_DEFS[type] || EXTRA_OBJECT_DEFS[type] || null;
+  // TW que aporta un objeto por sí mismo (0 si el tipo no aporta nada).
+  const objectEnergy = (type) => {
+    const def = objectDef(type);
+    return Math.max(0, Number(def && def.provides && def.provides.energy) | 0);
+  };
 
   // ---- constructores -------------------------------------------------------
   function createTile(floor) { return { floor: floor || 'deck', wall: null }; }
@@ -279,7 +291,7 @@
   return {
     SAVE_FORMAT, NEXO_SLOTS, FLOORS, WALL_KINDS, OBJECT_DEFS,
     createTile, createWall, createObjectInstance, createRoomEvent, createRoom, createNexo, createLink, createStation, createState, ringWalls,
-    registerObjectDefs, objectDef,
+    registerObjectDefs, objectDef, objectEnergy,
     createModuleBlueprint, normalizeModuleBlueprint, normalizeModuleLibraryInput,
     normalizeWall, normalizeTile, normalizeRoom, normalizeNexo, normalizeStation, normalizeState
   };

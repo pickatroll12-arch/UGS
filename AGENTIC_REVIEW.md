@@ -1425,3 +1425,78 @@ rectángulo; (3) X deshace, Y rehace; (4) decirme si el cursor va a buena veloci
 
 **Decisión pendiente:** (1) velocidad de cursor y zona muerta tras probarlo en mano;
 (2) ¿el mando debería navegar también el panel lateral?
+
+### §6.29 — CLAUDE — El Reactor pasa a ser OBJETO + la sala fantasma de la escena 3D — 2026-07-28
+**Observación de -XONO:** «el sistema de construccion se rompio con el reactor. **el
+reactor debe ser un objeto no una sala como tal**. se duplica la sala en todo.
+modulos/Nexo y no se auto ajusta el tamaño de modulo. queda permanenetmente duplicado.
+y lo peor **pierde la logica de desplazamiento (navegacion)**». Cuatro síntomas; **tres
+eran el mismo fallo**, y el cuarto es la orden de diseño.
+
+**LA SALA FANTASMA (causa de 3 de los 4 síntomas).** No era del sistema de construcción:
+el modelo estaba **siempre correcto**. Era `render/render3d.js`. Al terminar de cargar la
+hoja de consolas, el callback hacía `stat = null` para forzar la reconstrucción de la
+escena estática. **Soltar la referencia no saca el grupo de la escena**: three.js siguió
+dibujando aquella sala para siempre, y la siguiente reconstrucción añadió otra encima.
+De ahí, en cadena:
+- «se duplica la sala en todo. modulos/Nexo» → la sala congelada en el instante en que
+  cargó la textura se calca sobre **todas** las vistas: otros blueprints, el Nexo 1 y
+  hasta el Nexo 2 recién creado (captura 4 del reporte).
+- «queda permanentemente duplicado» → nada la quitaba nunca; sobrevivía a cambiar de
+  módulo, de sección y de nexo.
+- «no se auto ajusta el tamaño de modulo» → el módulo activo SÍ se encuadraba bien
+  (el HUD y el formulario decían la verdad: "Módulo 2 · 8×6"); lo que no encajaba era
+  el fantasma de 20×20 dibujado debajo.
+- «pierde la logica de desplazamiento» → el más grave y el más lógico: ese suelo **no
+  existe en el modelo**. El jugador clica un suelo que ve, el picking resuelve contra la
+  sala real, no hay tile, y el PCJ no se mueve. La navegación nunca se rompió; se
+  rompió lo que se estaba dibujando.
+
+**Arreglo:** toda entrada y salida de la escena pasa ahora por `swapGroup(scene, prev,
+next)`, única puerta, con un invariante: **como mucho un grupo vivo por ranura**, y
+`next = null` **vacía** la ranura (quita del grafo + libera geometrías) en vez de
+abandonarla. Es pura salvo por `scene.add/remove`, así que se testea en Node con dobles,
+sin three.js ni WebGL — `tests/render3d.test.js`, 19 checks, incluido el caso exacto que
+falló y una prueba de 20 reconstrucciones seguidas que exige 1 grupo en escena.
+
+**EL REACTOR ES UN OBJETO (orden de -XONO).** Retirada la plantilla de módulo-Reactor:
+fuera `createReactorBlueprint()` y fuera el botón **+ Reactor**. `reactor_core` sigue en
+el catálogo T1 y ahora **declara sus 100 TW** (`provides.energy`), que viajan por
+`registerObjectDefs` hasta `data.objectEnergy(type)`. `toModuleDef()` suma los TW del
+formulario **y** los de los núcleos colocados dentro, así que **cualquier** módulo se
+vuelve generador si le metes un núcleo y deja de serlo si lo borras. Los TW **no** viajan
+en el save (los pone el catálogo por tipo): reequilibrar el reactor no obliga a migrar
+saves viejos. El formulario muestra en vivo los TW derivados bajo "Provee energía".
+`minSize` se queda: es mecanismo genérico por blueprint, solo que ya no lo usa el reactor.
+
+**Encuadre al redimensionar.** Aparte del fantasma había un hueco real: `bpResize` no
+reencuadraba, así que pasar un módulo de 6×6 a 20×20 lo dejaba saliéndose de pantalla.
+Ahora llama a `centerOn(..., {fit:true})` como el resto de puntos de encuadre.
+
+**Evidencia:** `node tests/run.js` → **506 checks, ALL SUITES GREEN** (+23). Verificado
+además en Chromium con WebGL real reproduciendo el reporte (módulo 20×20 con 24 núcleos
++ módulo 8×6): la escena mantiene **siempre 2 grupos** (estático + marcadores) — antes
+eran 3 y crecía — y el grupo estático sigue al blueprint activo (192 hijos en el 20×20,
+120 en el 8×6, 254 en el Nexo). Navegación tras colocar un módulo: ruta de 14 pasos.
+Cero errores de consola.
+
+**Riesgo / lo que NO se probó:** el balance. 24 núcleos dan **2400 TW** porque no hay
+tope de núcleos por módulo; con el árbol de progreso a medias no me invento un límite
+—queda apuntado abajo—. Tampoco he podido reproducir el estado exacto del reporte desde
+un save de -XONO (no lo tengo): trabajé desde las cuatro capturas.
+
+**Archivos afectados:** `src/render/render3d.js` (swapGroup), `src/core/objects_lib.js`
+(TW del núcleo), `src/core/data.js` (`provides` en el registro + `objectEnergy`),
+`src/engine/blueprint.js` (fuera la plantilla, dentro `energyFromObjects`),
+`src/app/app.js` (fuera + Reactor, encuadre al redimensionar, lectura de TW),
+`index.html`, `tests/render3d.test.js` (nuevo), `tests/objects.test.js`,
+`GUIA_TESTERS.md`, `README.md`, este documento.
+
+**Pruebas necesarias (humano):** -XONO: (1) crear dos módulos de tamaños distintos y
+alternar entre ellos — no debe quedar rastro del anterior; (2) ir a Nexo y crear el
+Nexo 2 — deben verse limpios; (3) en Juego, clicar suelo y comprobar que el PCJ camina;
+(4) colocar un núcleo con la herramienta Objeto y ver subir los TW en el formulario.
+
+**Decisión pendiente:** (1) ¿tope de núcleos por módulo, o coste/consumo por núcleo que
+lo autolimite? (2) ¿los 100 TW por núcleo son la cifra buena para F1 (~63-70 TW de
+consumo)? Ambas dependen del árbol de progreso, que sigue en manos humanas.

@@ -106,6 +106,10 @@
   #devpanel label.check { display:flex; align-items:center; gap:7px; font-size:10px; color:var(--muted); margin-top:5px;
     font-family:var(--mono); letter-spacing:.05em; cursor:pointer; }
   #devpanel input[type=checkbox] { accent-color:var(--accent); clip-path:none; }
+  /* línea de lectura (no editable): valores DERIVADOS del diseño, p. ej. los
+     TW que aportan los núcleos de reactor colocados dentro del módulo */
+  #devpanel .hintline { margin:-2px 0 6px; padding-left:9px; font-size:9.5px; line-height:1.35; color:var(--accent);
+    font-family:var(--mono); letter-spacing:.05em; border-left:2px solid var(--line); }
 
   /* tarjetas (kit UX: ItemEnable/IconD — barra de estado inferior) */
   .card { position:relative; background:linear-gradient(var(--panel2), var(--panel3)); border:1px solid var(--line);
@@ -214,7 +218,7 @@
   <section id="secModules" style="display:none">
     <h3>BIBLIOTECA DE MÓDULOS</h3>
     <div id="bpList"></div>
-    <div class="row"><button id="bpNew">+ Nuevo módulo</button><button id="bpNewReactor" title="Módulo de energía: 100 TW, mínimo 5×5">+ Reactor</button></div>
+    <div class="row"><button id="bpNew">+ Nuevo módulo</button></div>
     <div id="bpForm" style="display:none">
       <h3 style="margin-top:10px">MÓDULO ACTIVO<img id="bpFormIcon" class="bpicon inline" src="" alt=""></h3>
       <label class="field">Nombre <input id="bpName" type="text"></label>
@@ -225,6 +229,7 @@
       <label class="field">Coste (CRED) <input id="bpCost" type="number" min="0" step="10"></label>
       <label class="field">Consumo (TW) <input id="bpEnergyUse" type="number" min="0" step="1"></label>
       <label class="field">Provee energía (TW) <input id="bpProvEnergy" type="number" min="0" step="10"></label>
+      <div id="bpObjEnergy" class="hintline" title="El núcleo de reactor es un OBJETO: colócalo con la herramienta Objeto y el módulo pasa a generar TW">sin núcleos de reactor dentro</div>
       <label class="field">Provee almacén (UD) <input id="bpProvStorage" type="number" min="0" step="5"></label>
       <label class="field">Provee PNJ (cap.) <input id="bpProvPnj" type="number" min="0" step="1"></label>
       <label class="field">Tamaño <span><input id="bpW" type="number" min="1" max="64" style="width:52px"> × <input id="bpH" type="number" min="1" max="64" style="width:52px"></span></label>
