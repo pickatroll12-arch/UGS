@@ -43,11 +43,15 @@
   const F1 = window.UGS.contentF1;
   if (F1) F1.register(station);
   engine.bus.on('station:event', ({ id }) => setStatus('Evento de estación: ' + id));
-  engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
+  engine.bus.on('station:phase', ({ phase }) => { setStatus('¡Fase ' + phase + ' alcanzada!'); renderGamePanel(); });
   // Al volver, la carga se VENDE y entra como CRED (orden de -XONO): es la
   // fuente de ingresos del juego. El almacén queda libre para el siguiente viaje.
   engine.bus.on('station:expedition:done', ({ delivered }) => {
-    const sale = F1 ? F1.sellCargo(station, app.station, delivered) : { gross: 0, tax: 0, cred: 0, sold: {} };
+    // Se vende TODO lo vendible del almacén, no solo lo recién llegado: la
+    // orden documentada es «el almacén queda libre para el siguiente viaje»
+    // (§6.24), y con venta solo-de-lo-entregado el regalo del hito Almacén
+    // (5 UD) se quedaba eternamente sin vender.
+    const sale = F1 ? F1.sellCargo(station, app.station, app.station.state.inventory) : { gross: 0, tax: 0, cred: 0, sold: {} };
     const carga = Object.entries(sale.sold).map(([it, n]) => n + ' UD de ' + it).join(', ');
     // El impuesto UGS se muestra SIEMPRE y por separado: el jugador tiene que
     // ver quién le está cobrando (es el nombre del juego).
@@ -55,13 +59,13 @@
       ? 'Venta: ' + carga + ' · ' + sale.gross + ' CRED brutos − ' + sale.tax +
         ' de impuesto UGS = +' + sale.cred + ' CRED (saldo ' + app.station.state.cred + ')'
       : 'Expedición de vuelta sin carga vendible.');
-    syncShipObjects(); invalidate();
+    syncShipObjects(); invalidate(); renderGamePanel();
   });
   engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
   engine.bus.on('station:expedition:launch', () => { syncShipObjects(); invalidate(); });
   // al colocar un módulo puede aparecer un hangar: las naves sin plaza la toman
-  engine.bus.on('station:module', () => { syncShipObjects(); invalidate(); });
-  engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); });
+  engine.bus.on('station:module', () => { syncShipObjects(); invalidate(); renderGamePanel(); });
+  engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); renderGamePanel(); });
   // El runtime no reparte CRED/UD por hito: lo hace el contenido (applyRewards).
   engine.bus.on('station:hito', ({ hitoId }) => {
     if (!F1) return;
@@ -71,6 +75,7 @@
     if (given.cred) extra.push('+' + given.cred + ' CRED');
     for (const [it, n] of Object.entries(given.items)) extra.push('+' + n + ' UD de ' + it);
     setStatus('Hito desbloqueado: ' + ((def && def.name) || hitoId) + (extra.length ? ' · ' + extra.join(' · ') : ''));
+    renderGamePanel();
   });
   engine.bus.on('station:blackout', ({ blackout }) => {
     const e = app.station.state.energy;
@@ -93,7 +98,8 @@
     drag: null,                      // gesto rect activo {tool, roomId, x0,y0,x1,y1}
     pendingLink: null,
     showConn: false,
-    placing: null,                   // colocación de módulo activa {bpId} (sección Nexo)
+    showPanel: true,                 // panel de FASE visible en modo Juego (GAP-UI-01)
+    placing: null,                   // colocación de módulo activa {bpId} (suite) o {defId} (juego)
     mouseWorld: null,                // última posición del ratón en coords de mundo
     paused: false,
     undoStack: [], redoStack: [], editKey: null
@@ -254,6 +260,7 @@
       ensureStarterShip();          // se empieza con una nave minera
       syncShipObjects();
       app.paused = false;
+      renderGamePanel();
       setStatus('Click: caminar · puerta: abrir · ascensor: viajar · X expedir nave · Q/E rotar 90°');
     } else {
       engine.stop();
@@ -643,7 +650,7 @@
       return;
     }
     // colocación de módulo activa: el click lo gestiona handleClick/drawPlacementGhost
-    if (app.placing && app.mode === 'dev') { app.drag = null; return; }
+    if (app.placing && app.mode !== 'menu') { app.drag = null; return; }
     // dev: botón izquierdo sobre una sala con herramienta = gesto de edición
     if (app.mode === 'dev' && e.button === 0) {
       const hit = R.pick(app.cam, viewNexo(), mouse.x, mouse.y);
@@ -688,6 +695,11 @@
     updateMouse(e);
     if (app.drag) { const g = app.drag; app.drag = null; applyGesture(g); invalidate(); return; }
     if (mouse.dragged) { mouse.dragged = false; return; }
+    // colocación activa en JUEGO: click derecho cancela (no hay retirada de
+    // módulos en partida; eso es edición y vive en la suite Dev)
+    if (app.placing && e.button === 2 && app.mode === 'game') {
+      app.placing = null; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); return;
+    }
     // colocación activa: click derecho retira un módulo colocado (nunca salas del nexo)
     if (app.placing && e.button === 2 && app.mode === 'dev') {
       const hit = R.pick(app.cam, nexo(), mouse.x, mouse.y);
@@ -1019,6 +1031,7 @@
 
   // ---- clicks por modo ------------------------------------------------------
   function handleClick(px, py) {
+    if (app.mode === 'game' && app.placing && app.placing.defId) return gamePlaceClick(px, py);
     if (app.mode === 'game') return gameClick(R.pick(app.cam, viewNexo(), px, py));
     // colocación de módulo: click izquierdo coloca si la posición es válida
     if (app.mode === 'dev' && app.placing) {
@@ -1052,6 +1065,142 @@
     invalidate();
   }
 
+  /*
+   * Colocación de módulos en MODO JUEGO (GAP-UI-01 · OBJP-1: "en modo juego
+   * solo se pueden comprar y conectar módulos"). El ghost valida la geometría
+   * (no-solape + arista compartida, placementCheck) y placeModule aplica las
+   * puertas de verdad: hito desbloqueado, CRED, energía y conexión física.
+   * La sala la genera blueprint.roomFromDef desde los datos del def (huella
+   * placeholder hasta que los módulos F1 se diseñen en la suite).
+   */
+  function gamePlaceClick(px, py) {
+    const def = F1 ? F1.moduleById(app.placing.defId) : null;
+    if (!def) { app.placing = null; syncPlacing(); return; }
+    const size = def.room || { w: 6, h: 6 };
+    const w = R.screenToWorld(app.cam, px, py);
+    const chk = BP.placementCheck(nexo(), size, { x: w.x - size.w / 2, y: w.y - size.h / 2 });
+    if (!chk.ok) return setStatus('No se puede colocar: ' + chk.reason + '.');
+    const room = BP.roomFromDef(def);
+    room.transform.x = chk.x; room.transform.y = chk.y;
+    const r = station.placeModule(app.station, nexo(), def.id, room);
+    if (!r.ok) return setStatus(def.name + ': ' + r.reason + '.');
+    const opened = BP.openSharedEdge(nexo(), room, chk.touch);
+    setStatus(def.name + ' colocado (' + (def.cost ? '−' + def.cost + ' CRED' : 'gratis') + ')' +
+      (opened ? ' · paso abierto' : '') + ' · click coloca otro · ESC sale');
+    renderGamePanel();
+    invalidate();
+  }
+
+  /*
+   * Panel de FASE en modo Juego (GAP-UI-01). Muestra los hitos de la fase
+   * actual con su estado (desbloqueado / coste / motivo de bloqueo) y los
+   * módulos que esos hitos hacen construibles, con coste y botón de
+   * colocación. Lenguaje de jugador: cero vocabulario de desarrollo.
+   */
+  function renderGamePanel() {
+    const el = $('gamepanel'); if (!el) return;
+    if (app.mode !== 'game' || !app.showPanel) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    el.innerHTML = '';
+    const s = app.station.state;
+    const H = document.createElement('h3');
+    H.textContent = 'FASE ' + s.phase + ' · ' + s.cred + ' CRED';
+    el.appendChild(H);
+    const hitos = (F1 ? F1.HITOS : []).filter(h => (h.phase || 1) === s.phase);
+    if (!hitos.length) {
+      const d = document.createElement('div'); d.className = 'hintline';
+      d.textContent = 'Fase ' + (s.phase - 1) + ' completada ✓ — el contenido de esta fase aún no está diseñado.';
+      el.appendChild(d);
+    }
+    for (const h of hitos) {
+      const row = document.createElement('div'); row.className = 'gprow';
+      const done = s.unlocked.includes(h.id);
+      const chk = done ? null : station.hitoStatus(app.station, h.id);
+      const grants = [];
+      for (const m of (h.grants.modules || [])) { const md = F1.moduleById(m); grants.push(md ? md.name : m); }
+      for (const a of (h.grants.abilities || [])) grants.push(a.replace(/_/g, ' '));
+      row.innerHTML = '<div class="t">' + (done ? '✓ ' : '') + h.name + '</div>' +
+        '<div class="s">' + (done ? 'desbloqueado'
+          : (chk.ok ? (h.cost ? h.cost + ' CRED' : 'gratis') : chk.reason) +
+            (grants.length ? ' · da: ' + grants.join(', ') : '')) + '</div>';
+      if (!done) {
+        const b = document.createElement('button');
+        b.textContent = chk.ok ? 'Desbloquear' + (h.cost ? ' (−' + h.cost + ')' : '') : 'Bloqueado';
+        b.disabled = !chk.ok;
+        b.addEventListener('click', () => {
+          const r = station.unlockHito(app.station, h.id);
+          if (!r.ok) setStatus('No se puede desbloquear ' + h.name + ': ' + r.reason + '.');
+          renderGamePanel(); invalidate();
+        });
+        row.appendChild(b);
+      }
+      el.appendChild(row);
+    }
+    const mods = F1 ? F1.MODULES.filter(m => (m.tier || 1) <= s.phase) : [];
+    if (mods.length) {
+      const h2 = document.createElement('h3'); h2.style.marginTop = '10px';
+      h2.textContent = 'MÓDULOS — COMPRAR Y CONECTAR';
+      el.appendChild(h2);
+      for (const m of mods) {
+        const row = document.createElement('div'); row.className = 'gprow';
+        const buildable = s.buildable.includes(m.id);
+        const prov = [];
+        if (m.provides.energy) prov.push('+' + m.provides.energy + ' TW');
+        if (m.provides.storage) prov.push('+' + m.provides.storage + ' UD almacén');
+        if (m.provides.shipCap) prov.push(m.provides.shipCap + ' amarres');
+        if (m.provides.pnjCapacity) prov.push('+' + m.provides.pnjCapacity + ' PNJ');
+        if (m.energyUse) prov.push('−' + m.energyUse + ' TW de consumo');
+        const placingThis = !!(app.placing && app.placing.defId === m.id);
+        row.innerHTML = '<div class="t">' + m.name + '</div>' +
+          '<div class="s">' + (buildable
+            ? (m.cost ? m.cost + ' CRED' : 'gratis') + (prov.length ? ' · ' + prov.join(' · ') : '')
+            : 'requiere hito') + '</div>';
+        if (buildable) {
+          const b = document.createElement('button');
+          b.textContent = placingThis ? '▣ Colocando… (ESC sale)' : 'Colocar';
+          b.classList.toggle('active', placingThis);
+          b.addEventListener('click', () => {
+            app.placing = placingThis ? null : { defId: m.id };
+            syncPlacing();
+            setStatus(placingThis ? 'Colocación cancelada.'
+              : m.name + ': elige dónde conectarlo al Nexo (debe compartir una arista). ESC cancela.');
+            invalidate();
+          });
+          row.appendChild(b);
+        }
+        el.appendChild(row);
+      }
+    }
+    // naves: estado y reparación (sin este botón, una nave dañada era
+    // soft-lock en modo Juego — no había UI para repararla)
+    const ships = s.ships || [];
+    if (ships.length) {
+      const h3 = document.createElement('h3'); h3.style.marginTop = '10px';
+      h3.textContent = 'NAVES';
+      el.appendChild(h3);
+      for (const sh of ships) {
+        const row = document.createElement('div'); row.className = 'gprow';
+        const route = sh.routeId && F1 ? F1.routeById(sh.routeId) : null;
+        const estado = sh.state === 'out'
+          ? 'en ruta — ' + (route ? route.name : sh.routeId) + ' · etapa ' + Math.min(sh.stage + 1, route ? route.stages.length : 5) + '/' + (route ? route.stages.length : 5)
+          : sh.state === 'damaged' ? 'DAÑADA — necesita reparación' : 'en hangar, lista';
+        row.innerHTML = '<div class="t">' + (sh.name || 'Nave') + '</div>' +
+          '<div class="s">' + estado + (sh.capacity ? ' · bodega ' + sh.capacity + ' UD' : '') + '</div>';
+        if (sh.state === 'damaged') {
+          const b = document.createElement('button');
+          b.textContent = 'Reparar';
+          b.addEventListener('click', () => {
+            const r = station.repairShip(app.station, sh.id, 0);
+            setStatus(r.ok ? (sh.name || 'Nave') + ' reparada y lista para salir.' : 'No se pudo reparar: ' + r.reason + '.');
+            renderGamePanel(); invalidate();
+          });
+          row.appendChild(b);
+        }
+        el.appendChild(row);
+      }
+    }
+  }
+
   // ---- overlay: frontera de conexión (los Nexos son conectores centrales) -------
   function drawConnOverlay() {
     if (!(app.mode === 'dev' && app.devSection === 'nexo' && app.showConn)) return;
@@ -1078,10 +1227,21 @@
 
   // ---- ghost de colocación de módulo (preview + validación en vivo) -------------
   function drawPlacementGhost() {
-    if (!(app.mode === 'dev' && app.devSection === 'nexo' && app.placing && app.mouseWorld)) return;
-    const bp = app.station.moduleLibrary.find(b => b.id === app.placing.bpId);
-    if (!bp) return;
-    const size = bp.room.size;
+    if (!(app.placing && app.mouseWorld)) return;
+    const isGame = app.mode === 'game' && app.placing.defId;
+    if (!(isGame || (app.mode === 'dev' && app.devSection === 'nexo' && app.placing.bpId))) return;
+    let size, label;
+    if (isGame) {
+      const def = F1 ? F1.moduleById(app.placing.defId) : null;
+      if (!def) return;
+      size = def.room || { w: 6, h: 6 };
+      label = def.name;
+    } else {
+      const bp = app.station.moduleLibrary.find(b => b.id === app.placing.bpId);
+      if (!bp) return;
+      size = bp.room.size;
+      label = bp.name;
+    }
     const chk = BP.placementCheck(nexo(), size, { x: app.mouseWorld.x - size.w / 2, y: app.mouseWorld.y - size.h / 2 });
     const col = chk.ok ? '126,217,87' : '239,98,98';
     const pts = [[0, 0], [size.w, 0], [size.w, size.h], [0, size.h]]
@@ -1105,7 +1265,7 @@
     }
     ctx.fillStyle = 'rgba(' + col + ',0.95)';
     ctx.font = '12px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    ctx.fillText(bp.name + ' ' + size.w + '×' + size.h + (chk.ok ? ' · conexión OK — click para colocar' : ' · ' + chk.reason), mouse.x + 14, mouse.y - 10);
+    ctx.fillText(label + ' ' + size.w + '×' + size.h + (chk.ok ? ' · conexión OK — click para colocar' : ' · ' + chk.reason), mouse.x + 14, mouse.y - 10);
     ctx.restore();
   }
 
@@ -1131,7 +1291,7 @@
     const e = app.station.state.energy;
     const tw = ' · ⚡' + e.used + '/' + e.capacity + 'TW' + (app.station.state.blackout ? ' ¡BROWNOUT!' : '');
     return app.station.name + ' · ' + view.name + tw +
-      (app.mode === 'game' ? expeditionHud() : '') +
+      (app.mode === 'game' ? ' · ' + app.station.state.cred + ' CRED' + expeditionHud() : '') +
       (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
       '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
       (fxCanvas ? ' · 3D' : ' · 2D') + ' · ' + fpsNow + 'fps';
@@ -1190,6 +1350,7 @@
   bind('mGame', () => setMode('game'));
   bind('tMenu', () => setMode('menu'));
   bind('tPlay', () => setMode(app.mode === 'game' ? 'dev' : 'game'));
+  bind('tFase', () => { app.showPanel = !app.showPanel; renderGamePanel(); invalidate(); });
   // música: mute + volumen (persistentes). El navegador bloquea el audio hasta
   // el primer gesto del usuario: por eso todo click/tecla reintenta el unlock.
   bind('muBtn', () => { musicMuted = !(musicMuted || musicVol === 0); if (!musicMuted && musicVol === 0) musicVol = 0.6; saveMusicPrefs(); applyMusicPrefs(); player.unlock(); });
