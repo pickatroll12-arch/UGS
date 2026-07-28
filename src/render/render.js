@@ -182,6 +182,27 @@
 
   // ---- paredes (extruidas) ---------------------------------------------------
   function drawWall(ctx, cam, room, x, y, wall, alpha) {
+    // muralla de hangar (K2 · OBJP-1.1): apertura oscura con marco luminoso —
+    // las naves entran/salen por aquí; el PCJ no la cruza (C1). Ref: imagen de -XONO.
+    if (wall.kind === 'bay') {
+      const c = (lx, ly, z) => { const w = localToWorld(room, lx, ly); return worldToScreen(cam, w.x, w.y, z); };
+      poly(ctx, [c(x, y, 0), c(x + 1, y, 0), c(x + 1, y + 1, 0), c(x, y + 1, 0)], '#05070c', 'rgba(10,12,16,0.6)');
+      const post2 = (a, b, h) => {
+        const dx = b.x - a.x, dy = b.y - a.y, nl = Math.hypot(dx, dy) || 1;
+        const ox = -dy / nl * 0.045, oy = dx / nl * 0.045;
+        extrude(ctx, cam, [
+          { x: a.x + ox, y: a.y + oy }, { x: b.x + ox, y: b.y + oy },
+          { x: b.x - ox, y: b.y - oy }, { x: a.x - ox, y: a.y - oy }
+        ].map(p => ({ x: p.x, y: p.y })), h, '#d8f4ff', [180, 220, 235], null, alpha, null);
+      };
+      const c00 = localToWorld(room, x, y), c10 = localToWorld(room, x + 1, y);
+      const c11 = localToWorld(room, x + 1, y + 1), c01 = localToWorld(room, x, y + 1);
+      post2(c00, c10, WALL_H);          // dintel norte
+      post2(c00, c01, WALL_H);          // poste oeste
+      post2(c10, c11, WALL_H);          // poste este
+      post2(c01, c11, 0.12);            // umbral sur (bajo: la nave rueda por encima)
+      return;
+    }
     // huella en espacio LOCAL del tile → localToWorld (sigue la rotación de la sala)
     const fpLocal = wallFootprintWorld(x + 0.5, y + 0.5, wall.kind, wall.orientation);
     const fp = fpLocal.map(p => localToWorld(room, p.x, p.y));
@@ -202,6 +223,7 @@
       case 'console': return { top: '#3c4c5c', side: [44, 56, 70] };
       case 'elevator': return { top: '#2c4a56', side: [36, 62, 72] };
       case 'plant': return { top: '#4a6b44', side: [58, 84, 52] };
+      case 'ship': return { top: '#3a4a5e', side: [40, 52, 68] };
       default: return { top: COLORS.objTop, side: COLORS.objSide };
     }
   }
@@ -289,7 +311,8 @@
     }));
     const col = objectColors(o);
     extrude(ctx, cam, fp, h, col.top, col.side, COLORS.wallLine, null);
-    // detalle: pantalla/tick luminoso en la cara superior
+    // detalle: pantalla/tick luminoso en la cara superior (las naves no lo llevan)
+    if (o.type === 'ship') return;
     const s = worldToScreen(cam, c.x, c.y, h);
     ctx.fillStyle = COLORS.objLine;
     ctx.fillRect(s.x - 3 * cam.zoom, s.y - 1.5 * cam.zoom, 6 * cam.zoom, 3 * cam.zoom);
