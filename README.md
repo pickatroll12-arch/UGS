@@ -24,6 +24,8 @@ src/
     save.js           persistencia JSON (formato v1, sin legacy)
     objects_lib.js    catálogo data-driven de objetos decorativos (OBJP-1.1 T1);
                       registra sus defs en data.js para que `solid` sobreviva al save
+    content_f1.js     CONTENIDO de la Fase 1: árbol de hitos, módulos y ruta minera
+                      veta_k7 (OBJP-1.1 K3+K4). Datos puros: el runtime está en station.js
   engine/             [COMPONENTES LÓGICOS — juego]
     engine.js         runtime PRE-CARGADO POR NEXO (eventos declarativos de sala)
     nav.js            A* click→ruta (4-dir, determinista)
@@ -49,6 +51,7 @@ tests/
   blueprint.test.js   suite Dev: blueprints, ops de edición, puente a station.js
   audio.test.js       director musical: barajado, fundidos, crossfade, bucle infinito
   objects.test.js     OBJP-1.1: catálogo de objetos + Reactor ≥5×5
+  content_f1.test.js  OBJP-1.1: árbol de fases F1 + expedición minera determinista
   toolbox.test.js     barra de herramientas: DRAG BOX, teclas, geometría
 ```
 
@@ -64,7 +67,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (327 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (404 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -113,6 +116,7 @@ para OBJP-2 y OBJP-1.1, sin funcionalidad hasta las 3 firmas.
 | Caminar (en juego) | click en un tile |
 | Abrir puerta (en juego) | click en la puerta |
 | Viajar de Nexo (en juego) | click en el ascensor (▣) |
+| Expedir nave a la veta (en juego) | `X` (requiere hito Hangar y una nave amarrada) |
 | Elegir herramienta (dev) | `1`…`9`, `0` o click en su rombo de la barra inferior |
 | **DRAG BOX** (dev) | arrastrar con Suelo `2` / Pared `3` / Borrar `4` |
 | Inspeccionar / retirar objeto (dev) | Seleccionar `1` + click · `Supr` retira |

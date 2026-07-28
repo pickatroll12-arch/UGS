@@ -923,6 +923,51 @@ render a los dos archivos del Rector.
 **Decisión pendiente:** firmas retroactivas OBJP-1.1 (3/3) en `Feedback humano`.
 
 
+### §6.21 — KIMI K3 (Rector) — K1/K2 entregados + RELEVO formal a Claude — 2026-07-27
+> **TRANSCRITO POR CLAUDE.** El Rector redactó esta entrada pero no pudo
+> escribirla en el repo (caída de su servidor). -XONO facilitó el log de la
+> sesión y se transcribe aquí para no perder la traza. El texto es de Kimi K3;
+> Claude solo lo copia y lo marca como transcripción.
+
+**Observación:** cerradas las dos primeras etapas del plan OBJP-1.1 (§6.20) y,
+por orden de -XONO, **el resto del trabajo del Rector (K3/K4) queda RELEVADO a
+Claude**, que además mantiene su T1/T2 del brief. Documento de relevo completo
+en `RELEVO_CLAUDE.md` (commit `6f965c2`): estado del repo, lo hecho, sus tareas
+con specs, decisiones humanas pendientes y lecciones de operación.
+**Entregado por el Rector (NO repetir):**
+- **K1 — Energía TW:** agregado capacidad/consumo con readout `⚡used/cap TW` en
+  HUD, evento `station:blackout` + marca ¡BROWNOUT! (se restablece con headroom;
+  persiste en save), gating de placeModule y **bug histórico corregido**: retirar
+  módulos (click derecho / borrar blueprint) no limpiaba `station.modules` →
+  energía fantasma. Commits `8ef60b8`, `db869e3`.
+- **K2 — Hangar:** wall kind `bay` (apertura oscura + marco luminoso según imagen
+  de -XONO; bloquea al PCJ como toda pared), objeto `ship` placeholder sin tick,
+  capacidad **room-first seteable** (`[`/`]` en dev sobre la sala;
+  `provides.shipCap` por def), `shipCapacity/freeBerth/addShip` gateado, sync
+  placeholders↔naves (tecla `n` amarra; eventos de expedición colocan/retiran),
+  persistencia `hangar/shipCap/shipId` en saves, ciclo de pared con tecla `b`.
+  Commits `113ac29`, `eaa2931`, `a12fdc6`, `8e7b5bf`, `2ba6938`, `c2c15b6`.
+**Evidencia:** clon limpio → **293 passed, ALL SUITES GREEN** (+6 energía,
++3 bay, +8 hangar). E2E real con teclas: `]`×2 (capacidad 2) → `n`×2 (2 naves
+amarradas con placeholder visible) → 3ª `n` rechazada ("Sin amarre libre").
+Smokes visuales de la muralla bay en 2D y 3D a 2-4 yaws, cero errores de consola.
+**Relevado a Claude (specs en RELEVO_CLAUDE.md §3-§4):** sus T1 (librería de
+objetos) y T2 (reactor ≥5×5) del brief original, más **K3** (ruta minera
+`veta_k7` 5 etapas con rendimiento decreciente + UI de lanzamiento) y **K4**
+(contenido del árbol de fases F1: Hangar→Almacén→Generador→Radar→Habitacional,
+grants y límite 4 ya en runtime). Claude registra §6.22+.
+**Riesgo:** ninguno estructural — K1/K2 quedan con tests propios. La muralla bay
+es placeholder visual (un frame por tile; una boca de N tiles se compone de
+marcos contiguos — aceptable hasta arte final).
+**Recomendación:** Claude sigue el flujo rama+PR y las lecciones de operación de
+`RELEVO_CLAUDE.md` §6 (verificación md5 post-push, sandbox volátil, palabra de
+seguridad solo para CLI_RECTOR_PUSH).
+**Archivos afectados:** `src/engine/station.js`, `src/core/data.js`,
+`src/render/render.js`, `src/render/render3d.js`, `src/app/app.js`,
+`tests/engine.test.js`, `tests/station.test.js`, `RELEVO_CLAUDE.md`,
+este documento.
+
+
 ### §6.22 — CLAUDE — OBJP-1.1 T1 (librería de objetos) + T2 (Reactor ≥5×5) — 2026-07-28
 **Observación:** ejecutado el `BRIEF_CLAUDE_OBJP11.md` (commit `9b9717f`) bajo el
 desbloqueo de OBJP-1.1 de §6.20. Respetada la frontera del split: NO se ha tocado
@@ -994,3 +1039,86 @@ redimensionar a 4×4 (debe rechazar y decir por qué) y luego a 5×5 (debe acept
 **Decisión pendiente:** (1) ¿los 12 objetos son los que queríais o falta/sobra alguno?;
 (2) ¿coste del Reactor 1200 CRED y tamaño por defecto 6×6 os cuadran con el balance F1?;
 (3) ¿queréis iconos por objeto en el selector (habría que mapear el kit `IconD01-15`)?
+
+
+### §6.23 — CLAUDE — OBJP-1.1 K3 (ruta minera) + K4 (árbol F1), relevados del Rector — 2026-07-28
+**Observación:** ejecutadas las tareas que `RELEVO_CLAUDE.md` §4 me traspasa.
+Todo el contenido va en un archivo NUEVO de datos puros `src/core/content_f1.js`
+(la opción que el propio relevo prefería). **No se ha tocado `station.js`**: el
+runtime ya existía y solo se le da de comer.
+
+**K4 — Árbol de fases F1:** los 5 hitos del mapa mental §6.4 encadenados —
+Hangar → Almacén(30 UD) → Generador(100 TW) → Radar → Habitacional(12 PNJ) —
+cada uno requiriendo el anterior, con `grants.modules` que los hacen
+construibles y habilidades (`expedicion_minera`, `detectar_vetas`,
+`asignar_roles`). Al desbloquear el quinto, el runtime avanza a Fase 2.
+
+**K3 — Ruta minera `veta_k7`:** 5 etapas × 60 s con rendimiento decreciente
+1.00 / 0.65 / 0.40 / 0.25 / 0.15 (mapa mental), 3-5 UD de mineral por etapa
+lograda, `failChance 0.1`. **UI de lanzamiento:** tecla **X** en modo juego manda
+la primera nave libre; el HUD muestra `⛏Veta K-7 etapa 2/5` mientras está fuera,
+y avisa si hay naves dañadas. Cuando no se puede expedir, dice POR QUÉ (sin
+habilidad / sin naves / todas fuera / dañadas), nunca falla en silencio.
+
+**DOS PROBLEMAS DE DISEÑO QUE ENCONTRÉ Y QUE NECESITAN DECISIÓN HUMANA:**
+
+1. **El orden del mapa mental choca con la energía.** La estación arranca con
+   `capacity = 0` y `placeModule` rechaza todo lo que consuma. Como Hangar y
+   Almacén van ANTES del Generador en la cadena, si consumieran TW **nadie
+   podría colocarlos** y F1 quedaría bloqueada en el primer paso. Los he
+   declarado PASIVOS (0 TW), así que el consumo de F1 queda en **35 TW**
+   (Radar 15 + Habitacional 20) de los 100 del Generador — **por debajo de los
+   63-70 TW que dice el mapa mental**. Alternativa si preferís esa cifra: mover
+   el Generador al primer hito y devolverle consumo a Hangar/Almacén. Es
+   cambiar dos números en `content_f1.js`, cero motor.
+
+2. **F1 todavía NO es completable económicamente.** Coste total: 1100 CRED de
+   hitos + 2100 CRED de módulos = **3200 CRED**. Ingresos existentes: **0**. La
+   minería entrega mineral en **UD**, y la cadena de procesamiento del mapa
+   mental (base 100 → procesado 250 → enriquecido 500 CRED) **no existe en el
+   runtime**: no hay forma de convertir UD en CRED. Con los tests pongo CRED a
+   mano; un jugador real se quedaría atascado tras el primer hito (que por eso
+   cuesta 0). Hace falta decidir: ¿vender mineral a precio fijo, la cadena de
+   procesamiento completa, o CRED inicial de partida? Yo no lo he inventado
+   porque es diseño y toca `station.js`, que no es mío.
+
+**Además:** el runtime de `unlockHito` solo aplica `grants.modules` y
+`grants.abilities` — **CRED y UD los ignora**. Para no declarar premios que
+nadie entrega, las recompensas viven en `content_f1.applyRewards()` (función
+pura, testeable) y app.js la llama al oír `station:hito`.
+
+**Evidencia:** `node tests/run.js` → **404 checks, ALL SUITES GREEN** (60 nuevos
+en `tests/content_f1.test.js`: cadena y completabilidad de F1, avance de fase,
+el orden energético que permite construir, probabilidades exactas de la ruta,
+expedición completa **determinista** — misma semilla, mismo mineral y mismo
+tiempo —, rechazos de lanzamiento, recompensas). Smoke en Chromium **20/20
+verde**: registro al arranque, X sin habilidad avisa, cadena de 5 hitos con
+avance a Fase 2, colocación de generador/almacén/hangar, amarre de nave,
+**X lanza y el HUD marca la etapa**, X con la nave fuera avisa, expedición
+completa en 300 s entregando 8 UD en el almacén, **cero errores de consola**.
+
+**Riesgo / lo que NO se probó:** el smoke corrió en **2D** (el CDN de three.js
+sigue bloqueado por el proxy de este entorno, 403) — no he visto nada de esto
+sobre el renderer 3D. La UI de expedición es **una tecla**, no un panel: sin
+lista de naves ni de rutas, y con una sola ruta no hace falta elegir. No he
+probado a mano el ciclo completo con reparación de nave dañada (sí por test).
+El balance de CRED/coste es mío y está sin validar por vosotros.
+
+**Archivos afectados:** `src/core/content_f1.js` (nuevo),
+`tests/content_f1.test.js` (nuevo), `src/app/app.js` (registro, recompensas por
+bus, tecla X, HUD de expedición), `index.html` (script), `README.md`,
+este documento (§6.21 transcrita + esta entrada).
+
+**Pruebas necesarias (humano):** (1) Juego → pulsar X sin nada: debe explicar
+que falta el hito; (2) desbloquear la cadena y colocar Generador + Almacén +
+Hangar; (3) amarrar nave con `n` y pulsar **X**: el HUD debe marcar
+`⛏Veta K-7 etapa N/5`; (4) esperar (o acelerar) hasta el retorno y ver el
+mineral en el almacén; (5) volver a pulsar X con la nave fuera: debe avisar;
+(6) comprobar que al completar los 5 hitos la fase pasa a 2.
+
+**Decisión pendiente (las tres importantes):** (1) **¿de dónde salen los CRED?**
+— sin esto F1 no se puede terminar jugando; (2) ¿balance energético 35 TW como
+está, o movemos el Generador al primer hito para llegar a los 63-70 del mapa?;
+(3) ¿la expedición se queda en la tecla X o queréis un panel de naves/rutas?
+**Sigue pendiente de §6.20:** las firmas retroactivas 3/3 de OBJP-1.1 en
+`Feedback humano`.

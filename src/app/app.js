@@ -44,6 +44,20 @@
   engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
   engine.bus.on('station:expedition:launch', () => { syncShipObjects(); invalidate(); });
   engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); });
+  // CONTENIDO F1 (OBJP-1.1 · K3+K4, relevados del Rector): árbol de hitos,
+  // módulos y ruta minera. Son DATOS — el runtime ya existe en station.js.
+  const F1 = window.UGS.contentF1;
+  if (F1) F1.register(station);
+  // El runtime no reparte CRED/UD por hito: lo hace el contenido (applyRewards).
+  engine.bus.on('station:hito', ({ hitoId }) => {
+    if (!F1) return;
+    const def = F1.hitoById(hitoId);
+    const given = F1.applyRewards(station, app.station, hitoId);
+    const extra = [];
+    if (given.cred) extra.push('+' + given.cred + ' CRED');
+    for (const [it, n] of Object.entries(given.items)) extra.push('+' + n + ' UD de ' + it);
+    setStatus('Hito desbloqueado: ' + ((def && def.name) || hitoId) + (extra.length ? ' · ' + extra.join(' · ') : ''));
+  });
   engine.bus.on('station:blackout', ({ blackout }) => {
     const e = app.station.state.energy;
     setStatus(blackout ? '⚠ BROWNOUT: el consumo (' + e.used + ' TW) supera la capacidad (' + e.capacity + ' TW)' : 'Energía restablecida.');
@@ -379,6 +393,44 @@
     for (const n of app.station.nexos) for (const r of n.rooms) if (r.hangar || typeof r.shipCap === 'number') out.push(r);
     return out;
   }
+  /*
+   * Expedición minera (K3): manda la primera nave libre a la veta. La salida y
+   * el retorno los gestiona el runtime; los placeholders del hangar se
+   * sincronizan solos por los eventos (K2 del Rector).
+   */
+  function launchMining() {
+    if (!F1) return;
+    const s = app.station.state;
+    if (!s.abilities.includes('expedicion_minera')) return setStatus('Aún no tienes la habilidad de expedición minera (hito Hangar).');
+    const ship = s.ships.find(sh => sh.state === 'idle');
+    if (!ship) {
+      const out = s.ships.filter(sh => sh.state === 'out').length;
+      const bad = s.ships.filter(sh => sh.state === 'damaged').length;
+      if (!s.ships.length) return setStatus('No hay naves amarradas en el hangar.');
+      return setStatus(out ? 'Todas las naves están fuera (' + out + ' en ruta).' : bad + ' nave(s) dañada(s): hay que repararlas.');
+    }
+    const route = F1.routeById('veta_k7');
+    const r = station.launchExpedition(app.station, 'veta_k7', ship.id);
+    if (!r.ok) return setStatus('No se pudo expedir: ' + r.reason + '.');
+    setStatus('Nave en ruta a ' + route.name + ' — ' + route.stages.length + ' etapas de sondeo.');
+  }
+  /* resumen de expediciones para el HUD (solo en juego) */
+  function expeditionHud() {
+    const s = app.station.state;
+    if (!F1 || !s.ships.length) return '';
+    const out = s.ships.filter(sh => sh.state === 'out');
+    if (out.length) {
+      const sh = out[0];
+      const route = F1.routeById(sh.routeId);
+      const total = route ? route.stages.length : 5;
+      return '  ⛏' + (route ? route.name : sh.routeId) + ' etapa ' + Math.min(sh.stage + 1, total) + '/' + total +
+        (out.length > 1 ? ' (+' + (out.length - 1) + ')' : '');
+    }
+    const bad = s.ships.filter(sh => sh.state === 'damaged').length;
+    if (bad) return '  ⛏' + bad + ' nave(s) dañada(s)';
+    return '  ⛏X: expedir nave';
+  }
+
   function syncShipObjects() {
     const docked = app.station.state.ships.filter(sh => sh.state !== 'out');
     const rooms = hangarRooms();
@@ -570,7 +622,9 @@
       if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); setStatus('Colocación cancelada.'); invalidate(); }
       app.pendingLink = null;
     }
-    else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°'); }
+    // X = expedir nave a la veta (K3). En juego, con una nave amarrada e idle.
+    else if (k === 'x' && app.mode === 'game') { e.preventDefault(); launchMining(); }
+    else if (k === ' ' && app.mode === 'game') { e.preventDefault(); app.paused = !app.paused; setStatus(app.paused ? 'Pausa' : 'Click: caminar · puerta: abrir · ascensor: viajar · X expedir nave · Q/E rotar 90°'); }
   });
   window.addEventListener('resize', () => { resize(); invalidate(); });
 
@@ -803,6 +857,7 @@
     const e = app.station.state.energy;
     const tw = ' · ⚡' + e.used + '/' + e.capacity + 'TW' + (app.station.state.blackout ? ' ¡BROWNOUT!' : '');
     return app.station.name + ' · ' + view.name + tw +
+      (app.mode === 'game' ? expeditionHud() : '') +
       (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
       '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
       (fxCanvas ? ' · 3D' : ' · 2D') + ' · ' + fpsNow + 'fps';
