@@ -108,8 +108,14 @@ function pad(opts) {
   check('A confirma en ambos modos',
     GP.actionFor('a', 'game') === 'click' && GP.actionFor('a', 'dev') === 'click');
   check('B cancela', GP.actionFor('b', 'game') === 'cancel');
-  check('X expide nave SOLO en juego',
-    GP.actionFor('x', 'game') === 'expedite' && GP.actionFor('x', 'dev') === null);
+  check('X expide en juego y deshace en dev (ningún botón muerto)',
+    GP.actionFor('x', 'game') === 'expedite' && GP.actionFor('x', 'dev') === 'undo');
+  check('Y pausa en juego y rehace en dev',
+    GP.actionFor('y', 'game') === 'pause' && GP.actionFor('y', 'dev') === 'redo');
+  // ningún botón de "letra" puede quedarse sin acción en ningún modo: fue el
+  // fallo reportado desde el Odin 2 real ("funciona todo menos las letras")
+  check('A/B/X/Y hacen algo en LOS DOS modos',
+    ['a','b','x','y'].every(k => GP.actionFor(k,'game') && GP.actionFor(k,'dev')));
   check('el d-pad cambia de herramienta SOLO en dev',
     GP.actionFor('left', 'dev') === 'toolPrev' && GP.actionFor('left', 'game') === null);
   check('los bumpers rotan la cámara en ambos modos',

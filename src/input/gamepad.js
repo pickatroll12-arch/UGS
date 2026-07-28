@@ -129,8 +129,8 @@
   const ACTIONS = {
     a:     { game: 'click',     dev: 'click',      desc: 'Confirmar / caminar / colocar' },
     b:     { game: 'cancel',    dev: 'cancel',     desc: 'Cancelar (ESC)' },
-    x:     { game: 'expedite',  dev: null,         desc: 'Expedir nave a la veta' },
-    y:     { game: 'pause',     dev: null,         desc: 'Pausa' },
+    x:     { game: 'expedite',  dev: 'undo',       desc: 'Juego: expedir nave · Dev: deshacer' },
+    y:     { game: 'pause',     dev: 'redo',       desc: 'Juego: pausa · Dev: rehacer' },
     lb:    { game: 'rotL',      dev: 'rotL',       desc: 'Rotar vista −90°' },
     rb:    { game: 'rotR',      dev: 'rotR',       desc: 'Rotar vista +90°' },
     lt:    { game: 'zoomOut',   dev: 'zoomOut',    desc: 'Alejar' },

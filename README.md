@@ -73,7 +73,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (481 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (483 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -121,10 +121,10 @@ Se detecta solo al conectarlo.
 |---|---|
 | Stick izq | mover cursor |
 | Stick der | paneo de cámara |
-| A | confirmar / caminar / colocar |
+| A | confirmar / caminar · **Dev: mantener + stick = DRAG BOX** |
 | B | cancelar (ESC) |
-| X | expedir nave a la veta (en juego) |
-| Y | pausa |
+| X | Juego: expedir nave · **Dev: deshacer** |
+| Y | Juego: pausa · **Dev: rehacer** |
 | LB / RB | rotar vista ∓90° |
 | LT / RT | alejar / acercar |
 | D-pad ← → | herramienta anterior / siguiente (en Dev) |
