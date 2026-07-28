@@ -65,6 +65,7 @@
       if (!s.seed) s.seed = 'ugs-station';
       if (typeof s.phase !== 'number') s.phase = 1;
       if (!s.energy) s.energy = { capacity: 0, used: 0 };
+      if (typeof s.blackout !== 'boolean') s.blackout = s.energy.used > s.energy.capacity;
       if (!s.inventory) s.inventory = {};
       if (typeof s.storageCap !== 'number') s.storageCap = 0;
       if (!s.pnj) s.pnj = { count: 1, capacity: 0 };
@@ -127,7 +128,9 @@
       }
       s.energy.capacity = cap; s.energy.used = used;
       s.storageCap = storage; s.pnj.capacity = pnjCap;
+      const was = !!s.blackout;
       s.blackout = used > cap;
+      if (s.blackout !== was) emit('station:blackout', { station, blackout: s.blackout });
       return s;
     }
 

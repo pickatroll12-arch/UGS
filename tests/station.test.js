@@ -178,5 +178,30 @@ function mkRoomAt(name, w, h, x, y) {
   check('save viejo sin state se repara', (() => { const b2 = S.deserialize(JSON.stringify({ name: 'x', nexos: [] })); return b2.state && b2.state.phase === 1 && b2.state.cred === 0; })());
 }
 
+// ---- energía TW: agregado, brownout y evento (K1 · OBJP-1.1) -------------------
+{
+  const bus = new CORE.EventBus();
+  const st = mkEngine(bus);
+  const s = mkStation(1000);
+  const nexo = s.nexos[0];   // sala main 12×9 en (0,0)
+  let boEvt = null;
+  bus.on('station:blackout', e => { boEvt = e.blackout; });
+  check('reactor aporta capacidad TW',
+    st.placeModule(s, nexo, 'gen', mkRoomAt('Gen', 4, 4, 12, 0)).ok && s.state.energy.capacity === 100);
+  check('módulo consumidor suma uso sin brownout',
+    st.placeModule(s, nexo, 'almacen', mkRoomAt('Alm', 4, 4, 16, 0)).ok && s.state.energy.used === 5 && !s.state.blackout);
+  // perder el reactor CON consumo activo (retirada como hace la app: splice + recompute)
+  s.state.modules = s.state.modules.filter(m => m.defId !== 'gen');
+  st.recompute(s);
+  check('perder el reactor → brownout + evento', s.state.blackout === true && boEvt === true);
+  const rt = S.deserialize(S.serialize(s));
+  check('blackout sobrevive al save', rt.state.blackout === true && rt.state.energy.used === 5);
+  const r = st.placeModule(s, nexo, 'almacen', mkRoomAt('A2', 4, 4, 12, 5));
+  check('gating: sin capacidad no se coloca consumo', !r.ok && r.reason === 'energía insuficiente');
+  s.state.modules = s.state.modules.filter(m => m.defId !== 'almacen');
+  st.recompute(s);
+  check('brownout se restablece al quitar consumo', s.state.blackout === false && boEvt === false && s.state.energy.used === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
