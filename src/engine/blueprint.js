@@ -190,16 +190,22 @@
   // ---- puente blueprint → capa estratégica --------------------------------------
   // Def compatible con engine/station.js defineModule(): los campos extra
   // (layout, category, notes) viajan como datos y no molestan al runtime.
-  // La energía declarada a mano en el formulario y la que aportan los núcleos
-  // colocados dentro SUMAN: un módulo puede ser generador por diseño, por
-  // contenido, o por ambos.
+  /*
+   * La def lleva SOLO la energía declarada a mano en el formulario. Los TW de
+   * los núcleos NO se meten aquí a propósito: los cuenta la INSTANCIA colocada
+   * (station.attachModule → objEnergy), leyendo su propia sala. Sumarlos en los
+   * dos sitios los contaba dos veces, y además la sala colocada puede divergir
+   * del blueprint (se le añaden o quitan núcleos después de colocarla), así que
+   * la instancia es la única fuente honesta. `energyFromObjects` sigue
+   * existiendo para la vista previa del formulario en la suite.
+   */
   function toModuleDef(bp) {
     return {
       id: bp.id, name: bp.name,
       cost: Math.max(0, Number(bp.cost) | 0),
       energyUse: Math.max(0, Number(bp.energyUse) | 0),
       provides: {
-        energy: Math.max(0, Number(bp.provides && bp.provides.energy) | 0) + energyFromObjects(bp.room),
+        energy: Math.max(0, Number(bp.provides && bp.provides.energy) | 0),
         storage: Math.max(0, Number(bp.provides && bp.provides.storage) | 0),
         pnjCapacity: Math.max(0, Number(bp.provides && bp.provides.pnjCapacity) | 0)
       },

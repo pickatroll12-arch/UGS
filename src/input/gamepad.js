@@ -137,8 +137,8 @@
     rt:    { game: 'zoomIn',    dev: 'zoomIn',     desc: 'Acercar' },
     left:  { game: null,        dev: 'toolPrev',   desc: 'Herramienta anterior' },
     right: { game: null,        dev: 'toolNext',   desc: 'Herramienta siguiente' },
-    up:    { game: null,        dev: null,         desc: '—' },
-    down:  { game: null,        dev: null,         desc: '—' },
+    up:    { game: null,        dev: 'objRotR',    desc: 'Girar objeto +90°' },
+    down:  { game: null,        dev: 'objRotL',    desc: 'Girar objeto −90°' },
     start: { game: 'menu',      dev: 'menu',       desc: 'Menú' },
     back:  { game: 'mode',      dev: 'mode',       desc: 'Cambiar Dev / Juego' }
   };

@@ -111,6 +111,23 @@ el botón «+ Reactor».
 | 5.6 | Poner tamaño **20×20** y aplicar | La sala crece y **la cámara la reencuadra sola** (debe caber entera) |
 | 5.7 | Crear un segundo módulo de otro tamaño y **alternar entre los dos** | Solo se ve el módulo activo: **ni rastro del anterior** ⚠️ regresión conocida |
 | 5.8 | Borrar un módulo que esté colocado en un Nexo | Desaparece también **del Nexo**, no solo de la biblioteca |
+| 5.9 | Con la herramienta Objeto, pulsar **`R`** y colocar | El objeto sale **girado 90°**; `Shift+R` gira al revés |
+| 5.10 | Con **Seleccionar `[1]`**, clicar un objeto y pulsar **`R`** | Gira ese objeto ya colocado. `Ctrl+Z` lo devuelve |
+
+### PASO 5-bis — Energía de verdad (3 min)
+
+Ve a **DISEÑAR NEXO** con un módulo que tenga un núcleo dentro.
+
+| # | Qué hacer | Qué debe pasar |
+|---|---|---|
+| 5b.1 | Mirar el HUD arriba a la derecha | `⚡0/0TW` |
+| 5b.2 | **Activar colocación** y colocar el módulo pegado al Nexo | El HUD sube a **⚡100/0TW** y el aviso dice `+100 TW` |
+| 5b.3 | **Ctrl+Z** | La sala se va **y la energía vuelve a 0** |
+| 5b.4 | **Ctrl+Y** | Vuelven sala y energía |
+| 5b.5 | Seleccionar la sala con `[1]` y **🗑 Eliminar sala** | Se va, y la energía baja |
+| 5b.6 | **Ctrl+Z** | Vuelve con su energía |
+| 5b.7 | Intentar eliminar la **última** sala del Nexo | Se niega y lo explica |
+| 5b.8 | Colocar un núcleo con `[6]` **dentro de una sala ya montada** | La energía sube **en el acto**, sin recolocar nada |
 
 ---
 
