@@ -34,11 +34,13 @@
 (function (root, factory) {
   const coreApi = (root.UGS && root.UGS.core)
     || (typeof require !== 'undefined' ? require('../core/core.js') : null);
-  const api = factory(coreApi);
+  const dataApi = (root.UGS && root.UGS.data)
+    || (typeof require !== 'undefined' ? require('../core/data.js') : null);
+  const api = factory(coreApi, dataApi);
   root.UGS = root.UGS || {};
   root.UGS.station = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (CORE) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (CORE, D) {
   'use strict';
 
   const MAX_PHASE = 4;        // REVISION MAESTRA 2: límite de fases
@@ -120,6 +122,10 @@
         const def = moduleDefs.get(m.defId);
         if (!def) continue;
         used += def.energyUse || 0;
+        // TW que aportan los OBJETOS realmente colocados en la sala de esta
+        // instancia (núcleos de reactor). Lo mantiene al día syncModuleEnergy;
+        // viaja en el save para que la energía sobreviva a recargar.
+        cap += Math.max(0, Number(m.objEnergy) | 0);
         if (def.provides) {
           cap += def.provides.energy || 0;
           storage += def.provides.storage || 0;
@@ -190,11 +196,66 @@
       if (!connected) return { ok: false, reason: 'sin conexión física al Nexo' };
       pay(station, def.cost);
       nexo.rooms.push(room);
-      const inst = { id: CORE.uid('mod'), defId, nexoId: nexo.id, roomId: room.id };
-      s.modules.push(inst);
-      recompute(station);
+      const inst = attachModule(station, nexo, defId, room);
       emit('station:module', { station, nexo, module: inst, def });
       return { ok: true, module: inst };
+    }
+
+    /*
+     * ENGANCHE de una sala YA colocada a la capa estratégica (-XONO, 2026-07-28:
+     * «tampoco funciona la generacion de energia»). La suite Dev empuja salas
+     * directamente al Nexo, sin pasar por placeModule, así que la instancia
+     * nunca existía en state.modules y la energía se quedaba en 0/0 TW pasara
+     * lo que pasara. Esto es la MITAD CONTABLE de placeModule, sin las puertas
+     * de coste/hito/energía: en la suite se diseña, no se paga.
+     */
+    function attachModule(station, nexo, defId, room) {
+      const s = ensure(station);
+      detachModule(station, room.id);                 // idempotente: recolocar no duplica
+      const inst = {
+        id: CORE.uid('mod'), defId, nexoId: nexo.id, roomId: room.id,
+        objEnergy: energyOfRoom(room)
+      };
+      s.modules.push(inst);
+      recompute(station);
+      return inst;
+    }
+    function detachModule(station, roomId) {
+      const s = ensure(station);
+      const before = s.modules.length;
+      s.modules = s.modules.filter(m => m.roomId !== roomId);
+      if (s.modules.length !== before) recompute(station);
+      return before - s.modules.length;
+    }
+
+    // TW que aportan los objetos de una sala (el catálogo dice cuánto vale cada
+    // tipo; ver core/data.js objectEnergy). Sin data cargado, 0.
+    function energyOfRoom(room) {
+      if (!room || !Array.isArray(room.objects) || !D || !D.objectEnergy) return 0;
+      let tw = 0;
+      for (const o of room.objects) tw += D.objectEnergy(o.type);
+      return tw;
+    }
+
+    /*
+     * Reevalúa los TW de objeto de TODAS las instancias contra las salas reales
+     * y recomputa. Se llama tras editar objetos: colocar un núcleo en una sala
+     * ya montada tiene que encender la energía en el acto.
+     */
+    function syncModuleEnergy(station, nexos) {
+      const s = ensure(station);
+      let changed = false;
+      for (const m of s.modules) {
+        let room = null;
+        for (const n of (nexos || [])) {
+          const r = n.rooms.find(x => x.id === m.roomId);
+          if (r) { room = r; break; }
+        }
+        const tw = energyOfRoom(room);
+        if (tw !== (m.objEnergy || 0)) { m.objEnergy = tw; changed = true; }
+      }
+      if (changed) recompute(station);
+      return changed;
     }
 
     // ---- scheduler RNG -------------------------------------------------------------
@@ -328,7 +389,7 @@
       defineModule, defineHito, defineRoute,
       canAfford, pay, earn, addItem, removeItem, storedTotal,
       hitoStatus, unlockHito, nexoLimit,
-      rectsTouch, placeModule,
+      rectsTouch, placeModule, attachModule, detachModule, syncModuleEnergy,
       addTimer, addShip, launchExpedition, repairShip,
       shipCapacity, freeBerth,
       update

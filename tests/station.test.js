@@ -225,5 +225,71 @@ function mkRoomAt(name, w, h, x, y) {
   check('sin nexos (tests puros): addShip no gatea', !!st.addShip(s, { id: 'libre' }));
 }
 
+/* ---- PUENTE suite Dev → energía (-XONO, 2026-07-28) --------------------------
+ * «tampoco funciona la generacion de energia». La suite empuja salas
+ * directamente al Nexo sin pasar por placeModule, así que la instancia nunca
+ * existía en state.modules y la energía se quedaba en 0/0 TW. attachModule es
+ * la mitad contable de placeModule, sin las puertas de coste/hito/energía.
+ */
+{
+  const st = mkEngine();
+  const s = mkStation(0);
+  const nexo = s.nexos[0];
+  require('../src/core/objects_lib.js');            // registra reactor_core y sus TW
+
+  // una sala empujada a mano (como hace la suite) NO cuenta hasta engancharla
+  const room = mkRoomAt('Técnica', 6, 6, 12, 0);
+  nexo.rooms.push(room);
+  st.recompute(s);
+  check('sala empujada a mano: sigue sin energía', s.state.energy.capacity === 0);
+
+  st.defineModule({ id: 'libre', name: 'Libre', cost: 999, energyUse: 0, provides: { energy: 0 } });
+  const inst = st.attachModule(s, nexo, 'libre', room);
+  check('attachModule registra la instancia', s.state.modules.length === 1 && inst.roomId === room.id);
+  check('attachModule NO cobra (en la suite se diseña, no se paga)', s.state.cred === 0);
+  check('sin núcleos aún no hay energía', s.state.energy.capacity === 0);
+
+  // colocar un núcleo EN LA SALA YA MONTADA debe encender la energía
+  room.objects.push(D.createObjectInstance('reactor_core', 3, 3));
+  check('antes de sincronizar la energía no ha cambiado', s.state.energy.capacity === 0);
+  check('syncModuleEnergy detecta el núcleo', st.syncModuleEnergy(s, s.nexos) === true);
+  check('el núcleo enciende los 100 TW', s.state.energy.capacity === 100);
+  check('sincronizar dos veces no duplica', st.syncModuleEnergy(s, s.nexos) === false && s.state.energy.capacity === 100);
+
+  room.objects.push(D.createObjectInstance('reactor_core', 4, 3));
+  st.syncModuleEnergy(s, s.nexos);
+  check('dos núcleos → 200 TW', s.state.energy.capacity === 200);
+
+  // los TW de objeto viajan en el save: recargar no apaga el reactor
+  const rt = S.deserialize(S.serialize(s));
+  check('objEnergy sobrevive al save', rt.state.modules[0].objEnergy === 200);
+  check('la energía sobrevive al save', rt.state.energy.capacity === 200);
+
+  // quitar el núcleo apaga
+  room.objects = [];
+  st.syncModuleEnergy(s, s.nexos);
+  check('sin núcleos vuelve a 0 TW', s.state.energy.capacity === 0);
+
+  // enganchar dos veces la misma sala no duplica la instancia
+  st.attachModule(s, nexo, 'libre', room);
+  st.attachModule(s, nexo, 'libre', room);
+  check('attachModule es idempotente por sala', s.state.modules.filter(m => m.roomId === room.id).length === 1);
+
+  // detachModule limpia y recomputa
+  room.objects.push(D.createObjectInstance('reactor_core', 3, 3));
+  st.syncModuleEnergy(s, s.nexos);
+  check('reengancha con energía', s.state.energy.capacity === 100);
+  check('detachModule retira la instancia', st.detachModule(s, room.id) === 1 && s.state.modules.length === 0);
+  check('tras detach la energía se apaga', s.state.energy.capacity === 0);
+  check('detachModule de una sala que no está no rompe', st.detachModule(s, 'no-existe') === 0);
+
+  // una instancia cuya sala desapareció cuenta 0 (no arrastra energía fantasma)
+  const ghost = mkRoomAt('Fantasma', 4, 4, 30, 0);
+  ghost.objects.push(D.createObjectInstance('reactor_core', 1, 1));
+  st.attachModule(s, nexo, 'libre', ghost);          // nunca entró en nexo.rooms
+  check('sala fuera del nexo → sin energía tras sincronizar',
+    st.syncModuleEnergy(s, s.nexos) === true && s.state.energy.capacity === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

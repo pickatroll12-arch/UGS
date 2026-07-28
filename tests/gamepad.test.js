@@ -118,6 +118,15 @@ function pad(opts) {
     ['a','b','x','y'].every(k => GP.actionFor(k,'game') && GP.actionFor(k,'dev')));
   check('el d-pad cambia de herramienta SOLO en dev',
     GP.actionFor('left', 'dev') === 'toolPrev' && GP.actionFor('left', 'game') === null);
+  // girar objetos con la cruceta (-XONO: «tampoco se pueden rotar los objetos»)
+  check('la cruceta arriba/abajo gira objetos en dev',
+    GP.actionFor('up', 'dev') === 'objRotR' && GP.actionFor('down', 'dev') === 'objRotL');
+  check('girar objetos no existe en juego (allí no se edita)',
+    GP.actionFor('up', 'game') === null && GP.actionFor('down', 'game') === null);
+  check('ningún botón de la cruceta queda muerto en dev',
+    ['up','down','left','right'].every(k => GP.actionFor(k, 'dev')));
+  check('la rotación de objeto se auto-repite (mantener gira varias veces)',
+    GP.REPEATABLE.includes('up') && GP.REPEATABLE.includes('down'));
   check('los bumpers rotan la cámara en ambos modos',
     GP.actionFor('lb', 'game') === 'rotL' && GP.actionFor('rb', 'dev') === 'rotR');
   check('un botón desconocido no tiene acción', GP.actionFor('nope', 'game') === null);

@@ -1500,3 +1500,70 @@ Nexo 2 — deben verse limpios; (3) en Juego, clicar suelo y comprobar que el PC
 **Decisión pendiente:** (1) ¿tope de núcleos por módulo, o coste/consumo por núcleo que
 lo autolimite? (2) ¿los 100 TW por núcleo son la cifra buena para F1 (~63-70 TW de
 consumo)? Ambas dependen del árbol de progreso, que sigue en manos humanas.
+
+### §6.30 — CLAUDE — Deshacer estructural, eliminar sala, girar objetos y el puente de energía — 2026-07-28
+**Observación de -XONO** (tras confirmar que «conecta bien ahora»): «no deja revertir con
+ctrl,z ni eliminar sala. (tampoco hay opcion) y tampoco se pueden rotar los objetos» ·
+«tampoco funciona la generacion de energia ni nada». Cuatro huecos reales, ninguno un
+efecto secundario del arreglo anterior: eran cosas que **nunca habían estado cableadas**.
+
+**1. La energía nunca podía funcionar.** `station.placeModule()` era el único camino que
+registraba una instancia en `state.modules`, y la suite Dev **no pasa por ahí**: empuja la
+sala al Nexo directamente. Sin instancia no hay nada que recomputar, así que el HUD decía
+`⚡0/0TW` hiciera lo que hiciera el diseñador. Añado `attachModule` / `detachModule`
+(la mitad CONTABLE de `placeModule`, sin las puertas de coste/hito/energía — en la suite
+se diseña, no se paga) y `syncModuleEnergy(station, nexos)`, que reevalúa los TW de los
+núcleos contra las salas reales: **colocar un núcleo en una sala ya montada enciende la
+energía en el acto**. `objEnergy` vive en la instancia y viaja en el save.
+> **Doble conteo que me comí en §6.29 y corrijo aquí:** `toModuleDef()` sumaba los TW de
+> los núcleos del blueprint Y la instancia los sumaba otra vez → **200 TW por un núcleo**.
+> Lo pilló la verificación en navegador, no los tests. Ahora la def lleva solo la energía
+> declarada a mano y los núcleos los cuenta **siempre la instancia**, que además es la
+> honesta: la sala colocada puede divergir del blueprint. Hay un check que lo fija.
+
+**2. Deshacer no cubría la estructura.** La pila solo guardaba snapshots de UNA sala, y
+además `ensureEditKey` la **vaciaba al cambiar de sala** (pintar en A y luego en B borraba
+el historial de A). Colocar o eliminar una sala no entraba en la pila en absoluto — de ahí
+el «Nada que deshacer» de la captura. Ahora hay dos clases de entrada: `'room'`
+(contenido) y `'nexo'` (estructura: lista de salas + entrada + instancias de módulo), la
+clave es sección+nexo/bp y **cada entrada recuerda su sala**, así que el historial ya no se
+pierde al moverse. Colocar, eliminar y girar son deshacibles.
+
+**3. No había forma de eliminar una sala.** Existía solo el click derecho con la
+colocación activa, que no es una opción que nadie encuentre. Añadido **🗑 Eliminar sala**
+en la sección Nexo: actúa sobre la sala seleccionada con `[1]` o la que esté bajo el
+puntero, desengancha su instancia, reubica la entrada si apuntaba ahí, se niega a borrar
+la última sala del Nexo y es deshacible.
+
+**4. Los objetos no giraban.** Los dos renderizadores **ya leían `o.rotation`** — no había
+nada que la escribiera. `R` / `Shift+R`: con Seleccionar gira el objeto elegido, con
+cualquier otra herramienta gira el **pincel** (lo siguiente sale ya girado). En mando, la
+cruceta arriba/abajo, que estaban muertas en Dev (`desc: '—'`).
+
+**Evidencia:** `node tests/run.js` → **527 checks, ALL SUITES GREEN** (+21). Verificación
+en Chromium con WebGL real, **22/22**, recorriendo el flujo entero: colocar un módulo con
+núcleo enciende `100/0 TW`, `Ctrl+Z` revierte la colocación y apaga la energía, `Ctrl+Y`
+la rehace, el botón elimina la sala y desengancha la instancia, `Ctrl+Z` la devuelve con
+su energía, no deja borrar la última sala, `R` gira pincel y objeto, `Shift+R` al revés,
+`Ctrl+Z` deshace el giro, y la escena **sigue con 2 grupos** (la regresión de §6.29 no ha
+vuelto). Cero errores de consola.
+
+**Riesgo / lo que NO se probó:** el snapshot de estructura clona la lista de salas entera;
+con un Nexo grande y 50 pasos de historial eso es memoria — no medido, pero es una suite de
+diseño. La rotación gira el objeto sobre su tile: los objetos de más de 1 tile (footprint
+declarado pero **no implementado**) no van a girar bien cuando existan. La cruceta
+arriba/abajo la he probado con mando emulado, no en el Odin.
+
+**Archivos afectados:** `src/engine/station.js` (attach/detach/syncModuleEnergy),
+`src/engine/blueprint.js` (fin del doble conteo), `src/app/app.js` (historial de dos
+clases, eliminar sala, rotar, puente de energía), `src/input/gamepad.js` (cruceta),
+`index.html`, `tests/station.test.js`, `tests/objects.test.js`, `tests/gamepad.test.js`,
+`README.md`, `GUIA_TESTERS.md`, este documento.
+
+**Pruebas necesarias (humano):** -XONO: (1) colocar un módulo con núcleo y mirar el HUD —
+debe subir de 0 TW; (2) Ctrl+Z sobre colocar/eliminar/girar; (3) 🗑 Eliminar sala con una
+sala seleccionada con `[1]`; (4) `R` con el pincel y con Seleccionar; (5) en el Odin, la
+cruceta arriba/abajo girando objetos.
+
+**Decisión pendiente:** sigue abierta la de §6.29 (¿tope de núcleos por módulo? ¿100 TW es
+la cifra buena?) — ahora se puede medir de verdad, porque la energía por fin se enciende.

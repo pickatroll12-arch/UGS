@@ -94,23 +94,26 @@ console.log('UGS OBJP-1.1 · T1 librería de objetos + T2 Reactor\n');
   // un módulo cualquiera se vuelve generador al meterle un núcleo
   const bp = D.createModuleBlueprint({ name: 'Sala técnica', w: 8, h: 6 });
   check('sin núcleos el módulo no genera', BP.energyFromObjects(bp.room) === 0);
-  check('sin núcleos toModuleDef da 0 TW', BP.toModuleDef(bp).provides.energy === 0);
   bp.room.objects.push(D.createObjectInstance('reactor_core', 3, 3));
   check('con un núcleo el módulo genera 100 TW', BP.energyFromObjects(bp.room) === 100);
-  check('toModuleDef lleva los TW del objeto a la capa estratégica',
-    BP.toModuleDef(bp).provides.energy === 100);
   bp.room.objects.push(D.createObjectInstance('reactor_core', 5, 3));
-  check('dos núcleos suman 200 TW', BP.toModuleDef(bp).provides.energy === 200);
-  // los TW declarados a mano y los de los objetos SUMAN
-  bp.provides.energy = 50;
-  check('los TW del formulario y los de los núcleos se suman',
-    BP.toModuleDef(bp).provides.energy === 250);
-  // borrar el núcleo quita los TW: el módulo deja de ser generador
+  check('dos núcleos suman 200 TW', BP.energyFromObjects(bp.room) === 200);
   bp.room.objects = [];
-  bp.provides.energy = 0;
-  check('sin núcleos el módulo deja de generar', BP.toModuleDef(bp).provides.energy === 0);
+  check('sin núcleos el módulo deja de generar', BP.energyFromObjects(bp.room) === 0);
   check('energyFromObjects tolera una sala vacía o inválida',
     BP.energyFromObjects(null) === 0 && BP.energyFromObjects({}) === 0);
+
+  /* Los TW de los núcleos NO viajan en la def del módulo: los cuenta la
+   * INSTANCIA colocada (station.attachModule → objEnergy). Meterlos en los dos
+   * sitios los contaba DOS VECES — 200 TW por un solo núcleo. Este check es el
+   * que impide que vuelva. */
+  bp.room.objects.push(D.createObjectInstance('reactor_core', 3, 3));
+  bp.provides.energy = 50;
+  check('toModuleDef lleva SOLO la energía declarada a mano (sin doble conteo)',
+    BP.toModuleDef(bp).provides.energy === 50);
+  bp.provides.energy = 0;
+  check('un módulo sin energía declarada da 0 en la def, aunque tenga núcleos',
+    BP.toModuleDef(bp).provides.energy === 0);
 }
 
 // ============ T2 — minSize (mecanismo genérico por blueprint) ================
@@ -146,7 +149,7 @@ console.log('UGS OBJP-1.1 · T1 librería de objetos + T2 Reactor\n');
   // los TW NO viajan en el save: los aporta el catálogo por tipo de objeto,
   // así que reequilibrar el reactor no obliga a migrar saves viejos
   check('tras reimportar el núcleo sigue aportando sus TW',
-    BP.toModuleDef(r).provides.energy === 100);
+    BP.energyFromObjects(r.room) === 100);
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

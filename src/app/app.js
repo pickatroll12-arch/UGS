@@ -84,7 +84,7 @@
     devSection: 'nexo',              // dev: nexo | modules
     bpId: null,                      // blueprint activo (sección módulos)
     tool: 'select',                  // id del catálogo de tools/toolbox.js (arranca inocuo)
-    brush: { floor: 'deck', wallKind: 'block', wallOrient: 0 },
+    brush: { floor: 'deck', wallKind: 'block', wallOrient: 0, objRotation: 0 },
     selection: null,                 // herramienta Seleccionar: {roomId, x, y, objId}
     toolHover: null,                 // rombo bajo el puntero (barra inferior)
     toolLayout: null,                // último layout de la barra (hit-test sin recalcular)
@@ -96,7 +96,7 @@
     placing: null,                   // colocación de módulo activa {bpId} (sección Nexo)
     mouseWorld: null,                // última posición del ratón en coords de mundo
     paused: false,
-    undoStack: [], redoStack: [], editKey: null, editRoomRef: null
+    undoStack: [], redoStack: [], editKey: null
   };
   app.nexoId = app.station.startNexoId;
 
@@ -168,32 +168,81 @@
     return '!_UGS/ux/Elements/' + (bpState(bp) === 'ok' ? set.ok : set.warn) + '.png';
   }
 
-  // ---- deshacer / rehacer (snapshots de engine/blueprint) ----------------------
-  function resetEdit() { app.undoStack = []; app.redoStack = []; app.editKey = null; app.editRoomRef = null; }
-  function ensureEditKey(room) {
-    const key = app.devSection + ':' + (app.devSection === 'modules' ? app.bpId : app.nexoId) + ':' + room.id;
-    if (key !== app.editKey) { app.editKey = key; app.editRoomRef = room; app.undoStack = []; app.redoStack = []; }
+  /* ---- deshacer / rehacer ---------------------------------------------------
+   * Dos clases de entrada, porque hay dos clases de edición (-XONO, 2026-07-28:
+   * «no deja revertir con ctrl,z ni eliminar sala»):
+   *   'room' → contenido de UNA sala (tiles/objetos). Snapshot de esa sala.
+   *   'nexo' → ESTRUCTURA del nexo (colocar/eliminar salas). Snapshot de la
+   *            lista de salas, la entrada y las instancias de módulo, porque
+   *            una sala colocada también existe en la capa estratégica.
+   * La pila ya NO se vacía al cambiar de sala: la clave es sección+nexo/bp y
+   * cada entrada recuerda a qué sala pertenece. Pintar en A y luego en B ya no
+   * borra el historial de A.
+   */
+  function resetEdit() { app.undoStack = []; app.redoStack = []; app.editKey = null; }
+  function ensureEditKey() {
+    const key = app.devSection + ':' + (app.devSection === 'modules' ? app.bpId : app.nexoId);
+    if (key !== app.editKey) { app.editKey = key; app.undoStack = []; app.redoStack = []; }
   }
-  function pushUndo(room) {
-    ensureEditKey(room);
-    app.undoStack.push(BP.snapshotRoom(room));
+  function snapshotNexo() {
+    const n = nexo();
+    return {
+      rooms: n.rooms.map(r => Object.assign(BP.snapshotRoom(r), { id: r.id, bpId: r.bpId || null })),
+      entry: JSON.parse(JSON.stringify(n.entry || null)),
+      modules: JSON.parse(JSON.stringify(app.station.state.modules))
+    };
+  }
+  function restoreNexoSnap(snap) {
+    const n = nexo();
+    n.rooms = snap.rooms.map(s => {
+      const room = D.normalizeRoom({
+        id: s.id, bpId: s.bpId, name: s.name, size: s.size, transform: s.transform,
+        tiles: s.tiles, objects: s.objects, events: s.events
+      });
+      return room;
+    });
+    n.entry = snap.entry ? JSON.parse(JSON.stringify(snap.entry)) : null;
+    app.station.state.modules = JSON.parse(JSON.stringify(snap.modules));
+    station.recompute(app.station);
+    syncShipObjects();
+  }
+  function pushEntry(entry) {
+    ensureEditKey();
+    app.undoStack.push(entry);
     if (app.undoStack.length > 50) app.undoStack.shift();
     app.redoStack = [];
   }
-  function doUndo() {
-    if (!app.undoStack.length || !app.editRoomRef) return setStatus('Nada que deshacer.');
-    const room = app.editRoomRef;
-    app.redoStack.push(BP.snapshotRoom(room));
-    BP.restoreRoom(room, app.undoStack.pop());
-    invalidate(); refreshBpForm(); setStatus('Deshecho.');
+  function pushUndo(room) { pushEntry({ k: 'room', roomId: room.id, snap: BP.snapshotRoom(room) }); }
+  function pushUndoNexo() { pushEntry({ k: 'nexo', snap: snapshotNexo() }); }
+
+  // captura el estado ACTUAL equivalente a una entrada (para la pila contraria)
+  function captureLike(entry) {
+    if (entry.k === 'nexo') return { k: 'nexo', snap: snapshotNexo() };
+    const room = viewNexo().rooms.find(r => r.id === entry.roomId);
+    return room ? { k: 'room', roomId: room.id, snap: BP.snapshotRoom(room) } : null;
   }
-  function doRedo() {
-    if (!app.redoStack.length || !app.editRoomRef) return setStatus('Nada que rehacer.');
-    const room = app.editRoomRef;
-    app.undoStack.push(BP.snapshotRoom(room));
-    BP.restoreRoom(room, app.redoStack.pop());
-    invalidate(); refreshBpForm(); setStatus('Rehecho.');
+  function applyEntry(entry) {
+    if (entry.k === 'nexo') { restoreNexoSnap(entry.snap); return true; }
+    const room = viewNexo().rooms.find(r => r.id === entry.roomId);
+    if (!room) return false;
+    BP.restoreRoom(room, entry.snap);
+    refreshModuleEnergy();
+    return true;
   }
+  function stepHistory(from, to, verb) {
+    ensureEditKey();
+    while (from.length) {
+      const entry = from.pop();
+      const inverse = captureLike(entry);
+      if (!applyEntry(entry)) continue;      // la sala ya no existe: entrada muerta
+      if (inverse) to.push(inverse);
+      invalidate(); refreshBpForm(); refreshSlots();
+      return setStatus(verb + '.');
+    }
+    setStatus('Nada que ' + verb.toLowerCase().replace('hecho', 'hacer') + '.');
+  }
+  function doUndo() { stepHistory(app.undoStack, app.redoStack, 'Deshecho'); }
+  function doRedo() { stepHistory(app.redoStack, app.undoStack, 'Rehecho'); }
 
   // ---- modos ---------------------------------------------------------------
   function setMode(mode) {
@@ -374,6 +423,25 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  /* ---- puente suite Dev → capa estratégica (energía) -------------------------
+   * La suite empuja salas directamente al Nexo. Sin esto la instancia nunca
+   * llegaba a station.state.modules y la energía se quedaba en 0/0 TW pasara
+   * lo que pasara (-XONO: «tampoco funciona la generacion de energia»).
+   * En la suite se DISEÑA: se registra la def y se engancha sin cobrar ni
+   * exigir hito. Las puertas de coste/hito siguen vivas en el modo Juego.
+   */
+  function registerRoomModule(bp, room) {
+    const def = BP.toModuleDef(bp);
+    station.defineModule(def);
+    const inst = station.attachModule(app.station, nexo(), bp.id, room);
+    return inst ? (inst.objEnergy || 0) + (def.provides.energy || 0) : 0;
+  }
+  // reevalúa los TW de objeto de todas las instancias contra las salas reales:
+  // colocar un núcleo en una sala ya montada enciende la energía en el acto
+  function refreshModuleEnergy() {
+    return station.syncModuleEnergy(app.station, app.station.nexos);
+  }
+
   // ---- viaje entre Nexos (ascensores) --------------------------------------
   engine.bus.on('pawn:arrived', ({ pawn, x, y }) => {
     const link = linkAt(pawn.nexoId, pawn.roomId, x, y);
@@ -502,6 +570,28 @@
   }
 
   // ---- cámara RTS ----------------------------------------------------------
+  /* GIRAR OBJETOS 90° (-XONO, 2026-07-28: «tampoco se pueden rotar los objetos»).
+   * Los renderizadores ya leían o.rotation; no había nada que la escribiera.
+   * Con Seleccionar gira el objeto elegido; con cualquier otra herramienta gira
+   * el PINCEL, así que lo siguiente que coloques sale ya girado.
+   * Teclado: R / Shift+R. Mando: cruceta arriba/abajo. */
+  function rotateObject(d) {
+    if (app.mode !== 'dev') return;
+    const turn = (v) => ((((Number(v) || 0) + d) % 360) + 360) % 360;
+    const s = app.selection;
+    const room = s && viewNexo().rooms.find(r => r.id === s.roomId);
+    const obj = room && room.objects.find(o => o.x === s.x && o.y === s.y);
+    if (app.tool === 'select' && obj) {
+      pushUndo(room);
+      obj.rotation = turn(obj.rotation);
+      setStatus((obj.type || 'objeto') + ' girado a ' + obj.rotation + '°.');
+    } else {
+      app.brush.objRotation = turn(app.brush.objRotation);
+      setStatus('Pincel de objeto a ' + app.brush.objRotation + '° · con [1] Seleccionar, R gira uno ya puesto.');
+    }
+    invalidate();
+  }
+
   function rotateCam(drot) {
     const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2;
     const anchor = R.screenToWorld(app.cam, cx, cy);
@@ -604,11 +694,11 @@
       if (hit) {
         const room = roomById(hit.roomId);
         if (room && room.bpId) {
+          pushUndoNexo();
           nexo().rooms = nexo().rooms.filter(r => r !== room);
           // limpieza estratégica: la instancia sale de station.modules y se recomputa energía
-          app.station.state.modules = app.station.state.modules.filter(m => m.roomId !== room.id);
-          station.recompute(app.station);
-          setStatus('Módulo retirado del nexo.'); invalidate();
+          station.detachModule(app.station, room.id);
+          setStatus('Módulo retirado del nexo (Ctrl+Z lo deshace).'); invalidate();
         } else setStatus('Solo se retiran salas colocadas desde la biblioteca.');
       }
       return;
@@ -635,10 +725,17 @@
       if (!obj) return setStatus('No hay objeto seleccionado.');
       pushUndo(room);
       room.objects = room.objects.filter(o => o !== obj);
+      if (app.devSection === 'modules') refreshBpForm(); else refreshModuleEnergy();
       setStatus('Objeto retirado (' + obj.type + ').');
       invalidate();
       return;
     }
+    /* R = GIRAR 90° (-XONO, 2026-07-28: «tampoco se pueden rotar los objetos»).
+     * Los renderizadores ya leían o.rotation; simplemente no había nada que la
+     * escribiera. Con Seleccionar gira el objeto elegido; con cualquier otra
+     * herramienta gira el PINCEL, así que lo siguiente que coloques sale ya
+     * girado. Mayúsculas (R con shift) gira al revés. */
+    else if (k === 'r' && app.mode === 'dev') { e.preventDefault(); rotateObject(e.shiftKey ? -90 : 90); }
     else if (k === 'b' && app.mode === 'dev') {
       // ciclar el tipo de pared del pincel (incluye 'bay', la muralla de hangar)
       const kinds = D.WALL_KINDS;
@@ -710,6 +807,8 @@
   function doPadAction(act) {
     switch (act) {
       case 'click':    padPressA(); break;
+      case 'objRotR':  rotateObject(90); break;
+      case 'objRotL':  rotateObject(-90); break;
       case 'undo':     doUndo(); break;
       case 'redo':     doRedo(); break;
       case 'cancel':
@@ -886,8 +985,10 @@
       const type = g.tool === 'console' ? 'console' : $('objSel').value;
       if (!NAV.walkable(room, g.x0, g.y0) || room.objects.some(o => o.x === g.x0 && o.y === g.y0)) return setStatus('Ahí no cabe el objeto.');
       pushUndo(room);
-      room.objects.push(D.createObjectInstance(type, g.x0, g.y0));
-      setStatus(g.tool === 'console' ? 'Consola colocada.' : 'Objeto colocado.');
+      const inst = D.createObjectInstance(type, g.x0, g.y0);
+      inst.rotation = app.brush.objRotation;          // R gira el pincel antes de colocar
+      room.objects.push(inst);
+      setStatus((g.tool === 'console' ? 'Consola' : 'Objeto') + ' colocado (' + inst.rotation + '°) · R gira.');
     } else if (g.tool === 'select') {
       app.selection = { roomId: room.id, x: g.x0, y: g.y0 };
       setStatus(describeSelection(room, g.x0, g.y0));
@@ -910,9 +1011,10 @@
         setStatus('Link (ascensor) creado.');
       }
     }
-    // colocar/borrar un núcleo cambia los TW del módulo: el formulario tiene
-    // que reflejarlo sin esperar a que se reseleccione el blueprint
+    // colocar/borrar un núcleo cambia los TW: en módulos lo refleja el
+    // formulario, en el nexo hay que recomputar la energía de la estación
     if (app.devSection === 'modules') refreshBpForm();
+    else refreshModuleEnergy();
   }
 
   // ---- clicks por modo ------------------------------------------------------
@@ -926,13 +1028,16 @@
       const size = bp.room.size;
       const chk = BP.placementCheck(nexo(), size, { x: w.x - size.w / 2, y: w.y - size.h / 2 });
       if (!chk.ok) return setStatus('No se puede colocar: ' + chk.reason + '.');
+      pushUndoNexo();                       // colocar una sala SÍ se puede deshacer
       const room = BP.instantiateRoom(bp, { x: chk.x, y: chk.y });
       nexo().rooms.push(room);
       // abrir paso entre la sala colocada y la sala del nexo tocada
       const opened = BP.openSharedEdge(nexo(), room, chk.touch);
+      const tw = registerRoomModule(bp, room);
       invalidate();
       setStatus(bp.name + ' colocado (' + nexo().rooms.length + ' salas en ' + nexo().name + ')' +
-        (opened ? ' · paso abierto (' + opened + ' paredes)' : ''));
+        (opened ? ' · paso abierto (' + opened + ' paredes)' : '') +
+        (tw ? ' · +' + tw + ' TW' : ''));
       return;
     }
   }
@@ -1136,6 +1241,27 @@
   });
   bind('tUndo', doUndo);
   bind('tRedo', doRedo);
+
+  /* Eliminar una sala del Nexo (-XONO: «ni eliminar sala (tampoco hay opcion)»).
+   * Antes solo se podía con click derecho y la colocación activa, que no es una
+   * opción que nadie encuentre. Objetivo: la sala seleccionada con [1], o la que
+   * esté bajo el puntero. Deshacible como cualquier otra edición. */
+  bind('nxDelRoom', () => {
+    if (app.devSection !== 'nexo') return setStatus('Las salas se eliminan en la sección Nexo.');
+    const n = nexo();
+    const id = (app.selection && app.selection.roomId) || (app.hover && app.hover.roomId);
+    const room = id && n.rooms.find(r => r.id === id);
+    if (!room) return setStatus('Selecciona una sala con [1] o apunta a una para eliminarla.');
+    if (n.rooms.length <= 1) return setStatus('No se puede eliminar la última sala del Nexo.');
+    pushUndoNexo();
+    n.rooms = n.rooms.filter(r => r !== room);
+    station.detachModule(app.station, room.id);
+    // la entrada no puede quedar apuntando a una sala que ya no existe
+    if (n.entry && n.entry.roomId === room.id) n.entry = { roomId: n.rooms[0].id, x: 1, y: 1 };
+    app.selection = null; app.hover = null;
+    syncShipObjects(); refreshSlots(); invalidate();
+    setStatus('Sala eliminada: ' + (room.name || room.id) + ' (Ctrl+Z lo deshace).');
+  });
 
   // colocación de módulo desde biblioteca (sección Nexo)
   bind('placeToggle', () => {

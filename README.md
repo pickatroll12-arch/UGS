@@ -78,7 +78,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (506 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (527 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -115,6 +115,17 @@ La tecla **no se reasigna** al cambiar de sección: Entrada/Ascensor/Módulo sol
 DISEÑAR NEXO y allí se ven apagadas, pero su número no se lo queda otra herramienta.
 Al final de la barra hay tres rombos **bloqueados** (PNJ, Evento, Zona): hueco reservado
 para OBJP-2 y OBJP-1.1, sin funcionalidad hasta las 3 firmas.
+
+Teclas de edición fuera de la barra:
+
+| Tecla | Qué hace |
+|---|---|
+| `R` / `Shift+R` | Gira 90°: con **Seleccionar** el objeto elegido, si no el **pincel** (lo siguiente que coloques sale girado) |
+| `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer — cubre también **colocar y eliminar salas**, no solo pintar |
+| `Supr` | Retira el objeto seleccionado |
+| `B` | Cicla el tipo de pared del pincel (incluye `bay`, muralla de hangar) |
+| `[` `]` | Capacidad de hangar de la sala |
+| `Q` / `E` | Rota la **cámara** 90° (C4) |
 
 ## Mando (Odin 2 Portal y cualquier gamepad estándar)
 
