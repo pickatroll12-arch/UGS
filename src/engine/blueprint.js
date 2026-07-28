@@ -313,11 +313,37 @@
     return removed;
   }
 
+  // ---- salas generadas desde defs de la capa estratégica ---------------------
+  /*
+   * roomFromDef(def) — fábrica de salas para el MODO JUEGO (GAP-UI-01). Las
+   * defs de content_f1 traen `room: {w, h, bay?}` como huella placeholder:
+   * cuando los módulos F1 se diseñen en la suite, la sala vendrá de la
+   * biblioteca; hasta entonces el jugador coloca una sala honesta generada
+   * aquí (anillo de paredes; el hangar abre su arista este como muralla
+   * `bay`). Sin objetos dentro: la energía la da el def (provides.energy),
+   * no un núcleo, así que no hay doble conteo.
+   */
+  function roomFromDef(def) {
+    const spec = (def && def.room) || {};
+    const w = CORE.clamp(spec.w || 6, 3, 64), h = CORE.clamp(spec.h || 6, 3, 64);
+    const room = D.createRoom(def && def.name || 'Módulo', w, h);
+    D.ringWalls(room);
+    if (spec.bay) {
+      // una arista como muralla `bay` (apertura oscura con marco luminoso, K2)
+      const edge = String(spec.bay).toUpperCase();
+      if (edge === 'E') for (let y = 0; y < h; y++) room.tiles[y][w - 1].wall = D.createWall('bay', 0);
+      else if (edge === 'W') for (let y = 0; y < h; y++) room.tiles[y][0].wall = D.createWall('bay', 0);
+      else if (edge === 'N') for (let x = 0; x < w; x++) room.tiles[0][x].wall = D.createWall('bay', 0);
+      else if (edge === 'S') for (let x = 0; x < w; x++) room.tiles[h - 1][x].wall = D.createWall('bay', 0);
+    }
+    return room;
+  }
+
   return {
     paintFloorRect, paintWallOutline, eraseRect, floodFillFloor, clearRoom, resizeRoom,
     minSizeOf, resizeBlueprint, energyFromObjects,
     snapshotRoom, restoreRoom,
-    toModuleDef, instantiateRoom,
+    toModuleDef, instantiateRoom, roomFromDef,
     rectsOverlap, sharedEdge, placementCheck, openSharedEdge
   };
 });
