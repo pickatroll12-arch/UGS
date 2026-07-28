@@ -72,7 +72,7 @@ function mkRoomAt(name, w, h, x, y) {
   check('placeModule generador conectado al Nexo', r1.ok && s.state.energy.capacity === 100);
   // almacén pegado al generador (12..16 en x → pegar en x=16)
   const r2 = st.placeModule(s, nexo, 'almacen', mkRoomAt('Alm', 4, 4, 16, 0));
-  check('placeModule almacén conectado módulo→módulo', r2.ok && s.state.storageCap === 30 && s.state.cred === 800);
+  check('placeModule almacén conectado módulo→módulo', r2.ok && s.state.storageCap === 35 && s.state.cred === 800);  // 30 del def + 5 base del Nexo
   // desconectado: flotando lejos
   const r3 = st.placeModule(s, nexo, 'hab', mkRoomAt('Hab', 4, 4, 40, 40));
   check('placeModule rechaza sala desconectada', !r3.ok && /conexión/.test(r3.reason));
@@ -289,6 +289,40 @@ function mkRoomAt(name, w, h, x, y) {
   st.attachModule(s, nexo, 'libre', ghost);          // nunca entró en nexo.rooms
   check('sala fuera del nexo → sin energía tras sincronizar',
     st.syncModuleEnergy(s, s.nexos) === true && s.state.energy.capacity === 0);
+}
+
+// ---- brownout: la puerta de energía deja pasar al productor que la resuelve ----
+{
+  const st = mkEngine();
+  const s = mkStation(500);
+  const nexo = s.nexos[0];
+  const g = st.placeModule(s, nexo, 'gen', mkRoomAt('Gen', 4, 4, 12, 0));
+  st.placeModule(s, nexo, 'almacen', mkRoomAt('Alm', 4, 4, 16, 0));   // used 5
+  st.detachModule(s, g.module.roomId);          // brownout: used 5 > cap 0
+  check('brownout declarado al retirar el generador', s.state.blackout === true);
+  const back = st.placeModule(s, nexo, 'gen', mkRoomAt('Gen2', 4, 4, 20, 0));
+  check('productor ADMITIDO durante brownout (él mismo lo resuelve)', back.ok === true);
+  check('brownout desaparece tras reponer generación', s.state.blackout === false && s.state.energy.capacity === 100);
+  st.detachModule(s, back.module.roomId);       // brownout otra vez
+  const cons = st.placeModule(s, nexo, 'hab', mkRoomAt('Hab', 4, 4, 20, 0));
+  check('consumidor sigue RECHAZADO durante brownout', !cons.ok && /energía/.test(cons.reason));
+}
+
+// ---- hangar: la marca llega a la sala desde el def (placeholder visible) ----
+{
+  const st = mkEngine();
+  st.defineModule({ id: 'hangar', name: 'Hangar', cost: 0, free: true, energyUse: 0, provides: { shipCap: 2 } });
+  const s = mkStation(0);
+  const nexo = s.nexos[0];
+  const room = mkRoomAt('Hangar', 4, 4, 12, 0);
+  st.placeModule(s, nexo, 'hangar', room);
+  check('placeModule marca la sala como hangar (la UI la reconoce)', room.hangar === true);
+  check('shipCap sin setear: la capacidad la lee del def (room-first)',
+    typeof room.shipCap !== 'number' && st.shipCapacity(s, s.nexos) === 2);
+  const room2 = mkRoomAt('Hangar2', 4, 4, 16, 0);
+  room2.shipCap = 5;
+  st.attachModule(s, nexo, 'hangar', room2);
+  check('un shipCap explícito del diseñador NO se pisa con el def', room2.shipCap === 5);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
