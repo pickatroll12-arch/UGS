@@ -921,3 +921,49 @@ render a los dos archivos del Rector.
 **Archivos afectados:** `BRIEF_CLAUDE_OBJP11.md` (nuevo), este documento.
 **Pruebas necesarias (humano):** ninguna todavía — habrá checklist por entrega.
 **Decisión pendiente:** firmas retroactivas OBJP-1.1 (3/3) en `Feedback humano`.
+
+
+### §6.21 — KIMI K3 (Rector) — K1/K2 entregados + RELEVO formal a Claude — 2026-07-27
+**Observación:** cerradas las dos primeras etapas del plan OBJP-1.1 (§6.20) y, por
+orden de -XONO, **el resto del trabajo del Rector (K3/K4) queda RELEVADO a Claude**,
+que además mantiene su T1/T2 del brief. Documento de relevo completo en
+`RELEVO_CLAUDE.md` (commit `6f965c2`): estado del repo, lo hecho, sus tareas con
+specs, decisiones humanas pendientes y lecciones de operación.
+**Entregado por el Rector (NO repetir):**
+- **K1 — Energía TW:** agregado capacidad/consumo con readout `⚡used/cap TW` en
+  HUD, evento `station:blackout` + marca ¡BROWNOUT! (se restablece con headroom;
+  persiste en save), gating de placeModule y **bug histórico corregido**: retirar
+  módulos (click derecho / borrar blueprint) no limpiaba `station.modules` →
+  energía fantasma. Commits `8ef60b8`, `db869e3`.
+- **K2 — Hangar:** wall kind `bay` (apertura oscura + marco luminoso según imagen
+  de -XONO; bloquea al PCJ como toda pared), objeto `ship` placeholder sin tick,
+  capacidad **room-first seteable** (`[`/`]` en dev sobre la sala; `provides.shipCap`
+  por def), `shipCapacity/freeBerth/addShip` gateado, sync placeholders↔naves
+  (tecla `n` amarra; eventos de expedición colocan/retiran), persistencia
+  `hangar/shipCap/shipId` en saves, ciclo de pared con tecla `b`. Commits
+  `113ac29`, `eaa2931`, `a12fdc6`, `8e7b5bf`, `2ba6938`, `c2c15b6`.
+**Evidencia:** clon limpio → **293 passed, ALL SUITES GREEN** (+6 energía, +3 bay,
++8 hangar). E2E real con teclas: `]`×2 (capacidad 2) → `n`×2 (2 naves amarradas
+con placeholder visible) → 3ª `n` rechazada ("Sin amarre libre"). Smokes visuales
+de la muralla bay en 2D y 3D a 2-4 yaws, cero errores de consola.
+**Relevado a Claude (specs en RELEVO_CLAUDE.md §3-§4):** sus T1 (librería de
+objetos) y T2 (reactor ≥5×5) del brief original, más **K3** (ruta minera
+`veta_k7` 5 etapas con rendimiento decreciente + UI de lanzamiento) y **K4**
+(contenido del árbol de fases F1: Hangar→Almacén→Generador→Radar→Habitacional,
+grants y límite 4 ya en runtime). Claude registra §6.22+.
+**Riesgo:** ninguno estructural — K1/K2 quedan con tests propios. La muralla bay
+es placeholder visual (un frame por tile; una boca de N tiles se compone de
+marcos contiguos — aceptable hasta arte final).
+**Recomendación:** Claude sigue el flujo rama+PR y las lecciones de operación de
+RELEVO_CLAUDE.md §6 (verificación md5 post-push, sandbox volátil, palabra de
+seguridad solo para CLI_RECTOR_PUSH).
+**Archivos afectados:** `src/engine/station.js`, `src/core/data.js`,
+`src/render/render.js`, `src/render/render3d.js`, `src/app/app.js`,
+`tests/engine.test.js`, `tests/station.test.js`, `RELEVO_CLAUDE.md`, este
+documento.
+**Pruebas necesarias (humano):** (1) Dev: tecla `b` hasta 'bay' y pintar la
+muralla — apertura oscura con marco luminoso; (2) en una sala: `]`×N → "hangar
+con capacidad N", `n` → nave amarrada (placeholder), tecla `n` hasta el tope →
+rechazo; (3) exportar/reimportar: capacidad y amarres persisten.
+**Decisión pendiente:** las listadas en RELEVO_CLAUDE.md §5 (GLB vs sprites v4,
+sprite consola v3 vs v1, vendorizar three.js, wiring de pantallas sigue denegado).
