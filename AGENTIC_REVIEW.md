@@ -886,3 +886,38 @@ sin tirones; (3) Dev con hover continuo; (4) si sigue lento, reportar fps en
 3D vs `?renderer=2d`.
 **Decisión pendiente:** ninguna nueva (sigue abierta la de §6.18: ¿GLB o
 sprites v4?).
+
+
+### §6.20 — KIMI K3 (Rector) — COORDINACIÓN OBJP-1.1: desbloqueo + split Kimi/Claude — 2026-07-27
+**Observación:** orden directa del organizador (2026-07-27): capacidades de
+módulos — hangar con muralla bay + naves placeholder + capacidad máx seteable +
+expedición; reactor ≥5×5 + mecánica TW; suite de objetos decorativos con la
+consola como opción dedicada — y **OBJP-1.1 completo** (árbol de fases con
+hitos/habilidades/recompensas, expedición minera off-screen, límite 4 fases).
+OBJP-1.1 queda **DESBLOQUEADO por orden del organizador**; pendiente firma
+retroactiva 3/3 en `Feedback humano` (patrón §6.14).
+**Split (detalle en `BRIEF_CLAUDE_OBJP11.md`, commit `9b9717f`):**
+- **Claude — T1:** librería de objetos decorativos data-driven (8-12 defs) en
+  `src/core/objects_lib.js` + sub-selector en toolbox; la consola (tecla 7)
+  sigue dedicada, FUERA del catálogo. **T2:** blueprint Reactor ≥5×5,
+  `provides.energy=100` — el puente a energía ya existe (toModuleDef→recompute).
+- **Kimi — K1:** energía TW disponible vs consumo: readout + brownout + tests.
+  **K2:** hangar: wall kind `bay` (apertura oscura + marco luminoso cian, ref.
+  imagen de -XONO), naves placeholder sincronizadas station.ships↔sala,
+  capacidad máxima seteable. **K3:** expedición minera F1 (ruta 5 etapas ×60s,
+  rendimiento decreciente 100/65/40/15%, falla 10% + reparación, salida/retorno
+  por la bay). **K4:** contenido del árbol de fases F1 (hitos del mapa mental +
+  grants módulos/habilidades/CRED-UD), límite 4 fases.
+**Contratos:** Claude NO toca station/nav/render/data (wall kinds) ni tests de
+engine — trabaja en rama+PR; Kimi NO toca toolbox/index.html/CSS. Integraciones
+de render de objetos nuevos quedan como "pendiente Rector" en el handoff de
+Claude. Terminología: TW = unidad eléctrica, UD = ítem genérico, CRED = moneda.
+**Evidencia:** este documento + `BRIEF_CLAUDE_OBJP11.md` en raíz.
+**Riesgo:** alcance grande — se ejecuta por etapas K1→K4 con tests verdes por
+etapa; la muralla bay y el render de objetos nuevos acotan la superficie de
+render a los dos archivos del Rector.
+**Recomendación:** Claude arranca T1/T2 ya; Rector ejecuta K1→K4 en main
+(excepción CLI_RECTOR_PUSH). Los dos reportan en §6.21/§6.22.
+**Archivos afectados:** `BRIEF_CLAUDE_OBJP11.md` (nuevo), este documento.
+**Pruebas necesarias (humano):** ninguna todavía — habrá checklist por entrega.
+**Decisión pendiente:** firmas retroactivas OBJP-1.1 (3/3) en `Feedback humano`.
