@@ -32,19 +32,34 @@
   'use strict';
 
   // ---- módulos de F1 --------------------------------------------------------
-  // `free:false` (por defecto) = exige que un hito lo haga construible.
+  // COSTE 0 por decisión de -XONO (2026-07-28): "los módulos iniciales deben
+  // ser gratis". Lo que se paga en F1 es el PROGRESO (los hitos), no el
+  // equipamiento de partida. Siguen gateados por hito: gratis ≠ disponible.
   const MODULES = [
-    { id: 'hangar',       name: 'Hangar',       cost: 400, energyUse: 0,  provides: { shipCap: 2 },
+    { id: 'hangar',       name: 'Hangar',       cost: 0, energyUse: 0,  provides: { shipCap: 2 },
       notes: 'Amarre para naves mineras. Pasivo: no consume TW.' },
-    { id: 'almacen',      name: 'Almacén',      cost: 250, energyUse: 0,  provides: { storage: 30 },
-      notes: '30 UD de capacidad. Pasivo: no consume TW.' },
-    { id: 'generador',    name: 'Generador',    cost: 600, energyUse: 0,  provides: { energy: 100 },
+    { id: 'almacen',      name: 'Almacén',      cost: 0, energyUse: 0,  provides: { storage: 30 },
+      notes: '30 UD de capacidad: es el tope de lo que una expedición puede traer.' },
+    { id: 'generador',    name: 'Generador',    cost: 0, energyUse: 0,  provides: { energy: 100 },
       notes: '100 TW. Es lo que desbloquea el resto del consumo de la fase.' },
-    { id: 'radar',        name: 'Radar',        cost: 350, energyUse: 15, provides: {},
+    { id: 'radar',        name: 'Radar',        cost: 0, energyUse: 15, provides: {},
       notes: 'Detección de vetas y contactos.' },
-    { id: 'habitacional', name: 'Habitacional', cost: 500, energyUse: 20, provides: { pnjCapacity: 12 },
+    { id: 'habitacional', name: 'Habitacional', cost: 0, energyUse: 20, provides: { pnjCapacity: 12 },
       notes: '12 PNJ de aforo.' }
   ];
+
+  /*
+   * VENTA (decisión de -XONO 2026-07-28): lo que la expedición entrega se
+   * convierte en CRED al volver. Precios en CRED por UD, con la escala del
+   * mapa mental §6.4 (base 100 → procesado 250 → enriquecido 500): hoy solo
+   * existe el mineral base; los otros dos quedan declarados para cuando exista
+   * la cadena de procesamiento.
+   * Es LA fuente de ingresos del juego: sin esto F1 no se puede pagar.
+   */
+  const PRICES = { mineral: 100, mineral_procesado: 250, mineral_enriquecido: 500 };
+
+  /* Nave con la que se empieza la partida (una extractora, orden de -XONO). */
+  const STARTER_SHIP = { id: 'nave-1', name: 'Extractora I', capacity: 20, state: 'idle' };
 
   /*
    * Árbol de hitos de F1 — cadena del mapa mental §6.4:
@@ -123,6 +138,31 @@
     return given;
   }
 
+  /*
+   * VENTA de lo que trae una expedición. `delivered` es lo que el runtime ya
+   * metió en el almacén al volver (respetando el tope): aquí se saca del
+   * inventario y se abona en CRED, así el almacén queda libre para el
+   * siguiente viaje. Función pura sobre el API → testeable en Node.
+   * Devuelve { cred, sold:{item:UD} } para que la UI cuente lo ocurrido.
+   */
+  function sellCargo(st, station, delivered) {
+    const out = { cred: 0, sold: {} };
+    for (const [item, n] of Object.entries(delivered || {})) {
+      const price = PRICES[item];
+      if (!price || n <= 0) continue;                 // sin precio no se vende: se queda en el almacén
+      const taken = st.removeItem(station, item, n);  // solo se cobra lo que de verdad había
+      if (taken <= 0) continue;
+      out.sold[item] = taken;
+      out.cred += taken * price;
+    }
+    if (out.cred > 0) st.earn(station, out.cred);
+    return out;
+  }
+  /* valor en CRED de un lote, sin tocar el estado (para previsualizar) */
+  function valueOf(items) {
+    return Object.entries(items || {}).reduce((a, [it, n]) => a + (PRICES[it] || 0) * n, 0);
+  }
+
   const hitoById = (id) => HITOS.find(h => h.id === id) || null;
   const moduleById = (id) => MODULES.find(m => m.id === id) || null;
   const routeById = (id) => ROUTES.find(r => r.id === id) || null;
@@ -134,5 +174,9 @@
   /* consumo total de F1 si se colocan los 5 módulos */
   const totalEnergyUse = () => MODULES.reduce((a, m) => a + (m.energyUse || 0), 0);
 
-  return { MODULES, HITOS, ROUTES, register, applyRewards, hitoById, moduleById, routeById, nextHito, totalEnergyUse };
+  return {
+    MODULES, HITOS, ROUTES, PRICES, STARTER_SHIP,
+    register, applyRewards, sellCargo, valueOf,
+    hitoById, moduleById, routeById, nextHito, totalEnergyUse
+  };
 });

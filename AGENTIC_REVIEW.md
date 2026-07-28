@@ -1122,3 +1122,72 @@ está, o movemos el Generador al primer hito para llegar a los 63-70 del mapa?;
 (3) ¿la expedición se queda en la tecla X o queréis un panel de naves/rutas?
 **Sigue pendiente de §6.20:** las firmas retroactivas 3/3 de OBJP-1.1 en
 `Feedback humano`.
+
+
+### §6.24 — CLAUDE — Economía F1: módulos gratis, nave inicial y VENTA — 2026-07-28
+**Observación:** -XONO responde a las dos preguntas abiertas de §6.23 con tres
+decisiones, y se implementan tal cual:
+1. **Los módulos iniciales son gratis** — los 5 de F1 pasan a `cost: 0`. Siguen
+   gateados por hito: gratis no es lo mismo que disponible. Lo que se paga en F1
+   es el PROGRESO (los hitos, 1100 CRED), no el equipamiento de partida.
+2. **Se empieza con 1 nave minera** — `STARTER_SHIP` (Extractora I, capacidad 20)
+   se añade al entrar en juego, sin gating de amarre porque al principio no hay
+   hangar. Cuando se construye uno, la nave **toma plaza sola**.
+3. **VENTA: la carga se convierte en CRED al volver** — `content_f1.sellCargo()`
+   saca del almacén lo que la expedición entregó y lo abona en CRED al precio de
+   `PRICES` (mineral base **100 CRED/UD**, con la escala 100/250/500 del mapa
+   mental §6.4 ya declarada para cuando exista el procesamiento). El almacén
+   queda libre para el siguiente viaje.
+
+**Esto cierra el bucle jugable que faltaba en §6.23:** empiezas con 0 CRED y una
+nave → el primer hito cuesta 0 → colocas Hangar (gratis) → **X** expide la nave →
+vuelve con mineral → se vende → con ese CRED pagas el siguiente hito. Hay un test
+que recorre exactamente esa cadena de principio a fin.
+
+Detalle de diseño: el **Almacén es el techo de lo que se puede traer** (el runtime
+solo guarda lo que cabe), así que ampliar almacenamiento = ampliar ingresos. Eso le
+da un papel económico real a un módulo que si no sería decorativo.
+
+**AVISO DE BALANCE (número concreto, decisión vuestra):** con estos precios una
+expedición rinde ~9,8 UD → **~980 CRED**, y F1 entera cuesta 1100 CRED. Es decir,
+**F1 se completa en ~1,1 expediciones (unos 6 minutos)**. Funciona, pero una fase
+entera dura menos que una canción. Si queréis que F1 dure ~5 expediciones, la
+palanca más limpia es **subir los costes de hito ×4** (150→600, 300→1200, 250→1000,
+400→1600) y dejar el precio del mineral como está, que es el que documenta el mapa
+mental. Está todo en dos constantes de `content_f1.js`; cero motor.
+
+**Fallo real encontrado por el smoke:** al construir un hangar, la nave inicial no
+tomaba plaza hasta que ocurriera otro evento cualquiera — el placeholder no
+aparecía. Corregido escuchando `station:module` (que el runtime ya emitía) para
+resincronizar. Sin tocar station.js.
+
+**Evidencia:** `node tests/run.js` → **429 checks, ALL SUITES GREEN** (25 nuevos:
+módulos gratis pero gateados, precios y escala del mapa, `sellCargo` que no cobra
+lo que no hay ni regala lo que no tiene precio, y el **bucle económico completo**
+0 CRED → hito 0 → hangar → expedición → venta → pagar el hito siguiente). Smoke en
+Chromium **27/27 verde**: se arranca con 1 nave y 0 CRED, los módulos no cobran, la
+nave adopta plaza en el hangar nuevo, X lanza, el HUD sigue la etapa, y al volver
+**"8 UD de mineral vendido por 800 CRED"** con el almacén vacío y CRED suficiente
+para seguir. **Cero errores de consola.**
+
+**Riesgo / lo que NO se probó:** la venta es **automática** al volver — no hay
+decisión de "cuándo vender" ni precios variables; si queréis mercado o regateo, es
+otra mecánica. Todo sigue verificado en **2D** (el CDN de three.js sigue bloqueado
+por el proxy, 403). El balance de arriba es mío y está sin validar por vosotros.
+La nave inicial solo se crea si el save no trae naves: un save antiguo NO recibe
+nave de regalo (decisión mía para no alterar partidas existentes).
+
+**Archivos afectados:** `src/core/content_f1.js` (costes a 0, PRICES,
+STARTER_SHIP, sellCargo, valueOf), `src/app/app.js` (nave inicial, adopción de
+amarre, venta al volver, listener `station:module`), `tests/content_f1.test.js`,
+`README.md` (sección Economía), este documento.
+
+**Pruebas necesarias (humano):** (1) entrar en Juego: debe haber 1 nave y 0 CRED;
+(2) desbloquear el hito Hangar (0 CRED) y colocar el Hangar — no debe cobrar nada;
+(3) pulsar **X** y esperar el retorno: la barra debe decir cuánto se vendió y por
+cuántos CRED; (4) comprobar que el almacén queda vacío tras la venta; (5) con lo
+ganado, pagar el hito del Almacén y seguir la cadena.
+
+**Decisión pendiente:** (1) **el balance de arriba** — ¿F1 en 1 expedición o subimos
+los hitos ×4?; (2) ¿la venta se queda automática o queréis vender a mano desde una
+consola?; (3) sigue pendiente de §6.20 las firmas retroactivas 3/3 de OBJP-1.1.

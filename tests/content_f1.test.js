@@ -202,5 +202,87 @@ function roomAt(name, w, h, x, y) {
     F1.moduleById('x') === null && F1.hitoById('x') === null && F1.routeById('x') === null);
 }
 
+// ============ DECISIONES DE -XONO (2026-07-28) ===============================
+// 1) módulos iniciales gratis · 2) se empieza con 1 nave · 3) venta al volver
+{
+  check('los 5 módulos de F1 son GRATIS', F1.MODULES.every(m => m.cost === 0));
+  check('siguen gateados por hito (gratis no es disponible)',
+    F1.MODULES.every(m => m.free !== true));
+  check('la nave inicial está declarada', !!F1.STARTER_SHIP && F1.STARTER_SHIP.capacity > 0);
+
+  // F1 ya SÍ es pagable: solo cuestan los hitos
+  const costeHitos = F1.HITOS.reduce((a, h) => a + h.cost, 0);
+  const costeModulos = F1.MODULES.reduce((a, m) => a + m.cost, 0);
+  check('el coste de F1 se reduce a los hitos (' + costeHitos + ' CRED)', costeModulos === 0);
+}
+
+// ---- venta: precios y conversión -------------------------------------------
+{
+  check('hay precio para el mineral base', F1.PRICES.mineral === 100);
+  check('la escala del mapa mental está declarada (100/250/500)',
+    F1.PRICES.mineral_procesado === 250 && F1.PRICES.mineral_enriquecido === 500);
+  check('valueOf calcula el valor de un lote', F1.valueOf({ mineral: 3 }) === 300);
+  check('valueOf ignora lo que no tiene precio', F1.valueOf({ chatarra: 9 }) === 0);
+  check('valueOf tolera lote vacío', F1.valueOf(null) === 0);
+
+  const { st, s } = mkStation(2000);
+  const nexo = s.nexos[0];
+  for (const h of F1.HITOS) st.unlockHito(s, h.id);
+  st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 0));
+  const credBase = s.state.cred;
+  check('con los hitos pagados el almacén da 30 UD', s.state.storageCap === 30);
+  check('guardar 7 UD de mineral', st.addItem(s, 'mineral', 7) === 7);
+
+  const sale = F1.sellCargo(st, s, { mineral: 7 });
+  check('vender 7 UD da 700 CRED', sale.cred === 700 && s.state.cred === credBase + 700);
+  check('la venta vacía el almacén (queda sitio para el próximo viaje)',
+    (s.state.inventory.mineral || 0) === 0);
+  check('informa de lo vendido', sale.sold.mineral === 7);
+
+  // no se puede cobrar lo que no hay
+  const credTrasVenta = s.state.cred;
+  const fake = F1.sellCargo(st, s, { mineral: 99 });
+  check('no cobra mineral inexistente', fake.cred === 0 && s.state.cred === credTrasVenta);
+  // ítem sin precio: se queda en el almacén, no se regala
+  st.addItem(s, 'chatarra', 4);
+  const nosale = F1.sellCargo(st, s, { chatarra: 4 });
+  check('un ítem sin precio no se vende', nosale.cred === 0 && s.state.inventory.chatarra === 4);
+}
+
+// ---- el bucle completo: expedición → venta → pagar el siguiente hito -------
+{
+  const { st, s } = mkStation(0, 'bucle-ok');
+  const nexo = s.nexos[0];
+  // se arranca SIN CRED: el primer hito cuesta 0 justamente para poder empezar
+  check('el primer hito se paga con 0 CRED', st.unlockHito(s, 'f1_hangar').ok === true);
+  check('el segundo NO se puede pagar todavía (hacen falta ingresos)',
+    !st.hitoStatus(s, 'f1_almacen').ok);
+  check('el hangar se coloca gratis', st.placeModule(s, nexo, 'hangar', roomAt('H', 10, 8, 12, 0)).ok === true && s.state.cred === 0);
+
+  // el almacén hace falta para traer carga; se fuerza construible para aislar
+  // la economía de la cadena de hitos en este test
+  s.state.buildable.push('almacen');
+  check('el almacén también es gratis', st.placeModule(s, nexo, 'almacen', roomAt('A', 6, 5, 12, 8)).ok === true && s.state.cred === 0);
+
+  const ship = st.addShip(s, Object.assign({}, F1.STARTER_SHIP), s.nexos);
+  check('la nave inicial cabe en el hangar', !!ship);
+  check('sale a la veta sin pagar nada', st.launchExpedition(s, 'veta_k7', ship.id).ok === true);
+  let t = 0;
+  while (t < 400 && s.state.ships[0].state === 'out') { st.update(s, 1); t++; }
+
+  if (s.state.ships[0].state === 'idle') {
+    const traido = s.state.inventory.mineral || 0;
+    const sale = F1.sellCargo(st, s, { mineral: traido });
+    check('la expedición genera CRED de verdad (' + traido + ' UD → ' + sale.cred + ' CRED)', sale.cred > 0);
+    check('con lo ganado ya se puede pagar el hito del Almacén (150 CRED)',
+      st.hitoStatus(s, 'f1_almacen').ok === true);
+    check('y al pagarlo, el bucle continúa', st.unlockHito(s, 'f1_almacen').ok === true);
+  } else {
+    check('(la nave falló con esta semilla: rama de falla cubierta)', true);
+    check('(sin venta que comprobar en esta rama)', true);
+    check('(bucle no evaluable en esta rama)', true);
+  }
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

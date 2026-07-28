@@ -38,16 +38,27 @@
   // sus eventos solo se anuncian en la barra de estado.
   const rng = window.UGS.rng.create('ugs-station');
   const station = window.UGS.station.create({ bus: engine.bus, rng });
-  engine.bus.on('station:event', ({ id }) => setStatus('Evento de estación: ' + id));
-  engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
-  engine.bus.on('station:expedition:done', ({ delivered }) => { setStatus('Expedición de vuelta: ' + JSON.stringify(delivered)); syncShipObjects(); invalidate(); });
-  engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
-  engine.bus.on('station:expedition:launch', () => { syncShipObjects(); invalidate(); });
-  engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); });
   // CONTENIDO F1 (OBJP-1.1 · K3+K4, relevados del Rector): árbol de hitos,
   // módulos y ruta minera. Son DATOS — el runtime ya existe en station.js.
   const F1 = window.UGS.contentF1;
   if (F1) F1.register(station);
+  engine.bus.on('station:event', ({ id }) => setStatus('Evento de estación: ' + id));
+  engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
+  // Al volver, la carga se VENDE y entra como CRED (orden de -XONO): es la
+  // fuente de ingresos del juego. El almacén queda libre para el siguiente viaje.
+  engine.bus.on('station:expedition:done', ({ delivered }) => {
+    const sale = F1 ? F1.sellCargo(station, app.station, delivered) : { cred: 0, sold: {} };
+    const carga = Object.entries(sale.sold).map(([it, n]) => n + ' UD de ' + it).join(', ');
+    setStatus(sale.cred > 0
+      ? 'Expedición de vuelta: ' + carga + ' vendido por ' + sale.cred + ' CRED (total ' + app.station.state.cred + ').'
+      : 'Expedición de vuelta sin carga vendible.');
+    syncShipObjects(); invalidate();
+  });
+  engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
+  engine.bus.on('station:expedition:launch', () => { syncShipObjects(); invalidate(); });
+  // al colocar un módulo puede aparecer un hangar: las naves sin plaza la toman
+  engine.bus.on('station:module', () => { syncShipObjects(); invalidate(); });
+  engine.bus.on('station:ship:repaired', () => { syncShipObjects(); invalidate(); });
   // El runtime no reparte CRED/UD por hito: lo hace el contenido (applyRewards).
   engine.bus.on('station:hito', ({ hitoId }) => {
     if (!F1) return;
@@ -188,8 +199,10 @@
     if (mode === 'game') {
       engine.start(nexo());
       spawnAtEntry();
+      ensureStarterShip();          // se empieza con una nave minera
+      syncShipObjects();
       app.paused = false;
-      setStatus('Click: caminar · puerta: abrir · ascensor: viajar · Q/E rotar 90°');
+      setStatus('Click: caminar · puerta: abrir · ascensor: viajar · X expedir nave · Q/E rotar 90°');
     } else {
       engine.stop();
       agents.clear();
@@ -431,7 +444,30 @@
     return '  ⛏X: expedir nave';
   }
 
+  /*
+   * Nave inicial (orden de -XONO): se empieza la partida con una extractora.
+   * Se añade SIN gating de amarre — al principio no hay hangar todavía — y
+   * `adoptHomelessShips` le asigna plaza en cuanto exista uno.
+   */
+  function ensureStarterShip() {
+    if (!F1) return;
+    const s = app.station.state;
+    if (s.ships.length) return;                       // save cargado: respeta sus naves
+    station.addShip(app.station, Object.assign({}, F1.STARTER_SHIP));
+  }
+  /* asigna hangar a las naves que aún no tienen plaza (p.ej. la inicial) */
+  function adoptHomelessShips() {
+    const s = app.station.state;
+    for (const sh of s.ships) {
+      if (sh.hangarRoomId || sh.state === 'out') continue;
+      const berth = station.freeBerth(app.station, app.station.nexos);
+      if (!berth) break;
+      sh.hangarRoomId = berth.roomId;
+    }
+  }
+
   function syncShipObjects() {
+    adoptHomelessShips();
     const docked = app.station.state.ships.filter(sh => sh.state !== 'out');
     const rooms = hangarRooms();
     for (const r of rooms) r.objects = r.objects.filter(o => o.type !== 'ship' || docked.some(sh => sh.id === o.shipId));

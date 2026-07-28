@@ -67,7 +67,7 @@ UI y `!_UGS/Fx/Music/` para la música (`Deck_Idle_Mu` en uso; `Tension_Events_M
 - **Determinismo:** el engine avanza a paso fijo (`FixedTimestep`), nunca con wall-clock.
 - **La música es presentación, no simulación:** el director decide en lógica pura (Node-testeable),
   el driver solo ejecuta. Ninguna capa de juego sabe que existe el audio.
-- **Tests en verde antes de cualquier entrega:** `npm test` (404 checks hoy; solo crece).
+- **Tests en verde antes de cualquier entrega:** `npm test` (429 checks hoy; solo crece).
 
 ## Cómo correr
 
@@ -122,6 +122,15 @@ para OBJP-2 y OBJP-1.1, sin funcionalidad hasta las 3 firmas.
 | Inspeccionar / retirar objeto (dev) | Seleccionar `1` + click · `Supr` retira |
 | Deshacer / Rehacer (dev) | `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`) |
 | Silenciar / volumen de música | control 🔊 abajo a la derecha (visible en todos los modos) |
+
+## Economía (Fase 1)
+
+Se empieza con **0 CRED** y **1 nave extractora**. Los módulos de F1 son **gratis**:
+lo que se paga es el PROGRESO (los hitos, 1100 CRED en total). El dinero sale de la
+**venta**: cuando una expedición vuelve, su carga se convierte en CRED al precio de
+`content_f1.PRICES` (mineral base 100 CRED/UD, escala del mapa mental 100/250/500) y
+el almacén queda libre para el siguiente viaje. El **Almacén (30 UD) es el techo de lo
+que cabe traer**, así que ampliarlo es ampliar ingresos.
 
 ## Música
 
