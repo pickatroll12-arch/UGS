@@ -32,6 +32,9 @@ function roomAt(name, w, h, x, y) {
   check('ids de hito únicos', new Set(F1.HITOS.map(h => h.id)).size === 5);
   check('ids de módulo únicos', new Set(F1.MODULES.map(m => m.id)).size === 5);
   check('todo hito tiene nombre y descripción', F1.HITOS.every(h => h.name && h.desc));
+  check('módulos F1 traen huella placeholder válida para el modo Juego',
+    F1.MODULES.every(m => m.room && m.room.w >= 3 && m.room.h >= 3 && m.room.w <= 64 && m.room.h <= 64));
+  check('solo el hangar declara borde bay', F1.MODULES.filter(m => m.room.bay).every(m => m.id === 'hangar_f1'));
 
   // la cadena del mapa mental, en orden
   const orden = F1.HITOS.map(h => h.id);
@@ -95,7 +98,7 @@ function roomAt(name, w, h, x, y) {
   check('el consumo total de F1 cabe en 100 TW (' + s.state.energy.used + ' TW)',
     s.state.energy.used <= 100 && s.state.energy.used === F1.totalEnergyUse());
   check('sin brownout al terminar F1', s.state.blackout === false);
-  check('el almacén da 30 UD', s.state.storageCap === 30);
+  check('el almacén da 30 UD (+5 de bodega base del Nexo)', s.state.storageCap === 35);
   check('el habitacional da aforo 12', s.state.pnj.capacity === 12);
 }
 
@@ -232,7 +235,7 @@ function roomAt(name, w, h, x, y) {
   for (const h of F1.HITOS) st.unlockHito(s, h.id);
   st.placeModule(s, nexo, 'almacen_f1', roomAt('A', 6, 5, 12, 0));
   const credBase = s.state.cred;
-  check('con los hitos pagados el almacén da 30 UD', s.state.storageCap === 30);
+  check('con los hitos pagados el almacén da 30 UD (+5 base)', s.state.storageCap === 35);
   check('guardar 7 UD de mineral', st.addItem(s, 'mineral', 7) === 7);
 
   const sale = F1.sellCargo(st, s, { mineral: 7 });
@@ -285,6 +288,34 @@ function roomAt(name, w, h, x, y) {
     check('(sin venta que comprobar en esta rama)', true);
     check('(bucle no evaluable en esta rama)', true);
   }
+}
+
+// ---- el bucle SIN trampas: la bodega base del Nexo arranca la economía -------
+// (GAP-ECON-01: antes la primera expedición no podía descargar — storageCap 0 —
+// y el hito del Almacén, 150 CRED, quedaba inalcanzable para siempre)
+{
+  const { st, s } = mkStation(0, 'bucle-real');
+  const nexo = s.nexos[0];
+  check('real: hito Hangar a 0 CRED', st.unlockHito(s, 'f1_hangar').ok === true);
+  check('real: hangar gratis', st.placeModule(s, nexo, 'hangar_f1', roomAt('H', 8, 6, 12, 0)).ok === true);
+  check('real: la bodega base del Nexo aparece al colocar (5 UD)', s.state.storageCap === 5);
+  const ship = st.addShip(s, Object.assign({}, F1.STARTER_SHIP), s.nexos);
+  check('real: nave inicial amarrada', !!ship);
+  let tries = 0, okTrip = false;
+  while (tries < 8 && !okTrip) {
+    tries++;
+    const cur = s.state.ships[0];
+    if (cur.state === 'damaged') st.repairShip(s, cur.id, 0);
+    if (cur.state === 'idle' && (s.state.inventory.mineral || 0) === 0) st.launchExpedition(s, 'veta_k7', cur.id);
+    let t = 0; while (t < 400 && cur.state === 'out') { st.update(s, 1); t++; }
+    okTrip = (s.state.inventory.mineral || 0) > 0;
+  }
+  const traido = s.state.inventory.mineral || 0;
+  const sale = F1.sellCargo(st, s, { mineral: traido });
+  check('real: la primera expedición YA vende gracias a la bodega base (' + traido + ' UD)', sale.cred > 0);
+  check('real: con esa venta el hito del Almacén (150) es alcanzable — NO hay deadlock',
+    st.hitoStatus(s, 'f1_almacen').ok === true);
+  check('real: y el bucle continúa por la cadena documentada', st.unlockHito(s, 'f1_almacen').ok === true);
 }
 
 // ============ DEFINICIÓN DE F1 (tier de módulo) ==============================
