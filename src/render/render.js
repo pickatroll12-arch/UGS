@@ -499,7 +499,7 @@
   function clear(ctx, w, h) { ctx.fillStyle = COLORS.bg; ctx.fillRect(0, 0, w, h); }
 
   // centrar la cámara en el Nexo (respeta zoom y rot)
-  function centerOn(cam, nexo, viewW, viewH) {
+  function centerOn(cam, nexo, viewW, viewH, opts) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const room of nexo.rooms) {
       for (const [lx, ly] of [[0, 0], [room.size.w, 0], [room.size.w, room.size.h], [0, room.size.h]]) {
@@ -509,6 +509,25 @@
       }
     }
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    /*
+     * `fit`: además de centrar, AJUSTA EL ZOOM para que la estación quepa en
+     * pantalla. Sin esto, en una pantalla pequeña (probado en un Odin 2 Portal)
+     * el mapa aparece gigante y recortado: el tile mide lo mismo en píxeles CSS
+     * dé igual el tamaño del lienzo.
+     */
+    if (opts && opts.fit) {
+      // extensión en pantalla a zoom 1, con la rotación actual aplicada
+      const r = cam.rot || 0, cos = Math.cos(r), sin = Math.sin(r);
+      let sx0 = Infinity, sy0 = Infinity, sx1 = -Infinity, sy1 = -Infinity;
+      for (const [wx, wy] of [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]]) {
+        const rx = wx * cos - wy * sin, ry = wx * sin + wy * cos;
+        sx0 = Math.min(sx0, rx * TILE); sx1 = Math.max(sx1, rx * TILE);
+        sy0 = Math.min(sy0, ry * TILE * TILT); sy1 = Math.max(sy1, ry * TILE * TILT);
+      }
+      const w1 = Math.max(1, sx1 - sx0), h1 = Math.max(1, sy1 - sy0 + WALL_H * TILE);
+      const margin = opts.margin || { x: 0.88, y: 0.74 };
+      cam.zoom = Math.max(0.35, Math.min(2.4, Math.min(viewW * margin.x / w1, viewH * margin.y / h1)));
+    }
     const s = worldToScreen({ x: 0, y: 0, zoom: cam.zoom, rot: cam.rot || 0 }, cx, cy, 0);
     cam.x = viewW / 2 - s.x; cam.y = viewH / 2 - s.y;
   }

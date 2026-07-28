@@ -244,10 +244,10 @@
     $('secNexo').style.display = sec === 'nexo' ? 'block' : 'none';
     $('secModules').style.display = sec === 'modules' ? 'block' : 'none';
     if (sec === 'modules') {
-      if (activeBp()) R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+      if (activeBp()) R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
       setStatus('Módulos: biblioteca de blueprints. Crea uno o selecciona para editar.');
     } else {
-      R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
+      R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
       setStatus('Nexos: 3 slots (1 por fase), conectores centrales de la estación.');
     }
     refreshSlots(); refreshBpList();
@@ -270,7 +270,7 @@
           // NO limpiar pendingLink: el origen del link debe sobrevivir al cambio
           // de nexo (el flujo es: marca origen → cambia de nexo → clica destino)
           app.nexoId = n.id; app.hover = null; resetEdit();
-          R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight);
+          R.centerOn(app.cam, nexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
           refreshSlots(); invalidate();
         });
       } else if (i === app.station.nexos.length) {
@@ -292,7 +292,7 @@
     n.rooms.push(hub); n.entry = { roomId: hub.id, x: 2, y: 2 };
     app.station.nexos.push(n);
     app.nexoId = n.id; resetEdit();
-    R.centerOn(app.cam, n, canvas.clientWidth, canvas.clientHeight);
+    R.centerOn(app.cam, n, canvas.clientWidth, canvas.clientHeight, { fit: true });
     refreshSlots(); invalidate();
     setStatus(n.name + ' creado (slot Fase ' + (i + 1) + ').');
   }
@@ -357,7 +357,7 @@
   }
   function selectBp(id) {
     app.bpId = id; resetEdit();
-    if (app.devSection === 'modules' && activeBp()) R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+    if (app.devSection === 'modules' && activeBp()) R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
     refreshBpList(); invalidate();
   }
   function downloadJson(filename, obj) {
@@ -378,7 +378,7 @@
     agents.place(pawn, target.id, spawnRoom.id, link.spawn.x, link.spawn.y);
     app.nexoId = target.id;
     engine.start(target);
-    R.centerOn(app.cam, target, canvas.clientWidth, canvas.clientHeight);
+    R.centerOn(app.cam, target, canvas.clientWidth, canvas.clientHeight, { fit: true });
     invalidate();
     setStatus('Ascensor → ' + target.name);
   });
@@ -681,9 +681,30 @@
     if (!navigator.getGamepads) return [];
     try { return Array.from(navigator.getGamepads() || []); } catch (_) { return []; }
   }
+  /*
+   * A en modo DEV no puede limitarse a handleClick: las herramientas de pintado
+   * se aplican por GESTO (pointerdown → arrastre → pointerup), así que un click
+   * suelto no pintaba nada — por eso "las letras no funcionaban" en el Odin.
+   * Aquí A sintetiza el gesto completo: al pulsar abre el arrastre, mientras se
+   * mantiene el stick extiende el rectángulo (DRAG BOX con mando) y al soltar
+   * se aplica. En juego, A sigue siendo un click normal.
+   */
+  function padPressA() {
+    if (app.mode !== 'dev' || app.placing) { handleClick(cursor.x, cursor.y); return; }
+    const hit = R.pick(app.cam, viewNexo(), cursor.x, cursor.y);
+    if (!hit) { setStatus('Apunta a una sala para usar la herramienta.'); return; }
+    app.drag = { tool: app.tool, roomId: hit.roomId, x0: hit.lx, y0: hit.ly, x1: hit.lx, y1: hit.ly };
+    invalidate();
+  }
+  function padReleaseA() {
+    if (app.drag) { const g = app.drag; app.drag = null; applyGesture(g); invalidate(); }
+  }
+
   function doPadAction(act) {
     switch (act) {
-      case 'click':    handleClick(cursor.x, cursor.y); break;
+      case 'click':    padPressA(); break;
+      case 'undo':     doUndo(); break;
+      case 'redo':     doRedo(); break;
       case 'cancel':
         if (app.placing) { app.placing = null; app.tool = 'select'; syncPlacing(); setStatus('Colocación cancelada.'); }
         app.pendingLink = null; invalidate();
@@ -724,7 +745,10 @@
       cursor.x = CORE.clamp(cursor.x + st.axes.lx * cursor.speed * dt, 0, canvas.clientWidth);
       cursor.y = CORE.clamp(cursor.y + st.axes.ly * cursor.speed * dt, 0, canvas.clientHeight);
       mouse.x = cursor.x; mouse.y = cursor.y;   // el hover reutiliza la posición del ratón
-      app.hover = app.mode === 'dev' ? R.pick(app.cam, viewNexo(), cursor.x, cursor.y) : null;
+      const hit = app.mode === 'dev' ? R.pick(app.cam, viewNexo(), cursor.x, cursor.y) : null;
+      app.hover = hit;
+      // con A mantenido, mover el stick EXTIENDE el rectángulo: DRAG BOX con mando
+      if (app.drag && hit && hit.roomId === app.drag.roomId) { app.drag.x1 = hit.lx; app.drag.y1 = hit.ly; }
       invalidate();
     }
     if (st.axes.rm > 0) {
@@ -737,6 +761,8 @@
       const a = GP.actionFor(b, app.mode);
       if (a === 'zoomIn' || a === 'zoomOut') doPadAction(a);
     }
+    // soltar A cierra el gesto de edición abierto por padPressA
+    if (st.released.indexOf('a') >= 0) padReleaseA();
     // el resto de acciones, por flanco (con auto-repetición donde toca)
     for (const b of st.repeated) {
       const a = GP.actionFor(b, app.mode);
@@ -1071,7 +1097,7 @@
       app.bpId = app.station.moduleLibrary.length ? app.station.moduleLibrary[0].id : null;
       app.pendingLink = null; resetEdit();
       refreshSlots(); refreshBpList();
-      R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+      R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
       setStatus('Estación importada.'); invalidate();
     } catch (err) { setStatus('Error al importar: ' + err.message); }
     e.target.value = '';
@@ -1223,7 +1249,7 @@
   loadMusicPrefs();
   applyMusicPrefs();
   player.start();                 // suena en cuanto el navegador lo permita (unlock)
-  R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight);
+  R.centerOn(app.cam, viewNexo(), canvas.clientWidth, canvas.clientHeight, { fit: true });
   // debug/smoke hook: ?auto=dev|game salta el menú (&sec=modules fuerza sección)
   const qs = new URLSearchParams(location.search);
   const auto = qs.get('auto');

@@ -1375,3 +1375,53 @@ gatillos, y decirme si la velocidad del cursor y las zonas muertas van finas.
 **Decisión pendiente:** (1) ¿la velocidad del cursor (900 px/s) y la zona muerta (0.22)
 os sirven o las ajusto?; (2) ¿queréis que el mando navegue también el panel lateral de
 Dev?; (3) ¿migramos a ESM+importmap para desbloquear GLB (§6.18)?
+
+
+### §6.28 — CLAUDE — Fixes del Odin 2 real: encuadre y "las letras" — 2026-07-28
+**Observación:** -XONO probó la build en un **Odin 2 Portal real** (GitHub Pages) y
+reportó dos cosas: el 3D **funciona** (HUD "· 3D · 60fps" — el vendorizado cumple), pero
+«funciona la mayoría de controles excepto las letras» y «la resolución está xD». Ambos
+eran fallos míos y ambos están corregidos.
+
+**1. "Las letras no funcionan" — A/B/X/Y.** No era el mando: era mi cableado.
+- **A en modo Dev no pintaba nada.** Las herramientas de pintado se aplican por GESTO
+  (pointerdown → arrastre → pointerup), y yo había mapeado A a `handleClick`, que en Dev
+  solo atiende la colocación de módulos. Ahora **A sintetiza el gesto completo**: al
+  pulsar abre el arrastre en el tile apuntado, con A mantenido el stick **extiende el
+  rectángulo** y al soltar se aplica. Es decir: **el DRAG BOX funciona con mando**, que
+  además es la forma natural de usarlo en una consola.
+- **X e Y no hacían absolutamente nada en Dev** (solo tenían acción en Juego). Ahora
+  X = deshacer e Y = rehacer. Hay un test que exige que **ningún botón de letra quede
+  muerto en ningún modo**, que es exactamente el fallo reportado.
+
+**2. "La resolución está xD".** `centerOn` solo CENTRABA, nunca ajustaba el zoom: el tile
+mide lo mismo en píxeles CSS dé igual el tamaño del lienzo, así que en una pantalla
+pequeña la estación salía gigante y recortada. Ahora `centerOn(..., {fit:true})` calcula
+el zoom para que la estación **quepa**, con la rotación actual aplicada, y se usa en los
+8 puntos donde se encuadra. Además hay media query para pantallas cortas (portátiles en
+horizontal): panel más estrecho, topbar más baja, HUD y barra de estado más pequeños.
+
+**Evidencia:** `node tests/run.js` → **483 checks, ALL SUITES GREEN**. Smoke del mando
+ampliado y ejecutado **a resolución de Odin (960×432, DPR 2)**: **15/15 verde**, con
+tres checks nuevos que reproducen justo lo reportado — la estación cabe a lo ancho
+(534/960 px) y a lo alto (294/432 px), el zoom se ajusta solo, **A pinta en Dev con
+DRAG BOX** (108→99 tiles arrastrando con el stick) y **X deshace** (99→108). Regresión:
+barra 21/21, economía F1 28/28. Cero errores de consola.
+
+**Riesgo / lo que NO se probó:** sigo sin el aparato en la mano — el encuadre y el gesto
+están verificados a la resolución del Odin pero con mando emulado. La velocidad del
+cursor (900 px/s) y la zona muerta (0.22) **siguen sin validar en hardware**: son el
+siguiente ajuste si va nervioso o lento. El panel lateral de Dev sigue siendo de
+dedo/ratón: el mando no lo navega.
+
+**Archivos afectados:** `src/render/render.js` (fit en centerOn), `src/app/app.js`
+(gesto de A, undo/redo, encuadre con fit), `src/input/gamepad.js` (X/Y en Dev),
+`index.html` (media query de pantalla corta), `tests/gamepad.test.js`, `README.md`,
+este documento.
+
+**Pruebas necesarias (humano):** -XONO en el Odin: (1) ¿entra la estación entera al
+abrir?; (2) en Dev, elegir Suelo y **mantener A moviendo el stick** — debe pintarse un
+rectángulo; (3) X deshace, Y rehace; (4) decirme si el cursor va a buena velocidad.
+
+**Decisión pendiente:** (1) velocidad de cursor y zona muerta tras probarlo en mano;
+(2) ¿el mando debería navegar también el panel lateral?
