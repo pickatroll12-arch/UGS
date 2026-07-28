@@ -283,10 +283,12 @@
     m.rotation.z = ((o.rotation || 0) + (room.transform.rotation || 0)) * Math.PI / 180;
     m.position.set(c.x, c.y, h / 2);
     g.add(m);
-    // tick luminoso superior
-    const tick = track(mesh(new THREE.PlaneGeometry(0.1, 0.05), basic(COLORS.objLine)));
-    tick.position.set(c.x, c.y, h + 0.005);
-    g.add(tick);
+    // tick luminoso superior (las naves no lo llevan, como en el 2D)
+    if (o.type !== 'ship') {
+      const tick = track(mesh(new THREE.PlaneGeometry(0.1, 0.05), basic(COLORS.objLine)));
+      tick.position.set(c.x, c.y, h + 0.005);
+      g.add(tick);
+    }
   }
 
   function rebuildStatic(nexo, cam, key) {
