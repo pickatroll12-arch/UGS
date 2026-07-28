@@ -42,6 +42,10 @@
   engine.bus.on('station:phase', ({ phase }) => setStatus('¡Fase ' + phase + ' alcanzada!'));
   engine.bus.on('station:expedition:done', ({ delivered }) => setStatus('Expedición de vuelta: ' + JSON.stringify(delivered)));
   engine.bus.on('station:expedition:failed', () => setStatus('Una nave minera ha fallado.'));
+  engine.bus.on('station:blackout', ({ blackout }) => {
+    const e = app.station.state.energy;
+    setStatus(blackout ? '⚠ BROWNOUT: el consumo (' + e.used + ' TW) supera la capacidad (' + e.capacity + ' TW)' : 'Energía restablecida.');
+  });
 
   const app = {
     mode: 'menu',                    // menu | dev | game
@@ -469,6 +473,9 @@
         const room = roomById(hit.roomId);
         if (room && room.bpId) {
           nexo().rooms = nexo().rooms.filter(r => r !== room);
+          // limpieza estratégica: la instancia sale de station.modules y se recomputa energía
+          app.station.state.modules = app.station.state.modules.filter(m => m.roomId !== room.id);
+          station.recompute(app.station);
           setStatus('Módulo retirado del nexo.'); invalidate();
         } else setStatus('Solo se retiran salas colocadas desde la biblioteca.');
       }
@@ -734,7 +741,9 @@
   let fpsFrames = 0, fpsAt = performance.now(), fpsNow = 0, lastFrame = 0, hudFpsShown = -1;
   function hudText() {
     const view = viewNexo();
-    return app.station.name + ' · ' + view.name +
+    const e = app.station.state.energy;
+    const tw = ' · ⚡' + e.used + '/' + e.capacity + 'TW' + (app.station.state.blackout ? ' ¡BROWNOUT!' : '');
+    return app.station.name + ' · ' + view.name + tw +
       (app.mode === 'dev' ? ' · [' + (app.devSection === 'modules' ? 'MÓDULOS' : 'NEXO') + ']' : '') +
       '  zoom:' + app.cam.zoom.toFixed(2) + '  rot:' + Math.round((app.cam.rot * 180 / Math.PI + 360) % 360) + '°' +
       (fxCanvas ? ' · 3D' : ' · 2D') + ' · ' + fpsNow + 'fps';
@@ -866,11 +875,15 @@
     const bp = activeBp(); if (!bp) return;
     // contar instancias colocadas antes de eliminar
     let removedCount = 0;
+    const removedRoomIds = [];
     for (const n of app.station.nexos) {
       const before = n.rooms.length;
+      removedRoomIds.push(...n.rooms.filter(r => r.bpId === bp.id).map(r => r.id));
       n.rooms = n.rooms.filter(r => r.bpId !== bp.id);
       removedCount += before - n.rooms.length;
     }
+    app.station.state.modules = app.station.state.modules.filter(m => !removedRoomIds.includes(m.roomId));
+    station.recompute(app.station);
     app.station.moduleLibrary = app.station.moduleLibrary.filter(b => b.id !== bp.id);
     app.bpId = app.station.moduleLibrary.length ? app.station.moduleLibrary[0].id : null;
     resetEdit(); refreshBpList(); invalidate();
@@ -945,5 +958,4 @@
   window.UGS._station = station;
   window.UGS._rng = rng;
   window.UGS._music = music;
-  window.UGS._player = player;
 })();
