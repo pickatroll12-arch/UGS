@@ -72,8 +72,15 @@ DECISIÓN REQUERIDA: N/A — Es un bug de rendimiento/optimización técnico no 
 
 
 
-
-
+-FROMO
+FEEDBACK #N2 | FECHA: 2026-07-28 | AUTOR:-FROMO
+PRIORIDAD: ALTA 
+MODO DONDE OCURRIÓ: DEV-JUEGO
+¿QUÉ HICE?: cree un diseño modelo de reactor con 6 pilones, me fui a construccion de nexo donde añadi modulo de reactor a la base, esperando un valr de 600tw pero salia 1200. parece que la instancias de diseño no estan separadas conviven en el mismo entorno.
+¿QUÉ ESPERABA?: un baso fijo de generacion de TW   
+¿QUÉ PASÓ EN REALIDAD?: se puede alterar la generacion de energia.
+EVIDENCIA: lo tiene XONO el modulo
+DECISIÓN REQUERIDA: Arreglar el sistema de diseño de modulo, evitar que otros modulos (Por el momento) generen enegia, solamente el modulo-categoria reactor puede generarla.
 
 
 
