@@ -198,5 +198,21 @@ console.log('UGS blueprint/devsuite tests\n');
   check('sala de diseño sin bpId → null', rt.nexos[0].rooms[0].bpId === null);
 }
 
+// ---- roomFromDef: salas generadas desde defs (modo Juego, GAP-UI-01) ----------
+{
+  const hangar = { id: 'hangar_f1', name: 'Hangar F1', room: { w: 8, h: 6, bay: 'E' } };
+  const r1 = BP.roomFromDef(hangar);
+  check('roomFromDef respeta la huella del def', r1.size.w === 8 && r1.size.h === 6);
+  check('roomFromDef cierra la sala con anillo de paredes',
+    !!r1.tiles[0][0].wall && !!r1.tiles[5][7].wall && !!r1.tiles[2][3].wall === false);
+  check('roomFromDef abre la arista este como muralla bay', r1.tiles[3][7].wall.kind === 'bay');
+  check('roomFromDef: el resto de aristas quedan block',
+    r1.tiles[3][0].wall.kind === 'block' && r1.tiles[0][4].wall.kind === 'block' && r1.tiles[5][4].wall.kind === 'block');
+  check('roomFromDef no mete objetos (la energía la da el def, sin doble conteo)',
+    r1.objects.length === 0 && BP.energyFromObjects(r1) === 0);
+  const defSin = BP.roomFromDef({ name: 'X' });
+  check('roomFromDef sin spec usa 6×6 por defecto', defSin.size.w === 6 && defSin.size.h === 6);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

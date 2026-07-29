@@ -46,16 +46,27 @@
   // COSTE 0 por decisión de -XONO: "los módulos iniciales deben ser gratis".
   // Lo que se paga en F1 es el PROGRESO (los hitos), no el equipamiento de
   // partida. Siguen gateados por hito: gratis ≠ disponible.
+  //
+  // `room` (2026-07-28, GAP-UI-01): huella PLACEHOLDER de la sala que el
+  // jugador coloca en modo Juego. Cuando los devs diseñen los módulos F1 en la
+  // suite, esta huella la da el blueprint de la biblioteca; hasta entonces la
+  // fábrica de blueprint.js genera una sala honesta (anillo de paredes; el
+  // hangar abre su arista este como muralla `bay` de K2).
   const MODULES = [
     { id: 'hangar_f1',       tier: TIER, name: 'Hangar F1',       cost: 0, energyUse: 0,  provides: { shipCap: 2 },
+      room: { w: 8, h: 6, bay: 'E' },
       notes: 'Amarre para 2 naves mineras. Pasivo: no consume TW.' },
     { id: 'almacen_f1',      tier: TIER, name: 'Almacén F1',      cost: 0, energyUse: 0,  provides: { storage: 30 },
+      room: { w: 6, h: 5 },
       notes: '30 UD de capacidad: es el tope de lo que una expedición puede traer.' },
     { id: 'generador_f1',    tier: TIER, name: 'Generador F1',    cost: 0, energyUse: 0,  provides: { energy: 100 },
+      room: { w: 7, h: 7 },
       notes: '100 TW. Es lo que desbloquea el resto del consumo de la fase.' },
     { id: 'radar_f1',        tier: TIER, name: 'Radar F1',        cost: 0, energyUse: 15, provides: {},
+      room: { w: 5, h: 5 },
       notes: 'Detección de vetas y contactos.' },
     { id: 'habitacional_f1', tier: TIER, name: 'Habitacional F1', cost: 0, energyUse: 20, provides: { pnjCapacity: 12 },
+      room: { w: 8, h: 6 },
       notes: '12 PNJ de aforo.' }
   ];
 

@@ -59,6 +59,17 @@
 
     const emit = (evt, payload) => { if (bus) bus.emit(evt, payload); };
 
+    /*
+     * Bodega base del Nexo (GAP-ECON-01, debug 2026-07-28): sin ella el bucle
+     * F1 era IMPOSIBLE — la primera expedición volvía sin poder descargar
+     * (storageCap 0 hasta colocar el Almacén), la venta daba 0 CRED y el hito
+     * del Almacén (150 CRED) quedaba fuera de alcance para siempre. 5 UD de
+     * bodega de emergencia bastan para arrancar la economía sin tocar los
+     * costes de hito documentados: el Almacén sigue siendo el techo real (30).
+     * PROPUESTA pendiente de validación humana: se ajusta en una constante.
+     */
+    const BASE_STORAGE = 5;
+
     // ---- estado -------------------------------------------------------------
     function ensure(station) {
       if (!station.state) station.state = {};
@@ -133,7 +144,7 @@
         }
       }
       s.energy.capacity = cap; s.energy.used = used;
-      s.storageCap = storage; s.pnj.capacity = pnjCap;
+      s.storageCap = BASE_STORAGE + storage; s.pnj.capacity = pnjCap;
       const was = !!s.blackout;
       s.blackout = used > cap;
       if (s.blackout !== was) emit('station:blackout', { station, blackout: s.blackout });
@@ -189,7 +200,13 @@
       if (!def.free && !s.buildable.includes(defId)) return { ok: false, reason: 'requiere hito' };
       if (!canAfford(station, def.cost)) return { ok: false, reason: 'CRED insuficiente' };
       const energyAfter = s.energy.used + (def.energyUse || 0);
-      if (energyAfter > s.energy.capacity) return { ok: false, reason: 'energía insuficiente' };
+      // La puerta debe mirar la capacidad DESPUÉS de colocar: un productor
+      // (provides.energy) no puede quedar bloqueado por el consumo que él
+      // mismo viene a resolver. Antes de este arreglo, reponer un generador
+      // durante un brownout (used > capacity) se rechazaba con 'energía
+      // insuficiente' — el jugador solo podía salir retirando consumo.
+      const capAfter = s.energy.capacity + ((def.provides && def.provides.energy) || 0);
+      if (energyAfter > capAfter) return { ok: false, reason: 'energía insuficiente' };
       // CONEXIÓN FÍSICA: la sala debe compartir una arista con alguna sala del Nexo
       const r = roomRect(room);
       const connected = nexo.rooms.some(other => rectsTouch(r, roomRect(other)));
@@ -212,6 +229,14 @@
     function attachModule(station, nexo, defId, room) {
       const s = ensure(station);
       detachModule(station, room.id);                 // idempotente: recolocar no duplica
+      const def = moduleDefs.get(defId);
+      // Un hangar colocado por placeModule no heredaba la marca que la UI
+      // reconoce (hangarRooms lee room.hangar/shipCap): la nave se amarraba
+      // bien (roomCapOf lee el def) pero el placeholder nunca se dibujaba.
+      // Se propaga la marca desde el def; shipCap se deja SIN setear para que
+      // roomCapOf siga leyendo el def (capacidad room-first: un shipCap
+      // explícito del diseñador manda sobre el def y no se pisa).
+      if (def && def.provides && def.provides.shipCap && typeof room.shipCap !== 'number') room.hangar = true;
       const inst = {
         id: CORE.uid('mod'), defId, nexoId: nexo.id, roomId: room.id,
         objEnergy: energyOfRoom(room)

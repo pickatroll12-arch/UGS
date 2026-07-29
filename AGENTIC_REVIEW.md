@@ -1567,3 +1567,85 @@ cruceta arriba/abajo girando objetos.
 
 **Decisión pendiente:** sigue abierta la de §6.29 (¿tope de núcleos por módulo? ¿100 TW es
 la cifra buena?) — ahora se puede medir de verdad, porque la energía por fin se enciende.
+
+
+### §6.31 — KIMI K3 (Rector) — Debug extensivo + reparaciones: UI de juego (hitos/módulos/naves), energía, hangar y bodega base — 2026-07-29
+**Observación:** por orden de -XONO se hizo DEBUG EXTENSIVO del ciclo OBJP-1.1
+contra `GUIA_TESTERS.md` (la "lista de Claude"; su artifact externo no es
+accesible por Cloudflare/sesión) y los handoffs §6.22-§6.30. Método: clon limpio
++ 4 lotes automatizados en Chromium/WebGL real (~130 checks: arranque, música,
+toolbox, objetos, módulos, energía, hangar, bucle económico, mando emulado,
+regresión click→ruta/multi-sala/links). Resultado del debug: casi todo verde
+(verificado ítem a ítem), con **4 hallazgos reales** que esta entrega repara:
+
+1. **GAP-UI-01 (estructural): no existía UI de hitos ni de compra/colocación de
+   módulos en modo Juego.** El PASO 7 de la guía era imposible a mano y OBJP-1
+   ("en modo juego solo se pueden comprar y conectar módulos") seguía sin
+   cumplirse. **Implementado:** panel de FASE en modo Juego (`◈ Fase` en el
+   topbar): hitos de la fase con estado y botón Desbloquear (con coste y
+   motivo de bloqueo), módulos construibles con coste/provisión y botón
+   Colocar (ghost con validación en vivo, ESC/click derecho cancela), sección
+   NAVES con estado y botón **Reparar** (sin ella, una nave dañada era
+   soft-lock: falla ~40% por viaje), y CRED visible en el HUD. Las puertas de
+   `placeModule` (hito/CRED/energía/conexión) se aplican de verdad; la sala la
+   genera `blueprint.roomFromDef` desde la huella `room` añadida a cada def
+   F1 (placeholder honesto hasta que los módulos se diseñen en la suite).
+2. **BUG-ENERGÍA-01: durante un brownout, `placeModule` rechazaba colocar un
+   GENERADOR** ('energía insuficiente') aunque consume 0 TW y provee 100 —
+   la puerta `used + energyUse > capacity` ignoraba `provides.energy`, así que
+   el único camino para salir del brownout era retirar consumo (con el evento
+   de fallo de generador del mapa mental, soft-lock). Ahora la puerta mira la
+   capacidad TRAS colocar. Con test: productor admitido en brownout, consumidor
+   sigue rechazado.
+3. **BUG-HANGAR-01: un hangar colocado por `placeModule` no dibujaba el
+   placeholder de la nave** (la capacidad sí contaba, `roomCapOf` lee el def):
+   `hangarRooms()` solo reconoce `room.hangar/shipCap` y `attachModule` no lo
+   propagaba. Ahora `attachModule` marca `room.hangar` cuando el def provee
+   shipCap (sin pisar shipCap explícitos — capacidad room-first intacta).
+4. **GAP-ECON-01 (el más serio, encontrado por el propio smoke de la
+   reparación): el bucle F1 era IMPOSIBLE desde 0 CRED.** Sin Almacén
+   (storageCap 0) la primera expedición no podía descargar → venta 0 → el hito
+   del Almacén (150 CRED) inalcanzable para siempre. El test del bucle lo
+   escondía forzando `buildable` a mano. **Reparación PROPUESTA (validación
+   pendiente): bodega base del Nexo de 5 UD** (`BASE_STORAGE` en station.js,
+   una constante). La primera expedición ya vende (~194 netos) y el bucle
+   arranca sin tocar los costes de hito documentados. Test nuevo del bucle
+   SIN trampas. **Bonus alineado con §6.24:** la venta al volver ahora vende
+   TODO lo vendible del almacén (el regalo del hito Almacén, 5 UD, ya no se
+   queda eterno sin vender; "el almacén queda libre", como decía la orden).
+
+**Evidencia:** `node tests/run.js` → **554 checks, ALL SUITES GREEN** (+27:
+puerta de energía, marca hangar, roomFromDef, huellas F1, bucle real sin
+trampas). Smoke del game UI en Chromium **18/18**: panel visible con FASE 1 ·
+0 CRED, desbloqueo por botón, ghost + colocación del Hangar con paso abierto
+gratis, **la nave toma plaza Y SE VE el placeholder** (fixes 3+4), ESC cancela,
+venta desglosada con impuesto, panel refleja CRED y habilita Almacén,
+desbloqueo por botón con CRED ganado (267→117), rechazo lejos del Nexo con
+explicación, toggle ◈ Fase, **cero vocabulario dev en Juego**, export/import
+ocultos, cero errores de consola. Regresión: lote Dev 48/48, bucle API 15/15.
+**Riesgo / lo que NO se probó:** el panel no se probó en el Odin (cruceta
+arriba/abajo del mando no navega el panel: los botones son DOM, el mando sigue
+sirviendo para el mapa); la huella `room` de las defs es placeholder mío
+(8×6 hangar con bay este, 6×5, 7×7, 5×5, 8×6) — pendiente del diseño real en
+suite; la bodega base de 5 UD es PROPUESTA mía (balance); la venta-total
+asume que acumular recursos a propósito aún no es mecánica (no hay crafting).
+**Recomendación:** humanos reintentan el PASO 7 de la guía de principio a fin
+POR LA UI (ya es jugable) y nos dicen ritmo real. Si la bodega base se valida,
+queda; si no, se ajusta la constante.
+**Archivos afectados:** `src/engine/station.js` (puerta energía, marca hangar,
+BASE_STORAGE), `src/core/content_f1.js` (huellas room), `src/engine/blueprint.js`
+(roomFromDef), `src/app/app.js` (panel, colocación en juego, ghost, venta total,
+HUD CRED), `index.html` (panel + ◈ Fase + CSS), `tests/station.test.js`,
+`tests/blueprint.test.js`, `tests/content_f1.test.js`, este documento.
+**Pruebas necesarias (humano):** (1) Juego → panel: desbloquear Hangar (0 CRED),
+colocar Hangar F1 gratis junto al Nexo — la nave toma plaza y SE VE; (2) X y
+esperar el retorno: venta desglosada con impuesto; (3) con lo ganado,
+desbloquear Bodega presurizada (150) por botón y colocar el Almacén; (4) si la
+nave falla: botón Reparar en NAVES; (5) ◈ Fase oculta/muestra el panel;
+(6) seguir la cadena hasta Fase 2 y decirnos expediciones/tiempo real;
+(7) valorar la bodega base de 5 UD (¿arranque justo o regalo?).
+**Decisión pendiente:** (1) validar BASE_STORAGE=5 o ajustar; (2) huellas
+placeholder de los módulos F1 vs diseñarlas en la suite; (3) ¿la venta sigue
+total al volver o queréis acumular para una futura cadena de procesamiento?;
+(4) siguen abiertas las de §6.26 (firmas 3/3, GLB vs sprites v4, impuesto fijo
+o variable, módulos F2).
