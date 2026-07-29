@@ -1,0 +1,400 @@
+{
+  "id": "bp-10",
+  "name": "Reactor",
+  "category": "energia",
+  "cost": 0,
+  "energyUse": 0,
+  "provides": {
+    "energy": 600,
+    "storage": 0,
+    "pnjCapacity": 0
+  },
+  "notes": "",
+  "minSize": {
+    "w": 1,
+    "h": 1
+  },
+  "room": {
+    "id": "room-9",
+    "name": "Reactor",
+    "bpId": null,
+    "size": {
+      "w": 8,
+      "h": 6
+    },
+    "transform": {
+      "x": 0,
+      "y": 0,
+      "rotation": 0,
+      "pivot": {
+        "x": 4,
+        "y": 3
+      }
+    },
+    "tiles": [
+      [
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        }
+      ],
+      [
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        }
+      ],
+      [
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        }
+      ],
+      [
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        }
+      ],
+      [
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": null
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        }
+      ],
+      [
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        },
+        {
+          "floor": "deck",
+          "wall": {
+            "kind": "block",
+            "orientation": 0,
+            "collision": "full"
+          }
+        }
+      ]
+    ],
+    "objects": [
+      {
+        "id": "obj-11",
+        "type": "reactor_core",
+        "x": 6,
+        "y": 4,
+        "rotation": 0,
+        "solid": true,
+        "openable": false,
+        "open": false
+      },
+      {
+        "id": "obj-12",
+        "type": "reactor_core",
+        "x": 6,
+        "y": 1,
+        "rotation": 0,
+        "solid": true,
+        "openable": false,
+        "open": false
+      },
+      {
+        "id": "obj-13",
+        "type": "reactor_core",
+        "x": 1,
+        "y": 1,
+        "rotation": 0,
+        "solid": true,
+        "openable": false,
+        "open": false
+      },
+      {
+        "id": "obj-14",
+        "type": "reactor_core",
+        "x": 1,
+        "y": 4,
+        "rotation": 0,
+        "solid": true,
+        "openable": false,
+        "open": false
+      },
+      {
+        "id": "obj-15",
+        "type": "reactor_core",
+        "x": 3,
+        "y": 4,
+        "rotation": 0,
+        "solid": true,
+        "openable": false,
+        "open": false
+      },
+      {
+        "id": "obj-16",
+        "type": "reactor_core",
+        "x": 3,
+        "y": 1,
+        "rotation": 0,
+        "solid": true,
+        "openable": false,
+        "open": false
+      }
+    ],
+    "events": []
+  }
+}
